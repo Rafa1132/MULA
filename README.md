@@ -10,7 +10,7 @@ Next.js chat → LARAS FastAPI → Hermes gateway → Ollama / Qwen
 
 The app has simple username/password accounts. Each account owns one persistent Operator conversation, reopened after login or refresh. Sign out replaces New chat. Passwords are hashed and login sessions use private cookies; accounts and the visible chat history are stored in `.runtime/accounts.sqlite3`.
 
-This migration keeps Operator's existing planning scope. Inventory, Procurement, business tools, and autonomous actions have not been implemented. The dedicated Hermes profile starts with no tools and no cross-chat personal memory. This is the runtime foundation for adding scoped specialists later.
+Operator handles planning, uploaded CSVs and account memory. Forecasting provides deterministic statistical calculations and optional Qwen explanations. Inventory, Procurement, live business integrations and autonomous delegation are not implemented. The shared runtime profile still has no model-callable tools or cross-chat personal memory; the application dispatches its allowlisted capabilities through authenticated endpoints.
 
 ## Architecture
 
@@ -33,13 +33,15 @@ LARAS/
 │       ├── auth/                # Account UI and public index.ts
 │       ├── operator/            # Core visualizer, streaming and tests
 │       ├── voice/               # Speech playback and tests
-│       ├── team/                # AI office, role inspector and browser checks
+│       ├── memory/              # Editable categorized notes and retrieval inspector
+│       ├── team/                # Available agents, account settings and browser checks
+│       ├── forecasting/         # Forecast inputs, chart, report and CSV export
 │       └── workspace/           # Workspace screen
 ├── server/                     # Separate Python service
 │   ├── src/
 │   │   ├── main.py
 │   │   ├── common/
-│   │   └── features/            # Auth, Operator and voice routes/services/tests
+│   │   └── features/            # Auth, Operator, voice, memory, team and forecasting
 │   ├── tests/
 │   ├── scripts/
 │   └── hermes/
@@ -66,11 +68,25 @@ The launcher uses the existing installation; it reports missing setup instead of
 
 ## Workspace and AI voice
 
+### CSV attachments
+
+Use **Attach CSV** beside the Operator input, or drop a CSV onto the composer. Ask a question with it, or send the file alone for a summary. Remove a selected file before sending to change your mind. Failed requests restore the attachment for retry. Each account's saved chat shows the filename and parsed row/column counts.
+
+The server parses UTF-8 CSV using the Python standard library, including quoted cells, multiline values, a UTF-8 BOM, and comma/semicolon/tab/pipe delimiters. The first CSV record is the header; empty lines and subsequent blank rows are ignored. Blank headers receive names such as `Column 2`, and duplicate headers receive suffixes such as `Sales (2)`, preserving any existing names. Adjustments are shown in the attachment label and supplied to the Operator. Every data row must have the same width. One file per message is supported, up to 50,000 bytes, 500 data rows, 40 columns, 2,000 characters per cell and 24,000 characters of prepared context. Files exceeding a limit are rejected before any rows reach the model; they are never silently sampled.
+
+The full parsed table, missing-value counts and exact decimal sum/min/max summaries for plain numeric columns are supplied to Qwen with the question. Currency-formatted, percentage and mixed columns remain text. CSV cells and formulas are treated as data. The Operator explains the supplied export; it has no live business connection or code execution tool. Original files are not stored in a file library. Their parsed contents live in the runtime conversation and may be lost through context compression; reattach the CSV if the Operator needs the original rows again. Only attachment labels are stored in the app's visible chat records. This does not add RAG, Graphify, or runtime tools.
+
+Restart the running server after updating so it loads the new `csv_file` chat field.
+
 The workspace uses the supplied Mula logo, a dark charcoal/clay palette, and a layered circular Operator core. Its rings breathe and counter-rotate while idle, with additional movement driven by the actual playback waveform through Web Audio; reduced-motion preferences keep it still. Expand chat gives the saved conversation more space. Reports and My website remain marked as upcoming.
 
-**My team** (`/team`) opens an account-gated, flat office view with selectable teammates and a role inspector. The Operator is available for planning and guidance. Inventory, Forecasting, Procurement, Customer service and Website are clearly marked as planned; the dashed paths illustrate future collaboration rather than live task activity. The mobile layout uses a compact station grid and brings selected role details into view. This page does not enable specialist execution, hiring or delegation.
+**My team** (`/team`) uses neutral charcoal surfaces and clay accents. It shows only Operator and Forecasting. Select an agent to edit its additional instructions, reference data and enabled tools. Settings are account-scoped in SQLite and apply on the next request; concurrent edits are rejected rather than silently overwritten. Operator's CSV reading, memory retrieval and explicit memory saves are enforced server-side. Disabling a capability does not erase earlier chat content.
 
-Voice mode reads each newly completed answer aloud. Select **Chat** or the speaker/mute button to stop audio immediately and disable automatic speech. This preference is remembered in this browser. Existing history is never read automatically; **Play reply** replays an answer when voice is enabled. Sending another message, signing out or hiding the tab stops current playback. Voice output is TTS only; microphone input is not implemented.
+Select **Forecasting → Run a forecast** to upload historical CSV data, choose date/value columns and daily, weekly or monthly frequency, and forecast 1–90 periods. Available tools are last value, fixed trailing moving average, simple exponential smoothing, seasonal repeat and drift. Automatic comparison selects the lowest MAE on common expanding-window one-step test periods. The page includes a chart, values, historical MAE/RMSE, assumptions and a CSV download. At least six regular periods are required; seasonal repeat needs two full cycles before the test period. Missing periods, duplicates and ambiguous numbers must be resolved explicitly.
+
+Calculations work without Qwen or a paid provider. **Ask Forecasting to explain** passes the saved report and this agent's instructions/reference data to Qwen in an isolated execution session. Only the explanation uses the LLM; it does not generate forecast values. The latest 20 reports per account persist in SQLite, including the selected date/value history, but the original CSV is not stored. Prompt/reference changes affect explanations, while numerical parameters control calculations. Operator can direct you here; automatic specialist delegation is not connected. See [forecasting and agent settings](docs/forecasting.md) for formulas, data requirements and storage.
+
+Voice mode reads each newly completed answer aloud. Select **Chat** or the speaker/mute button to stop audio immediately and disable automatic speech. This preference is remembered in this browser. Existing history is never read automatically; **Play reply** replays an answer when voice is enabled. Sending another message, signing out or hiding the tab stops current playback. The microphone button provides separate speech-to-text input; the speaker/mute button controls AI voice output.
 
 After updating from the text-only version, restart the running backend before using voice; the launcher deliberately reuses existing services, so an old process will not load the new speech endpoint automatically.
 
@@ -92,10 +108,38 @@ npm test
 npm run build
 ```
 
-Optional UI regression: with a preview running on port 3001 and Playwright available, run `node src/features/team/tests/browser.spec.mjs`. `MULA_TEST_URL` overrides the preview address, `MULA_PLAYWRIGHT_MODULE` can point to an existing Playwright module, and `MULA_BROWSER_PATH` can select an installed browser. The check uses mocked account responses and covers idle/reduced motion, navigation, role selection, responsive layouts and sign-out without creating accounts.
+Optional UI regression: with a preview running on port 3001 and Playwright available, run `node src/features/team/tests/browser.spec.mjs`. `MULA_TEST_URL` overrides the preview address, `MULA_PLAYWRIGHT_MODULE` can point to an existing Playwright module, and `MULA_BROWSER_PATH` can select an installed browser. Use an isolated test backend/database: this check creates a test account and forecasts. It covers settings persistence, real calculations, CSV export, report reload, tool changes and responsive layout. Set `MULA_TEST_EXPLANATION=1` to also verify an explanation through the running Qwen gateway.
 
 The backend tests simulate the documented Hermes HTTP boundary, including session routing, interrupted streams, authentication failures, reasoning filtering and cancellation. They do not substitute for a live Hermes/model test.
 
 ## Deployment boundary
 
 This version provides local accounts and server-enforced conversation ownership. One account represents one workspace. Employee invitations, roles, password recovery and separate Hermes memory profiles are not implemented yet. Cross-chat personal memory remains disabled until profile isolation is implemented. For HTTPS hosting, set `LARAS_SECURE_COOKIES=true`, protect the database and keep Hermes private.
+
+## Inspectable memory
+
+Open **Memory** to browse and edit your account's categorized Markdown files. SQLite FTS5 retrieves relevant notes for the Operator; essential facts are supplied consistently. Use `/remember Your fact` to save an explicit note from chat. Nothing is automatically inferred into permanent memory from ordinary messages or CSVs.
+
+See [memory files, RAG and SQLite inspection](docs/memory-and-sqlite.md) for the full tree, retrieval limits, manual editing, and copyable read-only SQL queries. The database remains `.runtime/accounts.sqlite3`; memory lives in `.runtime/workspaces/<account-id>/memory/`. Restart the running server to load the memory endpoints.
+
+## Speech-to-text input
+
+Click the microphone beside the Operator input, allow microphone access, and speak. Choose **English** or **Bahasa Indonesia** with the Speech language selector; this preference is remembered in the browser. Interim words appear in a separate preview, while finalized speech appends to the current draft. Existing typed text stays editable. Click the microphone again to stop, review or edit the draft, then press **Send**. Dictation never sends messages automatically, and Send is disabled until recording finishes.
+
+Starting dictation stops AI speech to avoid feedback. Leaving the tab, signing out, or navigating away cancels recording. Permission denial, missing microphones, no speech and recognition-service failures produce actionable messages. The 8,000-character message limit also applies to dictation. Unsupported browsers keep typed chat available with an explanation beside the disabled microphone.
+
+This initial implementation uses the browser’s Web Speech `SpeechRecognition` / `webkitSpeechRecognition` API, requiring browser support and a secure context (HTTPS or localhost). No API key or new package is required. Some browsers send audio to an online recognition service, so recognition may need internet access and is not guaranteed to run on the device. Mula does not upload microphone recordings to its backend; only the reviewed text is sent when you press Send. See [MDN’s SpeechRecognition documentation](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition) for browser/service limitations.
+
+The optional `src/features/voice/tests/browser.spec.mjs` check uses a simulated recognition engine to exercise the dictation UI, cancellation, permission errors and mobile layout. Set `MULA_PLAYWRIGHT_MODULE`, `MULA_BROWSER_PATH` and `MULA_TEST_URL` as needed, as with the team browser check. It does not measure real microphone transcription accuracy.
+
+## Live conversation
+
+Click **Start live conversation** for hands-free turns. Speak, then pause for about 1.4 seconds after the last recognition update. The app finalizes your transcript and submits it automatically. Mula begins speaking completed sentences or longer phrases as text tokens arrive, without waiting for the full answer. When both generation and playback finish, the microphone listens for your next turn.
+
+The microphone pauses while Mula is responding to avoid hearing its own output. Tap the microphone (**Interrupt and speak**) to cancel the current reply and speak again. While listening, tap it to finish your spoken turn immediately. **End live conversation**, switching to Chat/muting, Stop reply, Stop audio, hiding the tab, signing out, or leaving the page ends the session. Permission, model and TTS failures stop the loop with an explanation; there is no background auto-retry. A 20-second no-speech timeout also pauses the session. The live mode is an explicit opt-in and is not restored on refresh.
+
+Live conversation enables AI voice output and sends finalized speech without a separate Send click. Any existing draft is included with the first spoken turn, but it is never submitted without actually hearing speech. Draft editing and new CSV selection are disabled during a live session; end the session to edit or attach a file. Normal typing and microphone dictation retain their review-before-Send behavior.
+
+This is a turn-based pipeline using browser recognition, local Qwen text streaming and the existing macOS TTS provider. It is not a full-duplex audio model: spoken barge-in while the AI is playing is not enabled, and interruption uses the microphone control. Browser recognition may use an online vendor service, and audible response time depends on recognition finalization, model speed, and TTS. Speech synthesis is requested per segment, so short gaps may occur. Markdown code blocks are omitted from spoken segments, and pending text/audio is discarded when a turn is interrupted.
+
+Unit checks for this loop are in `src/features/voice/tests/liveConversation.test.mjs`. The optional `live.browser.spec.mjs` check in the same directory uses simulated microphone/model input and real local TTS to verify automatic turns, speech before text completion, interruption and mobile layout. It requires an isolated server with TTS on port 8001 and a preview targeting that server on port 3001; override `MULA_TEST_URL`, `MULA_PLAYWRIGHT_MODULE` and `MULA_BROWSER_PATH` as needed. It creates a temporary account in that server's database and does not test real microphone recognition accuracy.

@@ -39,6 +39,16 @@ def server_ready():
             "An older or incompatible server is running on port 8000. "
             "Stop its Terminal process, then run ./run.sh again to load server/src."
         )
+    if not responds("http://127.0.0.1:8000/api/memory", statuses=(401,)):
+        raise RuntimeError(
+            "The server on port 8000 does not have account memory support. "
+            "Stop its Terminal process, then run ./run.sh again to load the updated server."
+        )
+    if not responds("http://127.0.0.1:8000/api/team", statuses=(401,)) or not responds("http://127.0.0.1:8000/api/forecasting/latest", statuses=(401,)):
+        raise RuntimeError(
+            "The server on port 8000 does not have agent settings and forecasting support. "
+            "Stop its Terminal process, then run ./run.sh again to load the updated server."
+        )
     return responds("http://127.0.0.1:8000/api/auth/me", statuses=(401,))
 
 

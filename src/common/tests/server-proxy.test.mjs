@@ -2,6 +2,33 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { proxyBackend } from "../services/server-proxy.ts";
 
+test("agent settings and forecasting uploads are bounded at the proxy", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", () => { throw new Error("Must not forward"); });
+  for (const [path, size] of [["/api/team/operator", 100001], ["/api/forecasting/run", 400001]]) {
+    const response = await proxyBackend(new Request(`http://localhost:3000${path}`, { method: "POST", body: "x".repeat(size) }), path);
+    assert.equal(response.status, 413);
+  }
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
+test("oversized CSV requests stop at the proxy without reaching the backend", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", () => { throw new Error("Must not forward"); });
+  const response = await proxyBackend(new Request("http://localhost:3000/api/chat", {
+    method: "POST", body: "x".repeat(400001),
+  }), "/api/agents/operator/chat");
+  assert.equal(response.status, 413);
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
+test("oversized memory edits stop before buffering arbitrary content", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", () => { throw new Error("Must not forward"); });
+  const response = await proxyBackend(new Request("http://localhost:3000/api/memory/document", {
+    method: "PUT", body: "x".repeat(64001),
+  }), "/api/memory/document");
+  assert.equal(response.status, 413);
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
 test("auth proxy forwards a private session cookie and login cookie", async (context) => {
   const fetch = context.mock.method(globalThis, "fetch", async (url, options) => {
     assert.ok(url.endsWith("/api/auth/login"));

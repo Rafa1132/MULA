@@ -6,8 +6,9 @@ import { AccountForm } from "@/features/auth";
 import Markdown from "react-markdown";
 import { Icon, Sidebar } from "@/common/components";
 import { MulaLogo } from "@/common/components";
-import { OperatorCore } from "@/features/operator";
-import { SpeechPlayer } from "@/features/voice";
+import { OperatorCore, CsvAttachment } from "@/features/operator";
+import type { CsvFile } from "@/features/operator";
+import { SpeechPlayer, useDictation, appendDictation, useLiveConversation } from "@/features/voice";
 import type { VoiceState } from "@/features/voice";
 import { readChatStream } from "@/features/operator";
 
@@ -29,7 +30,10 @@ export default function Workspace() {
   const [loading, setLoading] = useState(true);
   const [accountError, setAccountError] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraftValue] = useState("");
+  const draftValue = useRef("");
+  const [attachment, setAttachment] = useState<CsvFile | null>(null);
+  const [readingCsv, setReadingCsv] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("Ready when you are");
@@ -46,6 +50,51 @@ export default function Workspace() {
   const [expanded, setExpanded] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
+  const [dictationLimit, setDictationLimit] = useState(false);
+  function setDraft(value: string) {
+    draftValue.current = value;
+    setDraftValue(value);
+    setDictationLimit(false);
+  }
+  const dictation = useDictation((transcript) => {
+    const result = appendDictation(draftValue.current, transcript);
+    setDraft(result.text);
+    if (result.truncated) setDictationLimit(true);
+  }, () => {
+    voice.current?.stop();
+    setVoiceError("");
+    setDictationLimit(false);
+  });
+  const dictating = dictation.state !== "idle";
+  const live = useLiveConversation({
+    player: () => voice.current,
+    send: (text, onToken) => sendTurn(text, onToken),
+    abort: () => controller.current?.abort(),
+    transcript: (text) => setDraft(text),
+  });
+  const liveActive = live.state !== "off";
+
+  function toggleLive() {
+    if (live.isActive()) { live.stop(); return; }
+    dictation.cancel();
+    voice.current?.stop();
+    setChatMode(false);
+    live.start(dictation.language, draftValue.current);
+  }
+
+  function microphone() {
+    if (live.isActive()) {
+      if (live.state === "responding") live.interrupt();
+      else live.finishTurn();
+    } else dictation.toggle();
+  }
+
+  useEffect(() => {
+    if ((dictationLimit || draft.length >= 8000) && dictation.isActive()) {
+      dictation.cancel();
+      setDictationLimit(true);
+    }
+  }, [draft, dictating, dictationLimit]);
 
   useEffect(() => {
     const element = conversation.current;
@@ -80,6 +129,8 @@ export default function Workspace() {
   }
 
   function setChatMode(chatOnly: boolean) {
+    if (chatOnly) live.stop();
+    else if (live.isActive()) return;
     mutedRef.current = chatOnly;
     setMuted(chatOnly);
     setVoiceError("");
@@ -93,7 +144,7 @@ export default function Workspace() {
   }
 
   function playReply(text: string) {
-    if (mutedRef.current || document.hidden) return;
+    if (mutedRef.current || document.hidden || dictation.isActive() || live.isActive()) return;
     setVoiceError("");
     void voice.current?.speak(text).catch(reportVoiceError);
   }
@@ -109,8 +160,17 @@ export default function Workspace() {
 
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
-    const text = draft.trim();
-    if (!text || busy) return;
+    if (live.isActive()) return;
+    await sendTurn(draftValue.current);
+  }
+
+  async function sendTurn(rawText: string, onToken?: (token: string) => void): Promise<boolean> {
+    let text = rawText.trim();
+    if (controller.current || readingCsv || dictation.isActive() || (!text && !attachment)) return false;
+    if (!text) text = "Summarize this CSV and highlight useful findings.";
+    const attachedCsv = attachment;
+    let attachmentNote: string | undefined;
+    if (attachedCsv) attachmentNote = `CSV: ${attachedCsv.name}`;
 
     voice.current?.stop();
     setVoiceError("");
@@ -120,12 +180,14 @@ export default function Workspace() {
     const abort = new AbortController();
     controller.current = abort;
     const replyId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
     setMessages((previous) => [
       ...previous,
-      { id: crypto.randomUUID(), role: "user", text },
+      { id: userId, role: "user", text, note: attachmentNote },
       { id: replyId, role: "assistant", text: "" },
     ]);
     setDraft("");
+    setAttachment(null);
     setError("");
     setBusy(true);
     setStatus("Connecting to Operator…");
@@ -141,6 +203,7 @@ export default function Workspace() {
           message: text,
           stream: true,
           session_id: sessionId.current,
+          csv_file: attachedCsv,
         }),
         signal: abort.signal,
       });
@@ -155,6 +218,15 @@ export default function Workspace() {
         throw new Error("Streaming is unavailable in this browser.");
 
       await readChatStream(response.body, (chunk) => {
+        if (chunk.type === "memory") {
+          const notes: string[] = [];
+          if (chunk.note) notes.push(chunk.note);
+          if (chunk.paths?.length) notes.push("Memory used: " + chunk.paths.join(", "));
+          updateReply(userId, text, [attachmentNote, ...notes].filter(Boolean).join(" · "));
+        }
+        if (chunk.type === "attachment" && typeof chunk.note === "string") {
+          updateReply(userId, text, chunk.note);
+        }
         if (chunk.type === "token" && typeof chunk.content === "string") {
           if (firstToken) {
             setStatus(
@@ -164,6 +236,7 @@ export default function Workspace() {
           }
           reply += chunk.content;
           updateReply(replyId, reply);
+          if (!abort.signal.aborted) onToken?.(chunk.content);
         }
         if (chunk.type === "done" && chunk.truncated) {
           updateReply(
@@ -173,11 +246,16 @@ export default function Workspace() {
           );
         }
       });
-      playReply(reply);
+      if (abort.signal.aborted) return false;
+      if (!onToken) playReply(reply);
       setStatus("Ready when you are");
+      return true;
     } catch (failure) {
+      if (!onToken || !abort.signal.aborted) setAttachment(attachedCsv);
       if (abort.signal.aborted) {
-        updateReply(replyId, reply, "Stopped by you.");
+        let note = "Stopped by you.";
+        if (onToken) note = "Voice reply interrupted.";
+        updateReply(replyId, reply, note);
         setStatus("Reply stopped");
       } else {
         let detail =
@@ -189,10 +267,13 @@ export default function Workspace() {
         setDraft(text);
         setStatus("Could not complete reply");
       }
+      return false;
     } finally {
-      controller.current = null;
-      setBusy(false);
-      input.current?.focus();
+      if (controller.current === abort) {
+        controller.current = null;
+        setBusy(false);
+        if (!onToken) input.current?.focus();
+      }
     }
   }
 
@@ -229,15 +310,19 @@ export default function Workspace() {
   }, []);
 
   async function signOut() {
+    live.stop();
+    dictation.cancel();
     voice.current?.stop();
     const response = await fetch("/api/auth/logout", { method: "POST" });
     if (!response.ok) { setError("Could not sign out. Please retry."); return; }
     // Also stop work started while the sign-out request was in flight.
     controller.current?.abort();
+    dictation.cancel();
     voice.current?.stop();
     sessionId.current = null;
     setMessages([]);
     setDraft("");
+    setAttachment(null);
     setError("");
     setAccount(null);
     setVoiceError("");
@@ -252,6 +337,20 @@ export default function Workspace() {
   if (busy) presence = "Thinking with you…";
   if (voiceState === "preparing") presence = "Preparing voice…";
   if (voiceState === "speaking") presence = "Speaking…";
+  if (dictation.state === "starting") presence = "Allow microphone access to begin…";
+  if (dictation.state === "listening") presence = "Listening…";
+  if (dictation.state === "stopping") presence = "Finishing dictation…";
+  if (live.state === "starting") presence = "Starting live conversation…";
+  if (live.state === "listening") presence = "Listening · pause to send";
+  let micLabel = "Start dictation";
+  if (!dictation.supported) micLabel = "Speech input unavailable in this browser";
+  else if (dictation.state === "listening") micLabel = "Stop dictation";
+  else if (dictating) micLabel = "Cancel dictation";
+  if (live.state === "responding") micLabel = "Interrupt and speak";
+  else if (live.state === "listening") micLabel = "Finish spoken turn";
+  else if (live.state === "starting") micLabel = "Starting live conversation";
+  let micClass = "dictation-button icon-button";
+  if (dictating || live.state === "listening") micClass += " recording";
   let voiceLabel = "Mute AI voice · switch to chat";
   if (muted) voiceLabel = "Enable AI voice";
   let mainClass = "main-panel";
@@ -264,7 +363,7 @@ export default function Workspace() {
       <main className={mainClass}>
         <header className="topbar">
           <div className="workspace-title"><span className="mobile-brand"><MulaLogo /></span><span className="desktop-title">Your workspace <span className="header-divider">/</span> <strong>Operator</strong></span></div>
-          <div className="topbar-actions"><a className="mobile-team-link" href="/team">My team</a><span className="preview-badge">EARLY PREVIEW</span><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
+          <div className="topbar-actions"><a className="mobile-team-link" href="/team">My team</a><a className="mobile-team-link" href="/memory">Memory</a><span className="preview-badge">EARLY PREVIEW</span><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
         </header>
 
         <section className="operator-stage" aria-label="Your Operator">
@@ -296,7 +395,7 @@ export default function Workspace() {
                   </div>}
                   {!message.text && !message.note && <div className="waiting"><span /><span /><span /><span className="waiting-label">Preparing your reply</span></div>}
                   {message.note && <p className="message-note">{message.note}</p>}
-                  {message.role === "assistant" && message.text && !busy && !muted && <button className="play-reply text-button" onClick={() => playReply(message.text)}><Icon name="voice" />Play reply</button>}
+                  {message.role === "assistant" && message.text && !busy && !muted && !dictating && !liveActive && <button className="play-reply text-button" onClick={() => playReply(message.text)}><Icon name="voice" />Play reply</button>}
                 </div>
               </article>
             ))}
@@ -306,10 +405,20 @@ export default function Workspace() {
         <div className="composer-wrap">
           {error && <div className="error" role="alert">{error}</div>}
           {voiceError && <div className="error voice-error" role="status">{voiceError}<button type="button" className="text-button" onClick={() => setVoiceError("")}>Dismiss</button></div>}
+          {live.error && <div className="error" role="alert">{live.error}<button className="text-button" onClick={live.dismissError}>Dismiss</button></div>}
+          <div className="live-conversation-control"><button type="button" className="live-conversation-button" aria-pressed={liveActive} onClick={toggleLive} disabled={!dictation.supported || (!liveActive && (busy || readingCsv))}>{!liveActive && "Start live conversation"}{liveActive && "End live conversation"}</button><span>{!liveActive && "Speak naturally · your turn sends after a pause"}{liveActive && "Live · pause to send · microphone to interrupt"}</span></div>
+          {liveActive && <p className="live-notice" role="status">Live conversation sends your speech automatically after a short pause. The microphone pauses during Mula’s reply.{live.interim && <span className="interim-transcript">{live.interim}</span>}</p>}
+          {dictation.error && <div className="error" role="alert">{dictation.error}<button className="text-button" onClick={dictation.dismissError}>Dismiss</button></div>}
+          {dictationLimit && <p className="message-note" role="status">The message reached 8,000 characters. Dictation stopped; review the captured text.</p>}
+          {dictation.supported && <div className="dictation-tools"><label htmlFor="dictation-language">Speech language</label><select id="dictation-language" value={dictation.language} onChange={(event) => dictation.changeLanguage(event.target.value)} disabled={busy || dictating || liveActive}><option value="en-US">English</option><option value="id-ID">Bahasa Indonesia</option></select><span>Browser speech service may process audio online.</span></div>}
+          {!dictation.supported && <p className="dictation-unavailable">Speech input needs a supported browser on localhost or HTTPS. You can still type.</p>}
+          {dictating && <p className="dictation-preview" role="status"><span className="presence-dot" />{presence}{dictation.interim && <span className="interim-transcript">{dictation.interim}</span>}</p>}
+          <CsvAttachment value={attachment} onChange={setAttachment} onError={setError} onReading={setReadingCsv} disabled={busy || liveActive}>
           <form ref={form} className="composer" onSubmit={sendMessage}>
             <label htmlFor="message" className="sr-only">Message Mula</label>
-            <textarea ref={input} id="message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleKeyDown} maxLength={8000} rows={1} placeholder="Ask Mula anything…" disabled={busy} />
+            <textarea ref={input} id="message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleKeyDown} maxLength={8000} rows={1} placeholder="Ask Mula anything…" disabled={busy} readOnly={liveActive} />
             <div className="composer-controls">
+              <button type="button" className={micClass} aria-label={micLabel} title={micLabel} aria-pressed={dictating || live.state === "listening"} disabled={(busy && !liveActive) || !dictation.supported || live.state === "starting"} onClick={microphone}><Icon name="microphone" /></button>
               <div className="mode-switch" role="group" aria-label="AI response mode">
                 <button type="button" aria-pressed={muted} onClick={() => setChatMode(true)}>Chat</button>
                 <button type="button" aria-pressed={!muted} onClick={() => setChatMode(false)}>Voice</button>
@@ -317,12 +426,13 @@ export default function Workspace() {
               <button type="button" className="voice-button icon-button" aria-label={voiceLabel} title={voiceLabel} aria-pressed={!muted} onClick={() => setChatMode(!muted)}>
                 {muted && <Icon name="muted" />}{!muted && <Icon name="voice" />}
               </button>
-              {busy && <button type="button" className="send-button stop-button" aria-label="Stop reply" onClick={() => { controller.current?.abort(); voice.current?.stop(); }}><Icon name="stop" /></button>}
-              {!busy && <button type="submit" className="send-button" disabled={!draft.trim()} aria-label="Send message"><Icon name="send" /></button>}
+              {busy && <button type="button" className="send-button stop-button" aria-label="Stop reply" onClick={() => { live.stop(); controller.current?.abort(); voice.current?.stop(); }}><Icon name="stop" /></button>}
+              {!busy && <button type="submit" className="send-button" disabled={readingCsv || dictating || liveActive || (!draft.trim() && !attachment)} aria-label="Send message"><Icon name="send" /></button>}
             </div>
           </form>
+          </CsvAttachment>
           <div className="composer-meta"><span>{muted && "Chat mode · AI voice off"}{!muted && "Voice mode · replies read aloud"}</span>
-            {voiceState !== "idle" && <button className="text-button" onClick={() => voice.current?.stop()}>Stop audio</button>}
+            {voiceState !== "idle" && <button className="text-button" onClick={() => { live.stop(); voice.current?.stop(); }}>Stop audio</button>}
             {voiceState === "idle" && <span className="keyboard-hint">Enter to send · Shift + Enter for a new line</span>}
           </div>
           <p className="scope-note">Planning and guidance for now. Your conversation is saved to your account.</p>

@@ -24,3 +24,13 @@ class LauncherTests(unittest.TestCase):
             self.assertTrue(launcher.server_ready())
         self.assertEqual(responds.call_args_list[1].args, ("http://127.0.0.1:8000/api/speech",))
         self.assertEqual(responds.call_args_list[1].kwargs, {"statuses": (405,)})
+
+    def test_server_without_memory_support_is_not_reused(self):
+        with patch.object(launcher, "responds", side_effect=[True, True, False]):
+            with self.assertRaisesRegex(RuntimeError, "does not have account memory support"):
+                launcher.server_ready()
+
+    def test_server_without_forecasting_is_not_reused(self):
+        with patch.object(launcher, "responds", side_effect=[True, True, True, True, False]):
+            with self.assertRaisesRegex(RuntimeError, "agent settings and forecasting support"):
+                launcher.server_ready()

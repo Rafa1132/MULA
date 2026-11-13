@@ -4,6 +4,7 @@ export function speechChunks(markdown: string): string[] {
   // Speak prose, not fenced code, HTML, markdown syntax or raw destinations.
   const text = markdown
     .replace(/```[\s\S]*?(?:```|$)/g, " ")
+    .replace(/~~~[\s\S]*?(?:~~~|$)/g, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/<[^>]*>/g, " ")

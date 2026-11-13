@@ -1,6 +1,8 @@
-type IconName = "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop";
+type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop";
 
 const paths: Record<IconName, string> = {
+  microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
+  memory: "M4 3h16v18H4ZM8 3v18M12 8h4M12 12h4M12 16h3",
   home: "m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z",
   report: "M5 3h9l5 5v13H5ZM14 3v6h5M9 13h6M9 17h6",
   website: "M3 4h18v16H3ZM3 9h18M6 6.5h.01M9 6.5h.01",

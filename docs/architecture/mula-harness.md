@@ -48,13 +48,19 @@ The reply returns through the runtime adapter, FastAPI and Next.js proxy to the 
 
 Stop closes the stream toward the runtime, which cooperatively interrupts generation. It does not roll back work already performed.
 
-## Voice output
+## CSV input
+
+The composer accepts one UTF-8 CSV by file picker or drag-and-drop and sends its filename/content in the optional `csv_file` JSON field on the existing chat endpoint. Server-side parsing runs before saving the turn or calling the runtime. `server/src/features/operator/csv_files.py` checks structure and bounds, derives missing-value counts and exact plain-decimal summaries, and serializes the entire accepted table into bounded user-message context. Files exceeding the limits are rejected without sampling. No file-reading runtime tools or external parsing services are enabled.
+
+The visible account-owned user message retains the question and an attachment note with filename/row/column counts; an `attachment` stream event supplies that note to the client. Raw rows are passed to the runtime in the user turn, where normal persistence and lossy compression apply. There is no original-file library, retrieval index or automatic reloading after compression. Cells are untrusted data, and formulas are never executed. The Next.js proxy bounds chat request bodies at 400,000 bytes before forwarding; file/content/context limits are enforced separately by the server.
+
+## Voice playback path
 
 After a successful text stream completes, voice mode strips Markdown/code from the reply and splits prose into bounded chunks. The browser calls `POST /api/speech` through the existing same-origin proxy and account-cookie boundary. FastAPI validates a maximum of 1,200 characters per request and uses the backend Mac's `say` executable to generate WAV audio. This is a presentation path, not an LLM tool call; it does not add messages to either conversation store or send a second model request.
 
 `src/features/voice/services/speech.ts` decodes each returned WAV with Web Audio and connects a buffer source through an analyser to the output device. `OperatorCore.tsx` samples that analyser to animate the central core and rings. Reduced-motion mode keeps the drawing still. A generation counter invalidates pending fetch/decode work when playback is cancelled, preventing audio from starting after mute. New messages, tab hiding and sign-out stop current playback. Chat mode disables automatic speech and is persisted per browser in `localStorage`; loaded history never auto-plays.
 
-The initial provider uses private temporary files, no shell, no external TTS API, uncached responses, one active synthesis job per process and a 30-second timeout. Temporary audio is deleted after reading. Closing a client connection does not guarantee immediate server-job cancellation, but the bounded job cannot resume playback in the cancelled client. The macOS provider must be replaced for a Linux production backend. Speech begins after reply completion, with possible pauses between chunks; microphone input is not included.
+The initial provider uses private temporary files, no shell, no external TTS API, uncached responses, one active synthesis job per process and a 30-second timeout. Temporary audio is deleted after reading. Closing a client connection does not guarantee immediate server-job cancellation, but the bounded job cannot resume playback in the cancelled client. The macOS provider must be replaced for a Linux production backend. Speech begins after reply completion, with possible pauses between chunks. Microphone input is a separate browser speech-recognition path described below.
 
 ## Accounts and storage
 
@@ -79,9 +85,9 @@ Login uses username/password credentials, salted scrypt password hashes and an o
 | Context compression | Enabled with a configured trigger cap of 24,000 tokens; the six most recent messages are protected by the configuration. Compression is lossy and is not a hard per-request token limit. |
 | Configured Qwen context window | 40,960 tokens. This is capacity, not a fixed charge or amount of work for every message. |
 | Smaller-context compatibility | A reproducible local patch admits only the explicitly configured tool-free API Operator with the selected model and an 8,192–40,960-token window. Other cases retain the upstream minimum. |
-| Structured long-term business memory | Not implemented. |
+| Structured long-term business memory | Account-scoped categorized Markdown files, explicit owner saves, SQLite FTS5 retrieval and a Memory inspector. See `docs/memory-and-sqlite.md`. |
 | Built-in persistent personal memory | Disabled in the shared runtime profile. |
-| RAG over old conversations or documents | Not implemented. Saved transcripts are not automatically a retrieval index. |
+| RAG | Active over categorized memory files using SQLite FTS5. Saved transcripts and CSV files are not automatically indexed as durable memory. |
 
 Short replies, same-conversation recall and separation between new runtime conversations have been exercised previously. Full-window quality, compression under a long business workload and production throughput have not been established.
 
@@ -297,7 +303,7 @@ platform_toolsets:
 mcp_servers: {}
 ```
 
-The effective tool set is empty. There is no registered inventory function, procurement function, business MCP server or application-defined specialist. Describing an action in chat does not register executable functionality.
+The effective **model-callable runtime** tool set is empty. The application separately implements a Forecasting specialist with deterministic tools dispatched by authenticated HTTP requests. It does not register schemas with the runtime or enable autonomous delegation. There is still no inventory/purchasing function or business MCP server. Describing an action in chat does not register executable functionality.
 
 ### Runtime machinery when tools are enabled
 
@@ -477,3 +483,30 @@ Pinned runtime references, relative to `.runtime/hermes-source`:
 - `model_tools.py`: `get_tool_definitions()` and `handle_function_call()`.
 
 These references document current code behavior and supported runtime machinery. The inventory examples above are explanatory protocol examples, not claims of deployed business functionality.
+
+## Account memory retrieval
+
+The application-owned memory service lives in `server/src/features/memory/`. It keeps per-account Markdown files and a rebuildable SQLite FTS5 index. The Operator route retrieves memory before execution; `agent.py` appends current memory to the request's system instructions. This does not enable upstream personal memory or any runtime tools. `src/features/memory/` implements the editor, tree, search and last-retrieval inspector. See [memory and SQLite](../memory-and-sqlite.md) for bounds, explicit save commands and deletion/history semantics.
+
+## Speech-to-text input
+
+`src/features/voice/services/dictation.ts` wraps browser speech recognition; `hooks/useDictation.ts` owns its lifecycle and language preference. A user gesture starts a session. Cumulative result lists are deduplicated by finalized-result index, interim text is shown separately, and finalized text appends to the latest draft. The input remains editable, with Send blocked during recognition. The owner reviews and sends through the normal authenticated chat path; no server transcription endpoint or new runtime tool is added.
+
+Starting the microphone stops TTS. Stop allows a final recognition result, with a bounded timeout if the service never ends. Cancel detaches result callbacks before aborting; late permission grants are also aborted. Tab hiding, sign-out and unmount cancel recording, with no automatic restart. Unsupported or insecure browser contexts leave typing available. Some browser recognition engines transmit audio to their vendor service; this path is not a guaranteed local/offline model. Mula’s backend receives only the text submitted by the user.
+
+## Live voice turns
+
+`LiveConversation` owns a separate recognition session for explicit hands-free conversation. It finalizes and submits recognized speech after a bounded pause, stops the microphone during response generation/playback, and listens again only after the model stream and speech queue both drain. Explicit interruption cancels the current stream, queued segments and playback; generation IDs prevent old completions from taking over a newer listener. End/hidden-tab/unmount/error paths cancel the loop without automatic background retries.
+
+`StreamingSpeech` buffers streamed text into sentence/phrase segments outside Markdown code, queues TTS sequentially, and flushes a trailing segment at stream completion. The existing `SpeechPlayer` produces and analyzes real WAV playback. The Operator request, account memory retrieval and history persistence use the same server path as text chat. No new inference provider or API key is added. This remains a turn-based browser-STT → streamed text LLM → macOS-TTS pipeline; control-based interruption is supported, simultaneous speech detection during AI output is not.
+
+
+## Agent configuration and statistical Forecasting
+
+`server/src/features/team/service.py` defines the two-agent catalog and allowlisted capability IDs. `agent_settings` stores prompt additions, reference data, tools and a monotonic revision, keyed by authenticated account and agent. PUT validates the allowlist and uses a SQLite write lock plus revision comparison to prevent lost updates. User settings cannot enable shell, arbitrary code or a runtime toolset. `/api/team` supplies the actual available catalog to the client.
+
+The Operator route checks `csv_read` before attachment ingestion and `memory_write` before `/remember` persistence. With `memory_read` disabled it skips new retrieval. Current settings are appended to per-request instructions and disabled capabilities are described to the model. This does not remove data previously included in runtime history. Existing accounts retain all current capabilities by default.
+
+`server/src/features/forecasting/service.py` implements five bounded, pure-Python statistical methods. `/api/forecasting/preview` returns normalized CSV column names. `/run` validates dates, values, cadence and method permissions, calculates a common rolling-origin comparison and forecasts, then saves an account-owned report. `/latest` restores the most recent report; at most 20 are retained per account. `/explain` accepts only a run UUID, loads the report under the current account, checks the `explain` permission, and sends a bounded excerpt to Qwen. It cannot accept fabricated tool results from the browser. Each explanation receives a unique runtime session UUID, separate from the Operator conversation. The legacy transport header prefix remains `mula-operator-`; its UUID provides isolation. Explanations and report series are persisted separately from Operator chat.
+
+This is an application-dispatched specialist workflow: the owner runs calculations, then optionally asks for an explanation. It does not enable a model-driven function-calling loop or automatic Operator delegation, so the existing small-context runtime exception remains applicable. Client components are in `src/features/team` and `src/features/forecasting`. All endpoint proxies forward account cookies, reject cross-origin writes and bound request bodies. Full behavior and formulas: [forecasting](../forecasting.md).

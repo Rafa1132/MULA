@@ -2,7 +2,7 @@ import Icon from "./Icon";
 import MulaLogo from "./MulaLogo";
 
 type Props = {
-  active: "workspace" | "team";
+  active: "workspace" | "team" | "memory";
   username: string;
   onSignOut: () => void;
   busy?: boolean;
@@ -11,10 +11,13 @@ type Props = {
 export default function Sidebar({ active, username, onSignOut, busy = false }: Props) {
   let workspaceClass = "nav-item";
   let teamClass = "nav-item";
+  let memoryClass = "nav-item";
+  let memoryCurrent: "page" | undefined;
   let workspaceCurrent: "page" | undefined;
   let teamCurrent: "page" | undefined;
   if (active === "workspace") { workspaceClass += " active-nav"; workspaceCurrent = "page"; }
   if (active === "team") { teamClass += " active-nav"; teamCurrent = "page"; }
+  if (active === "memory") { memoryClass += " active-nav"; memoryCurrent = "page"; }
   return (
       <aside className="sidebar">
         <a className="brand" href="/" aria-label="Mula home"><MulaLogo /></a>
@@ -24,6 +27,7 @@ export default function Sidebar({ active, username, onSignOut, busy = false }: P
           <button className="nav-item" disabled title="Reports are coming soon"><Icon name="report" />Reports<span className="soon">Soon</span></button>
           <button className="nav-item" disabled title="Website builder is coming soon"><Icon name="website" />My website<span className="soon">Soon</span></button>
           <a className={teamClass} href="/team" aria-current={teamCurrent}><Icon name="team" />My team{active === "team" && <span className="nav-dot" />}</a>
+          <a className={memoryClass} href="/memory" aria-current={memoryCurrent}><Icon name="memory" />Memory{active === "memory" && <span className="nav-dot" />}</a>
         </nav>
         <div className="sidebar-note"><span className="tiny-sun" aria-hidden="true">◒</span><p>Big things begin<br />with a small step.</p></div>
         <div className="sidebar-bottom">

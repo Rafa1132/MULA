@@ -74,3 +74,15 @@ test("accepts Hermes session metadata before answer tokens", async () => {
   assert.equal(events[1].content, "Hello");
   assert.equal(events[2].type, "done");
 });
+
+test("memory source metadata passes through without replacing answer tokens", async () => {
+  const events = [];
+  const text = [
+    { type: "memory", paths: ["business-knowledge/suppliers.md"], note: "Saved to memory" },
+    { type: "token", content: "Aroma supplies coffee." },
+    { type: "done", truncated: false },
+  ].map((event) => JSON.stringify(event)).join("\n");
+  await readChatStream(body([new TextEncoder().encode(text)]), (event) => events.push(event));
+  assert.deepEqual(events[0].paths, ["business-knowledge/suppliers.md"]);
+  assert.equal(events[1].content, "Aroma supplies coffee.");
+});

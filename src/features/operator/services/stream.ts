@@ -1,8 +1,10 @@
 export type ChatEvent = {
-  type: "session" | "token" | "done" | "error";
+  type: "session" | "token" | "done" | "error" | "attachment" | "memory";
   session_id?: string;
   content?: string;
   detail?: string;
+  note?: string;
+  paths?: string[];
   truncated?: boolean;
 };
 

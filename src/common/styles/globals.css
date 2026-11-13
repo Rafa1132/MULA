@@ -174,3 +174,32 @@ h3 { font-size: 19px; letter-spacing: -.4px; line-height: 1.4; font-weight: 500;
 @media (max-width: 650px) {
   .mobile-team-link { display: inline-block; color: var(--clay); font-size: 12px; text-decoration: none; padding: 8px; }
 }
+
+.csv-dropzone { position: relative; border-radius: 22px; }
+.csv-dropzone.dragging { outline: 2px dashed var(--accent); outline-offset: 6px; background: #2c241d; }
+.csv-attachment-toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 0 6px 10px; }
+.attach-csv { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; white-space: nowrap; }
+.attach-csv > span { font-size: 17px; }
+.csv-attachment-toolbar > span { color: var(--muted); font-size: 9px; text-align: right; line-height: 1.5; }
+.csv-file-chip { display: flex; gap: 10px; align-items: center; padding: 9px 12px; margin-bottom: 10px; border: 1px solid #67503a; border-radius: 12px; background: #2a241d; }
+.csv-file-badge { color: var(--accent); font-size: 9px; border: 1px solid #67503a; padding: 5px; border-radius: 5px; }
+.csv-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.csv-reading { color: var(--muted); font-size: 11px; margin: 8px; }
+.csv-drop-hint { position: absolute; inset: 0; display: grid; place-items: center; background: #241e16f5; border-radius: 20px; z-index: 2; color: var(--accent); pointer-events: none; font-size: 14px; }
+
+.dictation-button { width: 41px; height: 41px; flex-shrink: 0; border: 1px solid #505b48; color: #c6ceba; }
+.dictation-button.recording { background: #6b3427; border-color: #dc946e; color: #ffe3cb; }
+.dictation-tools { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 0 6px 9px; font-size: 10px; color: var(--muted); }
+.dictation-tools select { background: #1a2119; color: #d7ddcb; border: 1px solid #444f3c; border-radius: 7px; font: inherit; padding: 5px; }
+.dictation-tools > span { margin-left: auto; font-size: 9px; }
+.dictation-unavailable { color: var(--muted); font-size: 10px; line-height: 1.6; margin: 0 6px 10px; }
+.dictation-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 11px; color: #e3b18b; padding: 10px; border: 1px solid #6f4931; border-radius: 10px; background: #2c231b; max-height: 85px; overflow: auto; }
+.interim-transcript { flex-basis: 100%; color: #b5bca7; font-style: italic; overflow-wrap: anywhere; }
+@media(max-width:650px) { .dictation-button { width: 35px; height: 35px; } .composer textarea { flex-basis: calc(100% - 140px); } .dictation-tools > span { margin-left: 0; flex-basis: 100%; } }
+
+.live-conversation-control { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 6px 10px; }
+.live-conversation-button { border: 1px solid #8f6544; border-radius: 18px; padding: 8px 12px; background: #30271d; color: #edb383; font-size: 11px; }
+.live-conversation-button[aria-pressed="true"] { background: #673729; color: #ffe2c8; border-color: #dc986e; }
+.live-conversation-control > span { color: var(--muted); font-size: 10px; }
+.live-notice { color: #c7d3b4; font-size: 10px; line-height: 1.7; padding: 10px; border: 1px solid #46523c; border-radius: 10px; background: #1c261a; margin: 0 0 10px; }
+.live-notice .interim-transcript { display: block; margin-top: 5px; }

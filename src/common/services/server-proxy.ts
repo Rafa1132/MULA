@@ -20,7 +20,32 @@ export async function proxyBackend(request: Request, path: string) {
   const options: RequestInit = {
     method: request.method, headers, cache: "no-store", signal: request.signal,
   };
-  if (request.method !== "GET") options.body = await request.text();
+  if (request.method !== "GET") {
+    if ((path === "/api/agents/operator/chat" || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting")) && request.body) {
+      // JSON can expand CSV characters into escapes; allow that overhead while
+      // bounding the upload before buffering or forwarding it to the server.
+      const reader = request.body.getReader();
+      const decoder = new TextDecoder();
+      let bytes = 0;
+      let body = "";
+      let maxBytes = 400_000;
+      if (path.startsWith("/api/memory")) maxBytes = 64_000;
+      if (path.startsWith("/api/team")) maxBytes = 100_000;
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > maxBytes) {
+            await reader.cancel();
+            return Response.json({ detail: "This request is too large. Shorten the content or attach a smaller CSV (up to 50 KB)." }, { status: 413 });
+          }
+          body += decoder.decode(chunk.value, { stream: true });
+        }
+        options.body = body + decoder.decode();
+      } finally { reader.releaseLock(); }
+    } else options.body = await request.text();
+  }
   try {
     const response = await fetch(`${backend.replace(/\/$/, "")}${path}`, options);
     const forwarded = new Headers({

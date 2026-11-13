@@ -1,0 +1,8 @@
+2026/11/06-13:37:47.156 72361a Reusing MANIFEST /Users/rafa/Desktop/LARAS/src/features/store-management/tokopedia_session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/11/06-13:37:47.158 72361a Recovering log #3
+2026/11/06-13:37:47.163 72361a Level-0 table #3: started
+2026/11/06-13:37:47.170 72361a Level-0 table #3: 145836 bytes OK
+2026/11/06-13:37:47.171 72361a Recovering log #4
+2026/11/06-13:37:47.172 72361a Reusing old log /Users/rafa/Desktop/LARAS/src/features/store-management/tokopedia_session/Default/Local Storage/leveldb/000004.log 
+2026/11/06-13:37:47.178 72361a Delete type=0 #3
+2026/11/06-13:37:47.178 72361a Delete type=2 #5
