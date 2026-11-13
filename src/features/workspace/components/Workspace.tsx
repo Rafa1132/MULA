@@ -54,6 +54,8 @@ export default function Workspace() {
   const input = useRef<HTMLTextAreaElement>(null);
   const form = useRef<HTMLFormElement>(null);
   const [dictationLimit, setDictationLimit] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
   function setDraft(value: string) {
     draftValue.current = value;
     setDraftValue(value);
@@ -103,6 +105,23 @@ export default function Workspace() {
     const element = conversation.current;
     if (element && followMessages.current) element.scrollTop = element.scrollHeight;
   }, [messages, expanded, account]);
+
+  // The voice options menu closes on a click elsewhere or Escape, like a native menu.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (menu.current && !menu.current.contains(event.target as Node)) setMenuOpen(false);
+    }
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     const player = new SpeechPlayer(setVoiceState, setAnalyser);
@@ -443,7 +462,7 @@ export default function Workspace() {
     setStatus("Ready when you are");
   }
 
-  if (loading) return <main className="account-screen"><p role="status">Opening your workspace…</p></main>;
+  if (loading) return <main className="account-screen"><p role="status"><span className="shimmer">Opening your workspace…</span></p></main>;
   if (accountError) return <main className="account-screen"><div><p role="alert">{accountError}</p><button onClick={() => { setLoading(true); loadAccount().catch((failure: Error) => setAccountError(failure.message)).finally(() => setLoading(false)); }}>Retry</button></div></main>;
   if (!account) return <AccountForm onSignedIn={loadAccount} />;
 
@@ -456,6 +475,11 @@ export default function Workspace() {
   if (dictation.state === "stopping") presence = "Finishing dictation…";
   if (live.state === "starting") presence = "Starting live conversation…";
   if (live.state === "listening") presence = "Listening · pause to send";
+  // The status line shimmers while Mula is preparing something and pulses while audio is live.
+  const preparing = busy || voiceState === "preparing" || dictation.state === "starting" || dictation.state === "stopping" || live.state === "starting";
+  const audioLive = voiceState === "speaking" || dictation.state === "listening" || live.state === "listening";
+  let presenceClass = "";
+  if (preparing) presenceClass = "shimmer";
   let micLabel = "Start dictation";
   if (!dictation.supported) micLabel = "Speech input unavailable in this browser";
   else if (dictation.state === "listening") micLabel = "Stop dictation";
@@ -465,10 +489,15 @@ export default function Workspace() {
   else if (live.state === "starting") micLabel = "Starting live conversation";
   let micClass = "dictation-button icon-button";
   if (dictating || live.state === "listening") micClass += " recording";
-  let voiceLabel = "Mute AI voice · switch to chat";
-  if (muted) voiceLabel = "Enable AI voice";
+  let liveLabel = "Start live conversation";
+  if (liveActive) liveLabel = "End live conversation";
   let mainClass = "main-panel";
   if (expanded) mainClass += " conversation-expanded";
+
+  function suggest(text: string) {
+    setDraft(text);
+    input.current?.focus();
+  }
 
   return (
     <div className="app-shell">
@@ -476,19 +505,17 @@ export default function Workspace() {
 
       <main className={mainClass}>
         <header className="topbar">
-          <div className="workspace-title"><span className="mobile-brand"><MulaLogo /></span><span className="desktop-title">Your workspace <span className="header-divider">/</span> <strong>Operator</strong></span></div>
-          <div className="topbar-actions"><a className="mobile-team-link" href="/agents">My agents</a><a className="mobile-team-link" href="/memory">Memory</a><span className="preview-badge">EARLY PREVIEW</span><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
+          <a className="mobile-brand" href="/" aria-label="Mula home"><MulaLogo /></a>
+          <div className="topbar-actions"><a className="mobile-team-link" href="/agents">My agents</a><a className="mobile-team-link" href="/memory">Memory</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
         </header>
 
         <section className="operator-stage" aria-label="Your Operator">
-          <div className="eyebrow">A LITTLE CLARITY. A LOT OF POSSIBILITY.</div>
           <OperatorCore analyser={analyser} />
           <h1>I’m here. What are we building today?</h1>
-          <div className="presence" role="status"><span className="presence-dot" />{presence}</div>
+          <div className="presence" role="status"><span className="presence-dot" data-live={audioLive} /><span className={presenceClass}>{presence}</span></div>
         </section>
 
         <div className="conversation-heading">
-          <span>YOU & MULA <span className="saved-label">· One ongoing conversation</span></span>
           <button className="text-button" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
             {!expanded && "Expand chat"}{expanded && "Show Operator"}
           </button>
@@ -497,7 +524,10 @@ export default function Workspace() {
           const element = conversation.current;
           if (element) followMessages.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
         }}>
-          {messages.length === 0 && <div className="empty-conversation"><p>Every beginning starts with a conversation.</p><span>Tell me what’s on your mind. We’ll find the next step together.</span></div>}
+          {messages.length === 0 && <div className="empty-conversation">
+            <p>Every beginning starts with a conversation.</p>
+            <div className="suggestions">{suggestions.map((suggestion) => <button key={suggestion.title} type="button" className="suggestion" onClick={() => suggest(suggestion.text)} disabled={busy}>{suggestion.title}</button>)}</div>
+          </div>}
           <section className="messages" role="log" aria-label="Chat messages" aria-live="polite" aria-relevant="additions text">
             {messages.map((message) => (
               <article key={message.id} className={`message ${message.role}`}>
@@ -519,55 +549,40 @@ export default function Workspace() {
 
         <div className="composer-wrap">
           {error && <div className="error" role="alert">{error}</div>}
-          {voiceError && <div className="error voice-error" role="status">{voiceError}<button type="button" className="text-button" onClick={() => setVoiceError("")}>Dismiss</button></div>}
-          {live.error && <div className="error" role="alert">{live.error}<button className="text-button" onClick={live.dismissError}>Dismiss</button></div>}
-          <div className="live-conversation-control"><button type="button" className="live-conversation-button" aria-pressed={liveActive} onClick={toggleLive} disabled={!dictation.supported || (!liveActive && (busy || readingCsv))}>{!liveActive && "Start live conversation"}{liveActive && "End live conversation"}</button><span>{!liveActive && "Speak naturally · your turn sends after a pause"}{liveActive && "Live · pause to send · microphone to interrupt"}</span></div>
-          {liveActive && <p className="live-notice" role="status">Live conversation sends your speech automatically after a short pause. The microphone pauses during Mula’s reply.{live.interim && <span className="interim-transcript">{live.interim}</span>}</p>}
-          {dictation.error && <div className="error" role="alert">{dictation.error}<button className="text-button" onClick={dictation.dismissError}>Dismiss</button></div>}
-          {dictationLimit && <p className="message-note" role="status">The message reached 8,000 characters. Dictation stopped; review the captured text.</p>}
-          {dictation.supported && <div className="dictation-tools"><label htmlFor="dictation-language">Speech language</label><select id="dictation-language" value={dictation.language} onChange={(event) => dictation.changeLanguage(event.target.value)} disabled={busy || dictating || liveActive}><option value="en-US">English</option><option value="id-ID">Bahasa Indonesia</option></select><span>Browser speech service may process audio online.</span></div>}
-          {!dictation.supported && <p className="dictation-unavailable">Speech input needs a supported browser on localhost or HTTPS. You can still type.</p>}
-          {dictating && <p className="dictation-preview" role="status"><span className="presence-dot" />{presence}{dictation.interim && <span className="interim-transcript">{dictation.interim}</span>}</p>}
+          {voiceError && <div className="error" role="status">{voiceError} <button type="button" className="text-button" onClick={() => setVoiceError("")}>Dismiss</button></div>}
+          {live.error && <div className="error" role="alert">{live.error} <button className="text-button" onClick={live.dismissError}>Dismiss</button></div>}
+          {dictation.error && <div className="error" role="alert">{dictation.error} <button className="text-button" onClick={dictation.dismissError}>Dismiss</button></div>}
+          {dictationLimit && <p className="composer-hint" role="status">The message reached 8,000 characters. Dictation stopped; review the captured text.</p>}
+          {!dictation.supported && <p className="composer-hint">Speech input needs a supported browser on localhost or HTTPS. You can still type.</p>}
+          {liveActive && <p className="composer-hint" role="status">Live · pause to send · microphone to interrupt{live.interim && <span className="interim-transcript">{live.interim}</span>}</p>}
+          {dictating && <p className="composer-hint" role="status"><span className="presence-dot" data-live={audioLive} />{presence}{dictation.interim && <span className="interim-transcript">{dictation.interim}</span>}</p>}
           <CsvAttachment value={attachment} onChange={setAttachment} onError={setError} onReading={setReadingCsv} disabled={busy || liveActive}>
           <form ref={form} className="composer" onSubmit={sendMessage}>
             <label htmlFor="message" className="sr-only">Message Mula</label>
             <textarea ref={input} id="message" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleKeyDown} maxLength={8000} rows={1} placeholder="Ask Mula anything…" disabled={busy} readOnly={liveActive} />
-            <div className="composer-controls">
-              <button type="button" className={micClass} aria-label={micLabel} title={micLabel} aria-pressed={dictating || live.state === "listening"} disabled={(busy && !liveActive) || !dictation.supported || live.state === "starting"} onClick={microphone}><Icon name="microphone" /></button>
-              <div className="mode-switch" role="group" aria-label="AI response mode">
-                <button type="button" aria-pressed={muted} onClick={() => setChatMode(true)}>Chat</button>
-                <button type="button" aria-pressed={!muted} onClick={() => setChatMode(false)}>Voice</button>
-              </div>
-              <button type="button" className="voice-button icon-button" aria-label={voiceLabel} title={voiceLabel} aria-pressed={!muted} onClick={() => setChatMode(!muted)}>
-                {muted && <Icon name="muted" />}{!muted && <Icon name="voice" />}
-              </button>
-              {busy && <button type="button" className="send-button stop-button" aria-label="Stop reply" onClick={() => { live.stop(); controller.current?.abort(); voice.current?.stop(); }}><Icon name="stop" /></button>}
-              {!busy && <button type="submit" className="send-button" disabled={readingCsv || dictating || liveActive || (!draft.trim() && !attachment)} aria-label="Send message"><Icon name="send" /></button>}
+            <button type="button" className={micClass} aria-label={micLabel} title={micLabel} aria-pressed={dictating || live.state === "listening"} disabled={(busy && !liveActive) || !dictation.supported || live.state === "starting"} onClick={microphone}><Icon name="microphone" /></button>
+            <button type="button" className="live-button icon-button" aria-label={liveLabel} title={liveLabel} aria-pressed={liveActive} onClick={toggleLive} disabled={!dictation.supported || (!liveActive && (busy || readingCsv))}><Icon name="live" /></button>
+            <div className="composer-menu" ref={menu}>
+              <button type="button" className="icon-button" aria-label="Voice options" aria-haspopup="true" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><Icon name="options" /></button>
+              {menuOpen && <div className="composer-menu-panel" role="group" aria-label="Voice options">
+                <div className="menu-row"><span>Replies</span>
+                  <div className="mode-switch" role="group" aria-label="AI response mode">
+                    <button type="button" aria-pressed={muted} onClick={() => setChatMode(true)}>Chat</button>
+                    <button type="button" aria-pressed={!muted} onClick={() => setChatMode(false)}>Voice</button>
+                  </div>
+                </div>
+                {dictation.supported && <div className="menu-row"><label htmlFor="dictation-language">Speech language</label><select id="dictation-language" value={dictation.language} onChange={(event) => dictation.changeLanguage(event.target.value)} disabled={busy || dictating || liveActive}><option value="en-US">English</option><option value="id-ID">Bahasa Indonesia</option></select></div>}
+                <p>Voice replies are read aloud. Browser speech service may process audio online.</p>
+              </div>}
             </div>
+            {busy && <button type="button" className="send-button stop-button" aria-label="Stop reply" onClick={() => { live.stop(); controller.current?.abort(); voice.current?.stop(); }}><Icon name="stop" /></button>}
+            {!busy && <button type="submit" className="send-button" disabled={readingCsv || dictating || liveActive || (!draft.trim() && !attachment)} aria-label="Send message"><Icon name="send" /></button>}
           </form>
           </CsvAttachment>
-          <div className="composer-meta"><span>{muted && "Chat mode · AI voice off"}{!muted && "Voice mode · replies read aloud"}</span>
-            {voiceState !== "idle" && <button className="text-button" onClick={() => { live.stop(); voice.current?.stop(); }}>Stop audio</button>}
-            {voiceState === "idle" && <span className="keyboard-hint">Enter to send · Shift + Enter for a new line</span>}
-          </div>
-          <p className="scope-note">Planning and guidance for now. Your conversation is saved to your account.</p>
+          {voiceState !== "idle" && <div className="composer-foot"><button className="text-button" onClick={() => { live.stop(); voice.current?.stop(); }}>Stop audio</button></div>}
           <span className="sr-only" role="status">{status}</span>
         </div>
       </main>
-
-      <aside className="desk-panel" aria-label="On your desk">
-        <div className="desk-heading"><h2>On your desk</h2><span className="desk-count">01</span></div>
-        <div className="desk-card">
-          <span className="card-icon"><Icon name="home" /></span>
-          <span className="card-kicker">YOUR STARTING POINT</span>
-          <h3>A little space<br />for your next big idea.</h3>
-          <p>Your Operator is ready to help you think, plan, and find a way forward.</p>
-          <button className="outline-button" onClick={() => { setDraft(suggestions[0].text); input.current?.focus(); }} disabled={busy}>Find my next step<Icon name="arrow" /></button>
-        </div>
-        <div className="desk-section-title">A spark to get you started</div>
-        <div className="desk-suggestions">{suggestions.slice(1).map((suggestion) => <button key={suggestion.title} onClick={() => { setDraft(suggestion.text); input.current?.focus(); }} disabled={busy}><span>{suggestion.title}</span><Icon name="arrow" /></button>)}</div>
-        <div className="desk-footnote"><span className="presence-dot" /><span>One Operator. Always in your corner.</span></div>
-      </aside>
     </div>
   );
 }

@@ -135,14 +135,14 @@ export default function MemoryPage() {
     finally { setBusy(false); }
   }
 
-  if (loading) return <main className="account-screen"><p role="status">Opening your memory…</p></main>;
+  if (loading) return <main className="account-screen"><p role="status"><span className="shimmer">Opening your memory…</span></p></main>;
   if (!account && error) return <main className="account-screen"><div><p role="alert">{error}</p><button onClick={() => window.location.reload()}>Retry</button></div></main>;
   if (!account) return <AccountForm onSignedIn={load} />;
 
   return <div className="memory-shell">
     <Sidebar active="memory" username={account.username} onSignOut={signOut} busy={busy} />
     <main className="memory-main">
-      <header className="topbar"><span className="desktop-title">Your workspace <span className="header-divider">/</span> <strong>Memory</strong></span><span className="mobile-brand"><MulaLogo /></span><div className="topbar-actions"><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><span className="mobile-brand"><MulaLogo /></span><div className="topbar-actions"><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
       <div className="memory-heading"><div className="eyebrow">A NOTEBOOK YOU CAN OPEN</div><h1>What Mula remembers.</h1><p>Read, correct, or clear the notes your Operator can use. These are saved memories, alongside your separate conversation history.</p><code>{data?.relative_root}/</code></div>
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <p className="memory-notice" role="status">{notice}</p>}

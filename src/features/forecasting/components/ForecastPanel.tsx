@@ -25,12 +25,12 @@ function ForecastChart({ report }: { report: Report }) {
   const history = report.history.map((point, index) => `${x(index)},${y(point.value)}`).join(" ");
   const future = [report.history[report.history.length - 1], ...report.forecast].map((point, index) => `${x(report.history.length - 1 + index)},${y(point.value)}`).join(" ");
   return <><svg className="forecast-chart" viewBox="0 0 600 240" role="img" aria-label={`${report.metric}: historical values and ${report.forecast.length} forecast periods. Exact forecast values are in the table below.`}>
-    <line x1="70" y1="190" x2="560" y2="190" stroke="#3a3b40" />
-    <line x1={x(report.history.length - 1)} y1="25" x2={x(report.history.length - 1)} y2="195" stroke="#535053" strokeDasharray="3 5" />
-    <text x="12" y="44" fill="#a3a3a8" fontSize="10">{number.format(high)}</text><text x="12" y="192" fill="#a3a3a8" fontSize="10">{number.format(low)}</text>
-    <polyline points={history} fill="none" stroke="#bcb9b7" strokeWidth="2" strokeLinejoin="round" />
-    <polyline points={future} fill="none" stroke="#cf947a" strokeWidth="2.5" strokeDasharray="6 4" strokeLinejoin="round" />
-    <text x="70" y="221" fill="#a3a3a8" fontSize="10">{points[0].date}</text><text x="560" y="221" textAnchor="end" fill="#a3a3a8" fontSize="10">{points[points.length - 1].date}</text>
+    <line className="chart-axis" x1="70" y1="190" x2="560" y2="190" />
+    <line className="chart-divider" x1={x(report.history.length - 1)} y1="25" x2={x(report.history.length - 1)} y2="195" strokeDasharray="3 5" />
+    <text className="chart-label" x="12" y="44" fontSize="10">{number.format(high)}</text><text className="chart-label" x="12" y="192" fontSize="10">{number.format(low)}</text>
+    <polyline className="chart-history" points={history} fill="none" strokeWidth="2" strokeLinejoin="round" />
+    <polyline className="chart-forecast" points={future} fill="none" strokeWidth="2.5" strokeDasharray="6 4" strokeLinejoin="round" />
+    <text className="chart-label" x="70" y="221" fontSize="10">{points[0].date}</text><text className="chart-label" x="560" y="221" textAnchor="end" fontSize="10">{points[points.length - 1].date}</text>
   </svg><div className="forecast-legend"><span>— Historical data</span><span>– – Forecast</span></div></>;
 }
 
@@ -138,7 +138,7 @@ export function ForecastPanel({ agent, disabled }: { agent: Agent; disabled: boo
       <ForecastChart report={report} />
       <div className="forecast-table-wrap"><table><caption className="sr-only">Forecast values</caption><thead><tr><th>Period</th><th>Forecast</th></tr></thead><tbody>{report.forecast.map((point) => <tr key={point.date}><td>{point.date}</td><td>{String(point.value)}</td></tr>)}</tbody></table></div>
       <div className="forecast-actions"><button type="button" className="text-button" onClick={download}>Download forecast CSV ↓</button>{agent.tools.includes("explain") && <button type="button" className="account-submit" onClick={explain} disabled={working || disabled}>{explaining && "Explaining…"}{!explaining && "Ask Forecasting to explain"}</button>}</div>
-      {explaining && <p role="status">{agent.name} is explaining the calculated report…</p>}
+      {explaining && <p role="status"><span className="shimmer">{agent.name} is explaining the calculated report…</span></p>}
       {explanation && <div className="forecast-explanation" aria-label="Forecasting explanation">{explanation}</div>}
       <details open><summary>Historical accuracy & assumptions</summary><p>{report.backtest_periods} expanding-window, one-step tests from {report.backtest_start}. Lower MAE / RMSE is better; both use the original units.</p><div className="forecast-table-wrap"><table><thead><tr><th>Method</th><th>MAE</th><th>RMSE</th></tr></thead><tbody>{report.scores.map((score) => <tr key={score.method}><td>{names[score.method]}{score.method === report.method && " · selected"}</td><td>{number.format(score.mae)}</td><td>{number.format(score.rmse)}</td></tr>)}</tbody></table></div><ul>{report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul><p>Run parameters: window {report.parameters.window}, alpha {report.parameters.alpha}, season {report.parameters.season_length}.</p></details>
     </section>}

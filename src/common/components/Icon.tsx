@@ -1,4 +1,4 @@
-type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop";
+type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options";
 
 const paths: Record<IconName, string> = {
   microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
@@ -13,6 +13,9 @@ const paths: Record<IconName, string> = {
   exit: "M10 4H4v16h6M14 8l4 4-4 4M8 12h13",
   arrow: "M5 12h14m-6-6 6 6-6 6",
   stop: "M6 6h12v12H6Z",
+  plus: "M12 5v14M5 12h14",
+  live: "M4 11v2M8 8v8M12 4v16M16 8v8M20 11v2",
+  options: "M4 7h9M17 7h3M15 4v6M4 17h3M11 17h9M9 14v6",
 };
 
 export default function Icon({ name }: { name: IconName }) {

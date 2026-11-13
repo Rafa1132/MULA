@@ -111,7 +111,7 @@ export default function AgentChat({ agent }: { agent: Agent }) {
   return <div className="agent-chat">
     <p className="settings-help">Talk with {agent.name} directly. This chat is separate from your Operator conversation and uses {agent.name}’s saved settings.</p>
     <div className="agent-chat-log" ref={log}>
-      {loading && <p role="status" className="settings-help">Loading your chat…</p>}
+      {loading && <p role="status" className="settings-help"><span className="shimmer">Loading your chat…</span></p>}
       {!loading && messages.length === 0 && <p className="agent-chat-empty">Ask {agent.name} anything about your sales. Attach a CSV to get a forecast.</p>}
       <section className="messages" role="log" aria-label={`Chat with ${agent.name}`} aria-live="polite" aria-relevant="additions text">
         {messages.map((message) => <article key={message.id} className={`message ${message.role}`}>

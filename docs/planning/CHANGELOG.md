@@ -2,6 +2,22 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 14 November 2026 — A quieter look: light and dark, one dawn accent (Muhammad Rafandi, with Claude)
+
+Request: repurpose the whole UI toward an elegant, minimal design in the spirit of ElevenLabs' interface, with quiet motion, and make everything feel expensive. Decisions: light and dark both supported; the Mula logo kept as it is and its orange kept as a "dawn" accent; the composer keeps only the microphone and a compact live-conversation button visible, with the rest in a menu; the desk panel goes and suggestions move inline; copy is stripped to the welcome line and the status line; hover and press on every control, fewer lines and more space, and a bundled typeface.
+
+Changed:
+- One set of colour tokens in `globals.css`: light by default, dark through `prefers-color-scheme`. Mostly monochrome, with the orange reserved for the logo, the Operator core and its halo, the status dot, links, the map arrow and selected states. Primary buttons are ink on background. Every page, the forecast chart and the Operator core draw from the tokens; the My agents page no longer carries its own dark palette.
+- Lines gave way to space: cards use a soft shadow (`--shadow`) and an invisible edge that becomes faint in dark mode (`--edge`); message dividers, the sidebar rule and the conversation heading rule are gone. Geist is bundled through `next/font`.
+- Workspace: the right-hand desk panel is removed and its three suggestions appear as chips under an empty conversation. The eyebrow, sidebar taglines, "YOU & MULA" heading, preview badge, footer notes and mode line are gone. The composer is one pill: **+** (CSV), message, microphone, live-conversation button, a **Voice options** menu (Chat/Voice, speech language) and send. Hints show only while they apply. The attached CSV floats above the pill as a chip.
+- Motion: every control eases the same way, lifts on hover and settles on press; messages fade in; text shimmers while something is being prepared; the status dot pulses while audio is live. Reduced-motion preferences turn it all off and keep the text readable.
+- The logo PNG has a transparent background instead of the baked-in black, so it sits on a light page. Same shapes, same orange.
+- Browser specs: the team spec checks the light and dark page background; the dictation spec opens the voice options menu before choosing a language. Button labels for live conversation and dictation are unchanged.
+
+Evidence: frontend tests (46) pass, type check is clean, and the workspace, team and dictation browser specs pass against the isolated copy. Screenshots of every page were checked in light and dark at 1440px and 390px, including the composer with a file attached and the menu open. No backend change.
+
+Open: the live-conversation browser spec needs real TTS and was not run. There is no in-app theme switch, only the device setting. The first build needs network access to fetch the typeface.
+
 ## 14 November 2026 — Every agent is a Mula agent; Operator can ask Forecasting (Muhammad Rafandi, with Claude)
 
 Request: every agent should be an LLM agent running on Mula, and the Operator should be connected to Forecasting. Decisions: local Qwen may run Mula's own tools below the upstream 64K context minimum; asking another agent is a setting whose default is "ask the owner first"; the owner talks through the Operator but can also chat with an agent directly in My agents.

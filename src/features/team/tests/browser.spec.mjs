@@ -30,7 +30,11 @@ try {
   const forecasting = page.getByRole("button", { name: "Configure Forecasting", exact: true });
   assert.equal(await page.locator(".map-card").count(), 2);
   assert.equal(await page.getByRole("button", { name: /Configure Inventory|Configure Procurement|Configure Store/ }).count(), 0);
-  assert.equal(await page.locator(".team-shell").evaluate((node) => getComputedStyle(node).backgroundColor), "rgb(17, 18, 20)");
+  // One theme for every page: light by default, dark when the device asks for it.
+  assert.equal(await page.locator(".team-shell").evaluate((node) => getComputedStyle(node).backgroundColor), "rgb(252, 251, 249)");
+  await page.emulateMedia({ colorScheme: "dark" });
+  assert.equal(await page.locator(".team-shell").evaluate((node) => getComputedStyle(node).backgroundColor), "rgb(15, 14, 13)");
+  await page.emulateMedia({ colorScheme: "light" });
   // Every agent is a Mula agent with its own brain.
   await page.getByText("Ready · Qwen (local)").first().waitFor();
   assert.equal(await page.getByText("Ready · Qwen (local)").count(), 2);

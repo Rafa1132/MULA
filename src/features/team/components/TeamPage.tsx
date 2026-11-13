@@ -178,14 +178,14 @@ export default function TeamPage() {
     finally { setSigningOut(false); }
   }
 
-  if (loading) return <main className="account-screen"><p role="status">Opening your agents…</p></main>;
+  if (loading) return <main className="account-screen"><p role="status"><span className="shimmer">Opening your agents…</span></p></main>;
   if (!account && error) return <main className="account-screen"><div><p role="alert">{error}</p><button className="account-submit" onClick={() => window.location.reload()}>Retry</button></div></main>;
   if (!account) return <AccountForm onSignedIn={() => load()} />;
 
   return <div className="team-shell">
     <Sidebar active="team" username={account.username} onSignOut={signOut} busy={signingOut} />
     <main className="team-main">
-      <header className="topbar"><span className="desktop-title">Your workspace <span className="header-divider">/</span> <strong>My agents</strong></span><span className="mobile-brand"><MulaLogo /></span><div className="topbar-actions"><a className="text-button" href="/memory">Memory</a><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={signingOut}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><span className="mobile-brand"><MulaLogo /></span><div className="topbar-actions"><a className="text-button" href="/memory">Memory</a><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={signingOut}><Icon name="exit" /></button></div></header>
       <div className="team-content">
         {error && <p className="error" role="alert">{error}</p>}
         <div className="agents-intro"><div><h1>My agents</h1><p>Meet the agents working for your business. <span className="map-hint">Drag a card to arrange your map, or focus it and use the arrow keys.</span></p></div><button type="button" className="map-reset" onClick={reset} disabled={resetting}>{resetting && "Resetting…"}{!resetting && "Reset layout"}</button></div>

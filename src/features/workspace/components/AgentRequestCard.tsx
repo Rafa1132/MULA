@@ -30,7 +30,8 @@ export default function AgentRequestCard({ request, disabled, onApprove, onDecli
         <button type="button" onClick={() => onApprove(request.id)} disabled={disabled}>Ask {request.to_name}</button>
         <button type="button" className="text-button" onClick={() => onDecline(request.id)} disabled={disabled}>Not now</button>
       </div>}
-      {request.status !== "pending" && <p className="agent-request-status" role="status">{statusText(request)}</p>}
+      {request.status === "running" && <p className="agent-request-status" role="status"><span className="shimmer">{statusText(request)}</span></p>}
+      {request.status !== "pending" && request.status !== "running" && <p className="agent-request-status" role="status">{statusText(request)}</p>}
     </div>
   );
 }

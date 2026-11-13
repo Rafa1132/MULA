@@ -42,6 +42,11 @@ export default function OperatorCore({ analyser }: { analyser: AnalyserNode | nu
       let amplitude = level;
       if (motion.matches) { phase = 0; amplitude = 0; }
 
+      // The orb draws with the page's tokens so it follows light and dark mode.
+      const theme = getComputedStyle(element);
+      const accent = theme.getPropertyValue("--accent").trim() || "#d99063";
+      const surface = theme.getPropertyValue("--surface").trim() || "#ffffff";
+
       context.translate(200, 200);
       // Counter-rotating layers and breathing keep the quiet state visibly alive.
       // Speech still adds measured energy on top of this ambient motion.
@@ -64,15 +69,17 @@ export default function OperatorCore({ analyser }: { analyser: AnalyserNode | nu
           else context.lineTo(x, y);
         }
         context.closePath();
-        context.strokeStyle = `rgba(222, 145, 98, ${0.38 + layer * 0.10})`;
+        context.strokeStyle = accent;
+        context.globalAlpha = 0.38 + layer * 0.10;
         context.lineWidth = 1.1;
         if (layer === 2 || layer === 4) context.setLineDash([1, 5]);
         else context.setLineDash([]);
         context.lineDashOffset = -phase * direction * 9;
         context.stroke();
       }
+      context.globalAlpha = 0.7;
       context.setLineDash([1, 7]);
-      context.strokeStyle = "#b47b58";
+      context.strokeStyle = accent;
       for (const radius of [61, 117]) {
         context.lineDashOffset = phase * radius * 0.12;
         context.beginPath();
@@ -84,9 +91,10 @@ export default function OperatorCore({ analyser }: { analyser: AnalyserNode | nu
       const coreRadius = 36 + amplitude * 7;
       context.beginPath();
       context.arc(0, 0, coreRadius, 0, Math.PI * 2);
-      context.fillStyle = "#211b17";
+      context.globalAlpha = 1;
+      context.fillStyle = surface;
       context.fill();
-      context.strokeStyle = "#df986c";
+      context.strokeStyle = accent;
       context.lineWidth = 1.4;
       context.stroke();
       // Deterministic points give the core depth without a rendered 3D globe.
@@ -95,9 +103,11 @@ export default function OperatorCore({ analyser }: { analyser: AnalyserNode | nu
         const angle = point * 2.39996 + phase * 0.12;
         context.beginPath();
         context.arc(Math.cos(angle) * distance, Math.sin(angle) * distance, 0.65 + (point % 3) * 0.2, 0, Math.PI * 2);
-        context.fillStyle = `rgba(233, 159, 111, ${0.3 + (point % 5) * 0.12})`;
+        context.fillStyle = accent;
+        context.globalAlpha = 0.3 + (point % 5) * 0.12;
         context.fill();
       }
+      context.globalAlpha = 1;
     }
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);

@@ -28,7 +28,10 @@ try {
  await page.goto(baseURL);
  const input=page.getByLabel('Message Mula',{exact:true});await input.waitFor();
  await input.fill('My cafe:');
+ // The speech language lives in the composer's voice options menu.
+ await page.getByRole('button',{name:'Voice options',exact:true}).click();
  await page.getByLabel('Speech language',{exact:true}).selectOption('id-ID');
+ await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'Start dictation',exact:true}).click();
  await page.getByRole('button',{name:'Stop dictation',exact:true}).waitFor();
  assert.equal(await page.evaluate(()=>window.__recognitions.at(-1).lang),'id-ID');
@@ -64,7 +67,9 @@ try {
  assert.equal(await input.inputValue(),'Keep this draft');
  await page.getByRole('button',{name:'Start dictation',exact:true}).waitFor();
  await page.reload();await input.waitFor();
+ await page.getByRole('button',{name:'Voice options',exact:true}).click();
  assert.equal(await page.getByLabel('Speech language',{exact:true}).inputValue(),'id-ID');
+ await page.keyboard.press('Escape');
  await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Start dictation',exact:true}).click();
  await page.evaluate(()=>window.__emit([['Buka kedai kopi',false]]));
