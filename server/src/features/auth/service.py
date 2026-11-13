@@ -42,12 +42,29 @@ def database():
             username TEXT NOT NULL, occurred INTEGER NOT NULL
         );
     ''')
+    add_message_agent_column(connection)
     os.chmod(DB_PATH, 0o600)
     try:
         with connection:
             yield connection
     finally:
         connection.close()
+
+
+def add_message_agent_column(connection):
+    """Older databases hold only Operator messages; tag them so each agent has its own history."""
+    if has_message_agent_column(connection):
+        return
+    try:
+        connection.execute("ALTER TABLE messages ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'operator'")
+    except sqlite3.OperationalError:
+        # A concurrent connection may have added it first; anything else is a real failure.
+        if not has_message_agent_column(connection):
+            raise
+
+
+def has_message_agent_column(connection):
+    return any(row["name"] == "agent_id" for row in connection.execute("PRAGMA table_info(messages)"))
 
 
 def password_hash(password, salt):
@@ -118,10 +135,10 @@ def logout(token):
             db.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash(token),))
 
 
-def add_message(account_id, role, text, note=None):
+def add_message(account_id, role, text, note=None, agent_id="operator"):
     with database() as db:
-        cursor = db.execute("INSERT INTO messages (account_id, role, text, note) VALUES (?, ?, ?, ?)",
-                            (account_id, role, text, note))
+        cursor = db.execute("INSERT INTO messages (account_id, role, text, note, agent_id) VALUES (?, ?, ?, ?, ?)",
+                            (account_id, role, text, note, agent_id))
         return cursor.lastrowid
 
 
@@ -130,7 +147,7 @@ def save_reply(message_id, text, note):
         db.execute("UPDATE messages SET text = ?, note = ? WHERE id = ?", (text, note, message_id))
 
 
-def history(account_id):
+def history(account_id, agent_id="operator"):
     with database() as db:
-        rows = db.execute("SELECT id, role, text, note FROM messages WHERE account_id = ? ORDER BY id", (account_id,)).fetchall()
+        rows = db.execute("SELECT id, role, text, note FROM messages WHERE account_id = ? AND agent_id = ? ORDER BY id", (account_id, agent_id)).fetchall()
     return [dict(row) for row in rows]

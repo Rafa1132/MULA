@@ -93,9 +93,9 @@ Short replies, same-conversation recall and separation between new runtime conve
 
 ## Tools and specialist agents
 
-The API and CLI toolsets are empty, and there are no configured MCP servers. The Operator performs planning and guidance; it cannot read live inventory, place purchases, publish a site or delegate to an Inventory/Procurement agent today.
+The API platform has one MCP server, `mula`, served by the backend at `/mcp`, with three tools: `ask_agent` (Operator), and `calculate_forecast` and `latest_forecast` (Forecasting). The CLI toolset is empty. Each turn's system prompt carries a ticket that scopes tool calls to one account, agent and turn; the backend refuses tools the calling agent may not use. The Operator asks Forecasting according to the owner's delegation setting, ask first by default, and Forecasting answers after the Operator's turn ends rather than inside the tool call (see `server/src/features/agents/README.md`). It cannot read live inventory, place purchases, publish a site or ask an Inventory/Procurement agent.
 
-The runtime supports an agent execution loop, but the current tool-free configuration follows the model-answer path. Tool schemas, tool dispatch, business permissions, approvals and specialist instructions must be introduced deliberately before multi-agent work can execute. Enabling tools also removes eligibility for the current smaller-context exception.
+The smaller-context exception covers this configuration only while every tool is one of Mula's own (`mcp__mula__*`, at most five). Terminal, file, web or other servers' tools fall back to the upstream 64K minimum.
 
 ## Startup
 
@@ -149,7 +149,7 @@ Mula gateway :8642
   ├─ API admission / conversation ownership inside the runtime
   ├─ Session authority / active transcript / persistence
   ├─ AIAgent execution and context preparation
-  ├─ Tool selection / argument parsing / dispatch (no tools enabled today)
+  ├─ Tool selection / argument parsing / dispatch (Mula's own tools, via MCP to the backend)
   └─ Provider transport
        │ OpenAI-compatible model protocol
        ▼
@@ -298,12 +298,18 @@ Compression is a sanctioned rewrite of active model context. The application can
 
 ```yaml
 platform_toolsets:
-  api_server: []
-  cli: []
-mcp_servers: {}
+  api_server: [mula]
+  cli: [no_mcp]
+mcp_servers:
+  mula:
+    url: http://127.0.0.1:8000/mcp/
+    headers: { Authorization: "Bearer ${MULA_TOOLS_KEY}" }
+    tools: { include: [ask_agent, calculate_forecast, latest_forecast] }
+tools:
+  tool_search: { enabled: "off" }
 ```
 
-The effective **model-callable runtime** tool set is empty. The application separately implements a Forecasting specialist with deterministic tools dispatched by authenticated HTTP requests. It does not register schemas with the runtime or enable autonomous delegation. There is still no inventory/purchasing function or business MCP server. Describing an action in chat does not register executable functionality.
+The **model-callable runtime** tool set is those three tools. Their work runs in the backend under the ticket's account; the runtime only carries the calls. There is still no inventory/purchasing function. Describing an action in chat does not register executable functionality.
 
 ### Runtime machinery when tools are enabled
 
@@ -507,6 +513,6 @@ Starting the microphone stops TTS. Stop allows a final recognition result, with 
 
 The Operator route checks `csv_read` before attachment ingestion and `memory_write` before `/remember` persistence. With `memory_read` disabled it skips new retrieval. Current settings are appended to per-request instructions and disabled capabilities are described to the model. This does not remove data previously included in runtime history. Existing accounts retain all current capabilities by default.
 
-`server/src/features/forecasting/service.py` implements five bounded, pure-Python statistical methods. `/api/forecasting/preview` returns normalized CSV column names. `/run` validates dates, values, cadence and method permissions, calculates a common rolling-origin comparison and forecasts, then saves an account-owned report. `/latest` restores the most recent report; at most 20 are retained per account. `/explain` accepts only a run UUID, loads the report under the current account, checks the `explain` permission, and sends a bounded excerpt to Qwen. It cannot accept fabricated tool results from the browser. Each explanation receives a unique runtime session UUID, separate from the Operator conversation. The legacy transport header prefix remains `mula-operator-`; its UUID provides isolation. Explanations and report series are persisted separately from Operator chat.
+`server/src/features/forecasting/service.py` implements five bounded, pure-Python statistical methods. `/api/forecasting/preview` returns normalized CSV column names. `/run` validates dates, values, cadence and method permissions, calculates a common rolling-origin comparison and forecasts, then saves an account-owned report. `/latest` restores the most recent report; at most 20 are retained per account. `/explain` accepts only a run UUID, loads the report under the current account, checks the `explain` permission, and sends a bounded excerpt to Forecasting's brain. It cannot accept fabricated tool results from the browser. Each explanation receives a unique runtime session UUID, separate from the Operator conversation. Explanations and report series are persisted separately from Operator chat.
 
-This is an application-dispatched specialist workflow: the owner runs calculations, then optionally asks for an explanation. It does not enable a model-driven function-calling loop or automatic Operator delegation, so the existing small-context runtime exception remains applicable. Client components are in `src/features/team` and `src/features/forecasting`. All endpoint proxies forward account cookies, reject cross-origin writes and bound request bodies. Full behavior and formulas: [forecasting](../forecasting.md).
+The owner can run calculations from the panel, or Forecasting runs the same calculation through its `calculate_forecast` tool when asked in chat or by the Operator. Explanations now run on Forecasting's own brain with its persona, in their own session (`mula-forecasting-…`). Client components are in `src/features/team` and `src/features/forecasting`. All endpoint proxies forward account cookies, reject cross-origin writes and bound request bodies. Full behavior and formulas: [forecasting](../forecasting.md).

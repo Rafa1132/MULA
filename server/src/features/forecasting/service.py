@@ -127,11 +127,11 @@ def forecast(request, enabled_tools):
         candidates.append(method)
     if request.method != "auto":
         if request.method not in enabled_tools:
-            raise HTTPException(403, "This forecasting method is disabled in My team.")
+            raise HTTPException(403, "This forecasting method is disabled in My agents.")
         if request.method not in candidates:
             raise HTTPException(422, "Not enough history for this method and a backtest. Add more periods or reduce the window/season length.")
     if not candidates:
-        raise HTTPException(422, "Enable a forecasting method with enough history in My team.")
+        raise HTTPException(422, "Enable a forecasting method with enough history in My agents.")
     scores = []
     for method in candidates:
         errors = []

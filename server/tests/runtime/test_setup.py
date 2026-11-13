@@ -33,6 +33,12 @@ class SetupTests(unittest.TestCase):
                 self.assertGreaterEqual(len(key), 32)
                 self.assertEqual(key, gateway_settings["API_SERVER_KEY"])
                 self.assertNotIn(key, output.getvalue())
+                # The runtime's key for calling the backend's agent tools is shared and separate.
+                tools_key = settings["MULA_TOOLS_KEY"]
+                self.assertGreaterEqual(len(tools_key), 32)
+                self.assertEqual(tools_key, gateway_settings["MULA_TOOLS_KEY"])
+                self.assertNotEqual(tools_key, key)
+                self.assertNotIn(tools_key, output.getvalue())
                 self.assertEqual(backend_file.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(gateway_file.stat().st_mode & 0o777, 0o600)
                 with self.assertRaises(SystemExit):

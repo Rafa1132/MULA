@@ -1,6 +1,6 @@
 # Forecasting (server)
 
-The Forecasting specialist. Its forecasts come from small, deterministic statistical methods written in plain Python, with no model training and no generated code. Qwen is used only to explain a report that has already been calculated.
+The Forecasting specialist, a Mula agent with its own persona (`prompts/forecasting.md`) and brain. Its numbers come from small, deterministic statistical methods written in plain Python, with no model training and no generated code. The agent runs them through its `calculate_forecast` tool (`features/agents`) or the "Run a forecast" panel, and explains the results in words; it never makes numbers up.
 
 ## Methods (`service.py`)
 
@@ -31,13 +31,13 @@ Warnings cover external factors that aren't modelled, horizons longer than the b
 | GET | `/api/forecasting/latest` | Latest `{ report, explanation }` for the account |
 | POST | `/api/forecasting/explain` | `{ run_id }` → `{ explanation }`; requires the `explain` tool |
 
-Choosing a method that's disabled in My team returns 403. Running auto with no usable methods returns 422.
+Choosing a method that's disabled in My agents returns 403. Running auto with no usable methods returns 422.
 
 ## Explanation
 
-- The prompt is the fixed `PROMPT` plus the owner's instructions and reference data from `team.context`. It forbids inventing numbers, claiming ML training, or giving confidence intervals.
-- The report sent to the model is shortened to 12 history points and 12 forecast points, and the unused parameter controls are removed.
-- Each explanation runs in **its own throwaway Hermes session**, `uuid5(account_id, "forecasting:" + uuid4())`, so it never mixes with the Operator chat or with earlier explanations. It uses `operator.runtime.chat()`.
+- **Ask Forecasting to explain** is a Forecasting turn on the agent's own brain (`agents.answer_as`), with its persona plus the owner's instructions and reference data from `team.context`. The persona forbids inventing numbers, claiming ML training, or giving confidence intervals.
+- The report sent to the model (`runs.summary_for_model`) is shortened to the last 12 history points and the first 12 forecast points, with the history and horizon lengths, and the unused parameter controls removed. The `calculate_forecast` tool returns the same summary.
+- Each explanation runs in **its own throwaway Mula session**, `uuid5(account_id, "forecasting:" + uuid4())`, so it never mixes with the Operator chat, the direct Forecasting chat or earlier explanations.
 
 ## Storage
 
@@ -45,9 +45,9 @@ Choosing a method that's disabled in My team returns 403. Running auto with no u
 
 ## Files
 
-`service.py`, `routes.py`, `tests/test_forecasting.py`. See also `docs/forecasting.md`.
+`service.py` (methods), `runs.py` (saved runs and the model summary), `routes.py`, `prompts/forecasting.md`, `tests/test_forecasting.py`. See also `docs/forecasting.md`.
 
 ## Limits
 
 - No prediction intervals, external factors, ML models or multi-series forecasts.
-- The Operator can't call Forecasting yet; it can only point the user to My team.
+- The Operator asks Forecasting through `ask_agent`, by default only after the owner approves (see `features/agents`).

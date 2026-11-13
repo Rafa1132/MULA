@@ -1,3 +1,11 @@
+export type Brain = {
+  name: string;
+  description: string;
+  location: "local" | "cloud";
+  // "unchecked" means the runtime could not be reached to confirm the brain is set up.
+  status: "ready" | "needs_setup" | "unchecked";
+};
+
 export type Agent = {
   id: string;
   name: string;
@@ -7,7 +15,26 @@ export type Agent = {
   tools: string[];
   available_tools: Record<string, string>;
   revision: number;
+  brain: string;
+  available_brains: Record<string, Brain>;
+  // Agents this one may ask for help; empty for agents that never ask.
+  delegates_to: string[];
+  // Null when delegates_to is empty.
+  delegation: Delegation | null;
 };
+
+// ask: the owner approves each request; auto: requests run right after the reply; off: never ask.
+export type Delegation = "ask" | "auto" | "off";
+
+export async function saveLayout(positions: Record<string, { x: number; y: number }>) {
+  const result = await teamRequest("/api/team/layout", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ positions }) });
+  return result.layout;
+}
+
+export async function resetLayout() {
+  const result = await teamRequest("/api/team/layout", { method: "DELETE" });
+  return result.layout;
+}
 
 export async function teamRequest(path: string, options?: RequestInit) {
   const response = await fetch(path, { cache: "no-store", ...options });

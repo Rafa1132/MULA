@@ -1,4 +1,0 @@
-2026/11/06-13:37:49.843 7235d3 Reusing MANIFEST /Users/rafa/Desktop/LARAS/src/features/store-management/tokopedia_session/Default/IndexedDB/https_seller-id.tokopedia.com_0.indexeddb.leveldb/MANIFEST-000001
-2026/11/06-13:37:49.845 7235d3 Recovering log #3
-2026/11/06-13:37:49.846 7235d3 Reusing old log /Users/rafa/Desktop/LARAS/src/features/store-management/tokopedia_session/Default/IndexedDB/https_seller-id.tokopedia.com_0.indexeddb.leveldb/000003.log 
-2026/11/06-13:37:49.866 7235d5 Manual compaction at level-0 from '\x00\x05\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x06\x00\x00\x00' @ 0 : 0; will stop at (end)

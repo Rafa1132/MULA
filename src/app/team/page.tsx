@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { TeamPage } from "@/features/team";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Mula · My team" };
-
+// "My team" became "My agents"; keep old links and bookmarks working.
 export default function Page() {
-  return <TeamPage />;
+  redirect("/agents");
 }

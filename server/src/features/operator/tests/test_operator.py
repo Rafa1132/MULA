@@ -39,10 +39,13 @@ class OperatorTests(AccountFixture, unittest.TestCase):
         self.assertEqual(request.headers['Authorization'], 'Bearer test-key')
         self.assertEqual(request.headers['X-Hermes-Session-Id'], f'mula-operator-{session}')
         payload = json.loads(request.content)
-        self.assertEqual(payload['messages'], [
-            {'role': 'system', 'content': OPERATOR_PROMPT},
-            {'role': 'user', 'content': 'Hello'},
-        ])
+        system, user = payload['messages']
+        self.assertEqual(user, {'role': 'user', 'content': 'Hello'})
+        self.assertEqual(system['role'], 'system')
+        # The persona, then this turn's tool ticket and the default "ask first" rule.
+        self.assertTrue(system['content'].startswith(OPERATOR_PROMPT))
+        self.assertIn('Mula tools: pass this ticket', system['content'])
+        self.assertIn('The owner approves each request', system['content'])
         self.assertTrue(payload['stream'])
         self.assertFalse(payload['model_options']['reasoning']['enabled'])
         self.assertNotIn('tools', payload)
@@ -134,3 +137,64 @@ class OperatorTests(AccountFixture, unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class OperatorBrainTests(AccountFixture, unittest.TestCase):
+    def choose(self, brain):
+        saved = self.client.put('/api/team/operator', json={
+            'prompt': '', 'data': '', 'tools': ['csv_read', 'memory_read', 'memory_write'], 'revision': 0, 'brain': brain,
+            'delegation': 'ask',
+        })
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+    def test_default_brain_uses_gateway_default_without_model_lookup(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return stream_response(answer())
+
+        with gateway(handler):
+            result = self.client.post('/api/agents/operator/chat', json={'message': 'Hi'})
+        self.assertEqual(result.json()['model'], HERMES_MODEL)
+        self.assertEqual([request.url.path for request in requests], ['/v1/chat/completions'])
+
+    def test_chosen_brain_is_sent_as_its_route_alias(self):
+        self.choose('claude-sonnet')
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.path == '/v1/models':
+                return httpx.Response(200, json={'data': [{'id': HERMES_MODEL}, {'id': 'mula-claude-sonnet'}]})
+            return stream_response(answer())
+
+        with gateway(handler):
+            result = self.client.post('/api/agents/operator/chat', json={'message': 'Hi'})
+            streamed = self.client.post('/api/agents/operator/chat', json={'message': 'Hi', 'stream': True})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()['model'], 'mula-claude-sonnet')
+        self.assertEqual(json.loads(streamed.text.splitlines()[-1])['type'], 'done')
+        chats = [request for request in requests if request.url.path == '/v1/chat/completions']
+        self.assertEqual([json.loads(request.content)['model'] for request in chats], ['mula-claude-sonnet'] * 2)
+        self.assertFalse(json.loads(chats[0].content)['model_options']['reasoning']['enabled'])
+
+    def test_brain_missing_from_runtime_is_refused_not_answered_by_default(self):
+        self.choose('claude-opus')
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.path == '/v1/models':
+                return httpx.Response(200, json={'data': [{'id': HERMES_MODEL}]})
+            return stream_response(answer())
+
+        with gateway(handler):
+            result = self.client.post('/api/agents/operator/chat', json={'message': 'Hi'})
+            streamed = self.client.post('/api/agents/operator/chat', json={'message': 'Hi', 'stream': True})
+        self.assertEqual(result.status_code, 409)
+        self.assertIn('not set up', result.json()['detail'])
+        last = json.loads(streamed.text.splitlines()[-1])
+        self.assertEqual((last['type'], last['status_code']), ('error', 409))
+        self.assertNotIn('/v1/chat/completions', [request.url.path for request in requests])
+        self.assertTrue(all(message['text'] == '' for message in self.client.get('/api/conversation').json()['messages'] if message['role'] == 'assistant'))

@@ -93,7 +93,7 @@ class ForecastApiTests(AccountFixture, unittest.TestCase):
 
     def test_explanation_uses_saved_report_and_config_in_isolated_session(self):
         report = self.client.post("/api/forecasting/run", json=request()).json()
-        self.client.put("/api/team/forecasting", json={"prompt": "Explain in Indonesian", "data": "Currency: IDR", "tools": ["naive", "explain"], "revision": 0})
+        self.client.put("/api/team/forecasting", json={"prompt": "Explain in Indonesian", "data": "Currency: IDR", "tools": ["naive", "explain"], "revision": 0, "brain": "qwen"})
         captured = []
         def handler(req):
             captured.append(req)
@@ -124,7 +124,7 @@ class ForecastApiTests(AccountFixture, unittest.TestCase):
 
     def test_tool_permissions_enforced_for_run_and_explain(self):
         report = self.client.post("/api/forecasting/run", json=request()).json()
-        self.client.put("/api/team/forecasting", json={"prompt": "", "data": "", "tools": ["naive"], "revision": 0})
+        self.client.put("/api/team/forecasting", json={"prompt": "", "data": "", "tools": ["naive"], "revision": 0, "brain": "qwen"})
         self.assertEqual(self.client.post("/api/forecasting/run", json=request(method="drift")).status_code, 403)
         self.assertEqual(self.client.post("/api/forecasting/explain", json={"run_id": report["id"]}).status_code, 403)
 

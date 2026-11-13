@@ -86,3 +86,16 @@ test("memory source metadata passes through without replacing answer tokens", as
   assert.deepEqual(events[0].paths, ["business-knowledge/suppliers.md"]);
   assert.equal(events[1].content, "Aroma supplies coffee.");
 });
+
+test("agent requests arrive before the reply finishes", async () => {
+  const events = [];
+  const request = { id: "r1", to_name: "Forecasting", status: "pending", approved_in_advance: false };
+  const text = [
+    { type: "token", content: "I asked Forecasting." },
+    { type: "request", request },
+    { type: "done", truncated: false },
+  ].map((event) => JSON.stringify(event)).join("\n");
+  await readChatStream(body([new TextEncoder().encode(text)]), (event) => events.push(event));
+  assert.deepEqual(events[1].request, request);
+  assert.equal(events[2].type, "done");
+});

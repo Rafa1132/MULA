@@ -6,12 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ..auth import accounts
-from ...common.config import HERMES_MODEL
+from ...common import brains
 from .agent import operator_reply, operator_stream
 from .runtime import HermesError
 from .csv_files import CsvFile, prepare_csv
 from ..memory import service as memory
 from ..team import service as team
+from ..agents import service as agents
 
 router = APIRouter()
 
@@ -40,6 +41,8 @@ class ChatResponse(BaseModel):
     model: str
     session_id: UUID
     truncated: bool = False
+    # Requests this reply made to other agents, as in GET /api/conversation.
+    requests: list[dict] = []
 
 
 @router.post("/api/agents/operator/chat", response_model=ChatResponse)
@@ -49,6 +52,7 @@ async def chat_with_operator(request: ChatRequest, account: dict = Depends(accou
         raise HTTPException(403, "This conversation belongs to another account.")
     model_message = request.message
     config = team.settings(account["id"], "operator")
+    model = brains.alias_for(config["brain"])
     csv_note = None
     if request.csv_file is not None:
         team.require_tool(config, "csv_read")
@@ -77,24 +81,37 @@ async def chat_with_operator(request: ChatRequest, account: dict = Depends(accou
         user_note = " · ".join(user_notes)
     accounts.add_message(account["id"], "user", request.message, user_note)
     reply_id = accounts.add_message(account["id"], "assistant", "", "Reply interrupted.")
+    # The ticket lets this turn's runtime tools act for this account, with this turn's CSV.
+    attachment = None
+    if request.csv_file is not None:
+        attachment = request.csv_file
+    ticket = agents.issue_ticket(account["id"], "operator", attachment, message_id=reply_id)
+    memory_context += agents.tool_context("operator", ticket, config)
     if request.stream:
         return StreamingResponse(
-            operator_events(model_message, session_id, reply_id, csv_note, memory_context, sources, memory_note),
+            operator_events(model_message, session_id, reply_id, csv_note, memory_context, sources, memory_note, model, ticket),
             media_type="application/x-ndjson",
             headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
         )
     try:
-        reply, truncated = await operator_reply(model_message, session_id, memory_context)
+        reply, truncated = await operator_reply(model_message, session_id, memory_context, model)
     except HermesError as error:
         raise HTTPException(status_code=error.status_code, detail=str(error)) from error
     note = None
     if truncated:
         note = "Reply reached its length limit."
     accounts.save_reply(reply_id, reply, note)
-    return ChatResponse(reply=reply, model=HERMES_MODEL, session_id=session_id, truncated=truncated)
+    return ChatResponse(reply=reply, model=model, session_id=session_id, truncated=truncated, requests=agents.requests_for_ticket(ticket))
 
 
-async def operator_events(message: str, session_id: UUID, reply_id: int, csv_note: str | None = None, memory_context: str = "", sources: list | None = None, memory_note: str | None = None):
+def join_notes(*notes):
+    kept = [note for note in notes if note]
+    if not kept:
+        return None
+    return " · ".join(kept)
+
+
+async def operator_events(message: str, session_id: UUID, reply_id: int, csv_note: str | None = None, memory_context: str = "", sources: list | None = None, memory_note: str | None = None, model: str = brains.alias_for(None), ticket: str | None = None, done_note: str | None = None):
     # Once headers are sent, stream failures must be explicit events, not HTTP errors.
     parts = []
     note = "Reply interrupted."
@@ -104,14 +121,18 @@ async def operator_events(message: str, session_id: UUID, reply_id: int, csv_not
             yield json.dumps({"type": "attachment", "note": csv_note}, ensure_ascii=False) + "\n"
         if sources or memory_note:
             yield json.dumps({"type": "memory", "paths": list(dict.fromkeys(source["path"] for source in (sources or []))), "note": memory_note}) + "\n"
-        async with aclosing(operator_stream(message, session_id, memory_context)) as events:
+        async with aclosing(operator_stream(message, session_id, memory_context, model)) as events:
             async for event in events:
                 if event["type"] == "token":
                     parts.append(event["content"])
                 if event["type"] == "done":
-                    note = None
+                    note = done_note
                     if event.get("truncated"):
-                        note = "Reply reached its length limit."
+                        note = join_notes(note, "Reply reached its length limit.")
+                    # Before "done": clients stop reading once the reply has finished.
+                    if ticket is not None:
+                        for agent_request in agents.requests_for_ticket(ticket):
+                            yield json.dumps({"type": "request", "request": agent_request}, ensure_ascii=False) + "\n"
                 yield json.dumps(event, ensure_ascii=False) + "\n"
     except HermesError as error:
         yield json.dumps({
@@ -124,6 +145,7 @@ async def operator_events(message: str, session_id: UUID, reply_id: int, csv_not
 
 @router.get("/api/conversation")
 def conversation(account: dict = Depends(accounts.current_account)):
-    return {"session_id": account["conversation_id"], "messages": accounts.history(account["id"])}
+    return {"session_id": account["conversation_id"], "messages": accounts.history(account["id"]),
+            "requests": agents.conversation_requests(account["id"])}
 
 

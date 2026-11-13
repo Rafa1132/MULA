@@ -26,17 +26,21 @@ def main() -> None:
         )
     RUNTIME_HOME.mkdir(parents=True, exist_ok=True, mode=0o700)
     key = secrets.token_urlsafe(32)
+    # A separate secret for the opposite direction: the runtime calling the backend's agent tools.
+    tools_key = secrets.token_urlsafe(32)
     write_private(backend_env, (
         "HERMES_BASE_URL=http://127.0.0.1:8642\n"
         f"HERMES_API_KEY={key}\n"
         "HERMES_MODEL=hermes-agent\n"
         "HERMES_TIMEOUT_SECONDS=120\n"
+        f"MULA_TOOLS_KEY={tools_key}\n"
     ))
     write_private(gateway_env, (
         "API_SERVER_ENABLED=true\n"
         f"API_SERVER_KEY={key}\n"
         "API_SERVER_HOST=127.0.0.1\n"
         "API_SERVER_PORT=8642\n"
+        f"MULA_TOOLS_KEY={tools_key}\n"
     ))
     write_private(config, (BACKEND / "hermes" / "config.yaml").read_text(encoding="utf-8"))
     print("Created the private Hermes profile and server/.env.hermes; no credentials were printed.")

@@ -16,6 +16,7 @@ The building blocks for the Operator chat: the animated core, the reader for str
 | `attachment` | `note` | Filename and row/column summary for the attached CSV |
 | `memory` | `paths`, `note` | Memory files used for this reply, or confirmation of a `/remember` save |
 | `token` | `content` | A piece of the answer text |
+| `request` | `request` | A request the Operator made to another agent during this turn (sent before `done`): `id`, `to_name`, `question`, `status`, `approved_in_advance`, `message_id` |
 | `done` | `truncated` | The reply finished; `truncated` is true if it hit the length limit |
 | `error` | `detail`, `status_code` | Hermes or runtime failure after streaming started |
 
@@ -25,7 +26,7 @@ The building blocks for the Operator chat: the animated core, the reader for str
 |---|---|
 | `components/OperatorCore.tsx` | Canvas visualizer |
 | `components/CsvAttachment.tsx` | Picker and drop zone UI |
-| `services/stream.ts` | `readChatStream` and the `ChatEvent` type |
+| `services/stream.ts` | `readChatStream`, and the `ChatEvent` and `AgentRequest` types |
 | `services/csv.ts` | `readCsvFile`, `CsvFile`, `MAX_CSV_BYTES` |
 | `tests/stream.test.mjs`, `tests/csv.test.mjs` | Unit tests (`npm test`) |
 | `index.ts` | Exports `OperatorCore`, `readChatStream`, `CsvAttachment`, `CsvFile` |

@@ -20,7 +20,7 @@ The browser never handles the session token. The server sets it in the HttpOnly 
 
 ## Used by
 
-`features/workspace` (`Workspace.tsx`) renders `AccountForm` when no account is loaded. The `/team` and `/memory` pages instead redirect to `/` when the session has expired.
+`features/workspace` (`Workspace.tsx`) renders `AccountForm` when no account is loaded. The `/agents` and `/memory` pages instead redirect to `/` when the session has expired.
 
 ## Server counterpart
 

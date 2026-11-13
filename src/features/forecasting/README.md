@@ -1,6 +1,6 @@
 # Forecasting (client)
 
-`ForecastPanel` is the forecast runner shown in **My team → Forecasting**. It uploads a sales or demand history, runs a statistical forecast on the server, and shows the chart, the table, error scores, and an optional explanation written by Qwen.
+`ForecastPanel` is the forecast runner shown in **My agents → Forecasting**. It uploads a sales or demand history, runs a statistical forecast on the server, and shows the chart, the table, error scores, and an optional explanation written by Qwen.
 
 ## Flow
 
@@ -13,7 +13,7 @@
    - a plain description of the calculation
    - warnings
 5. **Download forecast CSV** (`mula-forecast.csv`, built in the browser).
-6. **Ask Forecasting to explain** (shown only when the `explain` tool is enabled): `POST /api/forecasting/explain` with `{ run_id }`.
+6. **Ask Forecasting to explain** (shown only when the `explain` tool is enabled): `POST /api/forecasting/explain` with `{ run_id }`. It runs on Forecasting's own brain.
 
 When the panel opens, it loads the latest saved report and explanation from `GET /api/forecasting/latest`.
 
@@ -28,7 +28,7 @@ The proxy route is `src/app/api/forecasting/[action]/route.ts`. It allows POST f
 
 ## Used by
 
-`features/team` (`TeamPage.tsx`) embeds the panel and disables it while agent settings have unsaved changes.
+`features/team` (`TeamPage.tsx`) embeds the panel in the Forecasting settings panel on My agents and disables it while agent settings have unsaved changes.
 
 ## Server counterpart
 

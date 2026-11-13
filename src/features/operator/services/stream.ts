@@ -1,11 +1,25 @@
+// A question one agent asked another; the owner approves it unless it was approved in advance.
+export type AgentRequest = {
+  id: string;
+  from_agent: string;
+  to_agent: string;
+  to_name: string;
+  question: string;
+  status: "pending" | "running" | "answered" | "declined" | "failed" | "expired";
+  answer: string | null;
+  message_id: number | null;
+  approved_in_advance: boolean;
+};
+
 export type ChatEvent = {
-  type: "session" | "token" | "done" | "error" | "attachment" | "memory";
+  type: "session" | "token" | "done" | "error" | "attachment" | "memory" | "request";
   session_id?: string;
   content?: string;
   detail?: string;
   note?: string;
   paths?: string[];
   truncated?: boolean;
+  request?: AgentRequest;
 };
 
 export async function readChatStream(

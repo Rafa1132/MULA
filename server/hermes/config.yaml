@@ -1,21 +1,38 @@
-# Dedicated Mula Operator profile. Do not reuse a personal Hermes home.
+# Dedicated Mula agents profile. Do not reuse a personal Hermes home.
 model:
   default: huihui_ai/qwen3-abliterated:latest
   provider: custom
   base_url: http://127.0.0.1:11434/v1
-  # Actual Ollama window; the scoped Mula patch allows this tool-free profile.
+  # Actual Ollama window; the scoped Mula patch allows it while the only tools are Mula's own.
   context_length: 40960
 
 agent:
   max_turns: 8
   mula_compact_operator: true
 
-# Preserve the existing Operator scope. Enabling agents/tools is a separate
-# feature: define their business permissions and approval flow first.
+# Agents get only the business tools the Mula backend serves at /mcp
+# (server/src/features/agents/tools.py). Terminal, file, web, memory and
+# delegation tools stay off. The backend checks every call against a per-turn
+# ticket and the owner's settings, including approval before asking another agent.
 platform_toolsets:
-  api_server: []
-  cli: []
-mcp_servers: {}
+  api_server: [mula]
+  cli: [no_mcp]
+mcp_servers:
+  mula:
+    url: http://127.0.0.1:8000/mcp/
+    headers:
+      Authorization: Bearer ${MULA_TOOLS_KEY}
+    trust: full
+    timeout: 300
+    tools:
+      include: [ask_agent, calculate_forecast, latest_forecast]
+      resources: false
+      prompts: false
+# Show these few tools to the model directly. The default search bridge adds a
+# discovery step, and its tool names would not qualify for the small-context patch.
+tools:
+  tool_search:
+    enabled: "off"
 memory:
   memory_enabled: false
   user_profile_enabled: false

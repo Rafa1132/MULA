@@ -7,6 +7,9 @@ HERMES_BASE_URL = os.getenv("HERMES_BASE_URL", "http://127.0.0.1:8642").rstrip("
 HERMES_API_KEY = os.getenv("HERMES_API_KEY", "").strip()
 HERMES_MODEL = os.getenv("HERMES_MODEL", "hermes-agent").strip()
 HERMES_TIMEOUT_SECONDS = float(os.getenv("HERMES_TIMEOUT_SECONDS", "120"))
+# Shared secret the Mula runtime sends to this backend's /mcp tool server.
+# Empty means agent tools are not connected and /mcp refuses every request.
+MULA_TOOLS_KEY = os.getenv("MULA_TOOLS_KEY", "").strip()
 
 url = urlsplit(HERMES_BASE_URL)
 if (

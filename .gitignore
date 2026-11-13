@@ -8,3 +8,5 @@ node_modules/
 *.tsbuildinfo
 .runtime/
 .env.hermes
+# Browser profiles hold cookies and saved logins; never commit them.
+tokopedia_session/

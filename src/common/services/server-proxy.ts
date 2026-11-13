@@ -21,7 +21,7 @@ export async function proxyBackend(request: Request, path: string) {
     method: request.method, headers, cache: "no-store", signal: request.signal,
   };
   if (request.method !== "GET") {
-    if ((path === "/api/agents/operator/chat" || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting")) && request.body) {
+    if ((path.startsWith("/api/agents/") || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting")) && request.body) {
       // JSON can expand CSV characters into escapes; allow that overhead while
       // bounding the upload before buffering or forwarding it to the server.
       const reader = request.body.getReader();

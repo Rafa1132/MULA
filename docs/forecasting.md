@@ -1,6 +1,6 @@
 # Forecasting and agent settings
 
-Open **My team** and select Operator or Forecasting. Only implemented agents appear. Instructions (4,000 characters) and reference data (8,000 characters) are saved for that agent in your account. They augment built-in role instructions and are included in the next model request. They cannot grant unavailable capabilities. Save before running a forecast. Configurations have revision checks; reload the page if another tab has saved newer settings.
+Open **My agents** and click the Operator or Forecasting card. Only implemented agents appear. Instructions (4,000 characters) and reference data (8,000 characters) are saved for that agent in your account. They augment built-in role instructions and are included in the next model request. They cannot grant unavailable capabilities. Save before running a forecast. Configurations have revision checks; reload the page if another tab has saved newer settings.
 
 Operator's switches control new CSV ingestion, memory retrieval, and explicit `/remember` writes. They do not delete earlier messages, runtime history or saved facts. Reference data is separate from the categorized Memory files. Forecasting does not automatically retrieve Operator memories or conversation history.
 
@@ -10,7 +10,9 @@ Operator's switches control new CSV ingestion, memory retrieval, and explicit `/
 2. Select the date column, metric column and daily/weekly/monthly frequency.
 3. Choose the horizon (1–90 periods), method and applicable numerical parameters.
 4. Run, inspect historical error scores and warnings, then download forecast values if needed.
-5. Optionally select **Ask Forecasting to explain**. Your configured Qwen model interprets the existing report; calculations do not require the model.
+5. Optionally select **Ask Forecasting to explain**. Forecasting's brain interprets the existing report; calculations do not require the model.
+
+You can also ask in words: in **My agents → Forecasting → Chat**, or through the Operator, which asks Forecasting after your approval by default. With a CSV attached, Forecasting runs the same calculation through its `calculate_forecast` tool and saves the run here.
 
 The CSV follows the existing parser limits: UTF-8, 50 KB, 500 rows, 40 columns, 2,000 characters/cell and a 24,000-character prepared payload. Blank/duplicate column names are normalized and shown in the selectors. There must be at least six observations, one numeric total per date, and no missing periods. Date format is `YYYY-MM-DD`; rows are sorted chronologically with a notice. Duplicate dates must be aggregated before upload. Blank/ambiguous values, NaN/infinity and values outside ±1 trillion are rejected. Zero and negative values are valid and are not silently replaced or clipped. Other CSV columns are ignored by forecasting after parsing.
 
@@ -34,7 +36,7 @@ Hold out `min(20, max(3, floor(T/5)))` terminal periods as expanding-window one-
 
 These scores are selection diagnostics, not an independent final evaluation. They measure one-step prediction errors in the original units, not percentage accuracy, confidence intervals or long-horizon performance. No uncertainty bands are fabricated. External drivers, holidays, promotions and stockouts are not modeled. Results are a baseline for planning; future accuracy is not guaranteed.
 
-Prompt/reference changes guide the Qwen explanation only. They do not alter the selected time series, numerical parameters or forecast output. Each explanation is isolated from the main Operator chat and uses the saved report loaded by the server (up to 12 history points and the first 12 forecasts plus scores/parameters/warnings). Model-written explanation text should be interpreted against the authoritative report/table. Operator-to-Forecasting autonomous delegation is not implemented.
+Prompt/reference changes guide how Forecasting talks and explains only. They do not alter the selected time series, numerical parameters or forecast output. Each explanation is isolated from the main Operator chat and uses the saved report loaded by the server (up to 12 history points and the first 12 forecasts plus scores/parameters/warnings). Model-written explanation text should be interpreted against the authoritative report/table.
 
 ## Storage and API
 

@@ -7,16 +7,19 @@ import Markdown from "react-markdown";
 import { Icon, Sidebar } from "@/common/components";
 import { MulaLogo } from "@/common/components";
 import { OperatorCore, CsvAttachment } from "@/features/operator";
-import type { CsvFile } from "@/features/operator";
+import type { AgentRequest, CsvFile } from "@/features/operator";
 import { SpeechPlayer, useDictation, appendDictation, useLiveConversation } from "@/features/voice";
 import type { VoiceState } from "@/features/voice";
 import { readChatStream } from "@/features/operator";
+import AgentRequestCard from "./AgentRequestCard";
+import { attachRequests, placeRequest } from "../services/requests";
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
   note?: string;
+  requests?: AgentRequest[];
 };
 
 const suggestions = [
@@ -158,6 +161,106 @@ export default function Workspace() {
     );
   }
 
+  function showRequest(messageId: string, request: AgentRequest) {
+    setMessages((previous) => placeRequest(previous, messageId, request));
+  }
+
+  async function responseError(response: Response, fallback: string) {
+    const failure = await response.json().catch(() => ({}));
+    if (typeof failure.detail === "string") return new Error(failure.detail);
+    return new Error(fallback);
+  }
+
+  // Requests change on the server too (another tab, expiry), so re-read them after a refusal.
+  async function refreshRequests() {
+    const response = await fetch("/api/conversation", { cache: "no-store" });
+    if (!response.ok) return;
+    const saved = await response.json();
+    setMessages((previous) => attachRequests(previous, saved.requests));
+  }
+
+  async function declineRequest(requestId: string) {
+    setError("");
+    try {
+      const response = await fetch(`/api/agents/requests/${requestId}/decline`, { method: "POST" });
+      if (!response.ok) {
+        setError((await responseError(response, "Could not update this request. Please retry.")).message);
+        await refreshRequests();
+        return;
+      }
+      const saved = await response.json();
+      setMessages((previous) => attachRequests(previous, [saved.request]));
+    } catch {
+      setError("Could not reach Mula to update this request. Check your connection and retry.");
+    }
+  }
+
+  // Runs the other agent, then streams the Operator's relay of its answer as a new reply.
+  async function approveRequest(requestId: string) {
+    if (controller.current) return;
+    const abort = new AbortController();
+    controller.current = abort;
+    followMessages.current = true;
+    const relayId = crypto.randomUUID();
+    let relayShown = false;
+    let relay = "";
+    let relayNote = "Answer from another agent";
+    let current: AgentRequest | undefined;
+    setError("");
+    setBusy(true);
+    setStatus("Asking another agent…");
+    try {
+      const response = await fetch(`/api/agents/requests/${requestId}/approve`, { method: "POST", signal: abort.signal });
+      if (!response.ok) {
+        await refreshRequests();
+        throw await responseError(response, "Could not start this request. Please retry.");
+      }
+      if (!response.body) throw new Error("Streaming is unavailable in this browser.");
+      await readChatStream(response.body, (chunk) => {
+        if (chunk.type === "request" && chunk.request) {
+          // Requests the Operator makes while relaying belong under the relay.
+          if (chunk.request.id === requestId) current = chunk.request;
+          showRequest(relayId, chunk.request);
+          if (chunk.request.id === requestId && chunk.request.status === "answered" && !relayShown) {
+            relayShown = true;
+            relayNote = `Answer from ${chunk.request.to_name}`;
+            setMessages((previous) => [...previous, { id: relayId, role: "assistant", text: "" }]);
+          }
+        }
+        if (chunk.type === "token" && typeof chunk.content === "string") {
+          relay += chunk.content;
+          updateReply(relayId, relay);
+        }
+        if (chunk.type === "done") {
+          let note = relayNote;
+          if (chunk.truncated) note += " · Reply reached its length limit.";
+          updateReply(relayId, relay, note);
+        }
+      });
+      if (abort.signal.aborted) return;
+      playReply(relay);
+      setStatus("Ready when you are");
+    } catch (failure) {
+      // The server marks an unfinished request as failed; mirror that without reloading.
+      if (current?.status === "running") showRequest(relayId, { ...current, status: "failed" });
+      if (abort.signal.aborted) {
+        if (relayShown) updateReply(relayId, relay, "Stopped by you.");
+        setStatus("Reply stopped");
+      } else {
+        let detail = "Could not complete the request. Check your connection and try again.";
+        if (failure instanceof Error) detail = failure.message;
+        setError(detail);
+        if (relayShown) updateReply(relayId, relay, "Reply incomplete.");
+        setStatus("Could not complete request");
+      }
+    } finally {
+      if (controller.current === abort) {
+        controller.current = null;
+        setBusy(false);
+      }
+    }
+  }
+
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     if (live.isActive()) return;
@@ -193,6 +296,9 @@ export default function Workspace() {
     setStatus("Connecting to Operator…");
     let reply = "";
     let firstToken = true;
+    let completed = false;
+    // "Go ahead" requests run as soon as the Operator's reply ends.
+    const approvedInAdvance: string[] = [];
     const start = performance.now();
 
     try {
@@ -238,6 +344,10 @@ export default function Workspace() {
           updateReply(replyId, reply);
           if (!abort.signal.aborted) onToken?.(chunk.content);
         }
+        if (chunk.type === "request" && chunk.request) {
+          showRequest(replyId, chunk.request);
+          if (chunk.request.approved_in_advance && chunk.request.status === "pending") approvedInAdvance.push(chunk.request.id);
+        }
         if (chunk.type === "done" && chunk.truncated) {
           updateReply(
             replyId,
@@ -249,6 +359,7 @@ export default function Workspace() {
       if (abort.signal.aborted) return false;
       if (!onToken) playReply(reply);
       setStatus("Ready when you are");
+      completed = true;
       return true;
     } catch (failure) {
       if (!onToken || !abort.signal.aborted) setAttachment(attachedCsv);
@@ -273,6 +384,8 @@ export default function Workspace() {
         controller.current = null;
         setBusy(false);
         if (!onToken) input.current?.focus();
+        const next = approvedInAdvance[0];
+        if (completed && next) void approveRequest(next);
       }
     }
   }
@@ -301,7 +414,8 @@ export default function Workspace() {
     if (!conversation.ok) throw new Error("Could not load your conversation. Please retry.");
     const saved = await conversation.json();
     sessionId.current = saved.session_id;
-    setMessages(saved.messages.map((message: Message) => ({ ...message, id: String(message.id) })));
+    const messages = saved.messages.map((message: Message) => ({ ...message, id: String(message.id) }));
+    setMessages(attachRequests(messages, saved.requests ?? []));
     setAccount(user);
   }
 
@@ -363,7 +477,7 @@ export default function Workspace() {
       <main className={mainClass}>
         <header className="topbar">
           <div className="workspace-title"><span className="mobile-brand"><MulaLogo /></span><span className="desktop-title">Your workspace <span className="header-divider">/</span> <strong>Operator</strong></span></div>
-          <div className="topbar-actions"><a className="mobile-team-link" href="/team">My team</a><a className="mobile-team-link" href="/memory">Memory</a><span className="preview-badge">EARLY PREVIEW</span><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
+          <div className="topbar-actions"><a className="mobile-team-link" href="/agents">My agents</a><a className="mobile-team-link" href="/memory">Memory</a><span className="preview-badge">EARLY PREVIEW</span><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
         </header>
 
         <section className="operator-stage" aria-label="Your Operator">
@@ -395,6 +509,7 @@ export default function Workspace() {
                   </div>}
                   {!message.text && !message.note && <div className="waiting"><span /><span /><span /><span className="waiting-label">Preparing your reply</span></div>}
                   {message.note && <p className="message-note">{message.note}</p>}
+                  {message.requests?.map((request) => <AgentRequestCard key={request.id} request={request} disabled={busy} onApprove={(id) => void approveRequest(id)} onDecline={(id) => void declineRequest(id)} />)}
                   {message.role === "assistant" && message.text && !busy && !muted && !dictating && !liveActive && <button className="play-reply text-button" onClick={() => playReply(message.text)}><Icon name="voice" />Play reply</button>}
                 </div>
               </article>

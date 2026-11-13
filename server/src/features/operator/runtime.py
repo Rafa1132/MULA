@@ -15,14 +15,15 @@ class HermesError(RuntimeError):
         self.status_code = status_code
 
 
-def request_headers(session_id: UUID | None = None) -> dict[str, str]:
+def request_headers(session_id: UUID | None = None, agent_id: str = "operator") -> dict[str, str]:
     if not HERMES_API_KEY:
         raise HermesError("Hermes is not configured. Run the backend's Hermes setup first.")
     headers = {"Authorization": f"Bearer {HERMES_API_KEY}"}
     if session_id is not None:
         # Without an explicit ID, Hermes derives identity from prompt text. That
         # could join unrelated chats with the same opening. Never rely on it here.
-        headers["X-Hermes-Session-Id"] = f"mula-operator-{session_id}"
+        # The agent id keeps each agent's runtime history separate.
+        headers["X-Hermes-Session-Id"] = f"mula-{agent_id}-{session_id}"
     return headers
 
 
@@ -66,9 +67,33 @@ async def sse_events(response: httpx.Response):
     # SSE requires a blank line to dispatch. A partial final frame is discarded.
 
 
-async def stream_chat(system_prompt: str, message: str, session_id: UUID):
+async def configured_models() -> set[str]:
+    """Model aliases the gateway serves: its default plus configured `model_routes`."""
+    try:
+        async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
+            response = await client.get(f"{HERMES_BASE_URL}/v1/models", headers=request_headers())
+            check_status(response)
+            try:
+                return {entry["id"] for entry in response.json()["data"] if isinstance(entry["id"], str)}
+            except (ValueError, KeyError, TypeError) as error:
+                raise HermesError("Hermes returned an invalid model list.", 502) from error
+    except httpx.RequestError as error:
+        raise HermesError("Cannot reach Hermes. Start the Hermes gateway.") from error
+
+
+async def require_model(model: str) -> None:
+    # Hermes silently answers an unknown alias with its default model. Check first
+    # so an owner who chose Claude never gets a local reply presented as Claude's.
+    if model == HERMES_MODEL:
+        return
+    if model not in await configured_models():
+        raise HermesError("The brain chosen in My agents is not set up on the Mula runtime. Choose another brain or finish its setup.", 409)
+
+
+async def stream_chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator"):
+    await require_model(model)
     payload = {
-        "model": HERMES_MODEL,
+        "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message},
@@ -76,7 +101,7 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID):
         "stream": True,
         "model_options": {"reasoning": {"enabled": False}},
     }
-    headers = request_headers(session_id)
+    headers = request_headers(session_id, agent_id)
     saw_text = False
     finish_reason = None
     try:
@@ -143,11 +168,11 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID):
         raise HermesError("Cannot reach Hermes. Start the Hermes gateway and check its URL.") from error
 
 
-async def chat(system_prompt: str, message: str, session_id: UUID) -> tuple[str, bool]:
+async def chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator") -> tuple[str, bool]:
     parts = []
     truncated = False
     # Both response formats use one execution path and identical failure semantics.
-    async with aclosing(stream_chat(system_prompt, message, session_id)) as events:
+    async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id)) as events:
         async for event in events:
             if event["type"] == "token":
                 parts.append(event["content"])
