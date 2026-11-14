@@ -125,7 +125,8 @@ def load_catalog(folder=AGENTS_DIR):
     folder = Path(folder)
     if not folder.is_dir():
         raise AgentDefinitionError(f"The agent folder {folder} does not exist.")
-    agents = [read_agent(path) for path in sorted(folder.glob("*.md"))]
+    # README.md documents the folder; it is not an agent definition.
+    agents = [read_agent(path) for path in sorted(folder.glob("*.md")) if path.name != "README.md"]
     if not agents:
         raise AgentDefinitionError(f"The agent folder {folder} has no agent files (*.md).")
     catalog = {agent["id"]: agent for agent in sorted(agents, key=lambda agent: (agent["order"], agent["id"]))}
