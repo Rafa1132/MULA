@@ -1,20 +1,17 @@
-from pathlib import Path
-import tempfile
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from src.common import profiles
 from src.main import app
+from tests.support.database_fixture import DatabaseFixture
 
 
-class AccountFixture:
+class AccountFixture(DatabaseFixture):
+    """A fresh database schema, a private runtime home, and one signed-in account."""
+
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        database = patch("src.features.auth.service.DB_PATH", Path(temporary.name) / "accounts.sqlite3")
-        database.start()
-        self.addCleanup(database.stop)
+        super().setUp()
         # Account profiles go to a private runtime home, never the developer's real one.
-        self.runtime_home = Path(temporary.name) / "hermes"
+        self.runtime_home = self.data_dir / "hermes"
         for target, value in (("RUNTIME_HOME", self.runtime_home), ("KEY_SEED", "test-profile-seed")):
             patcher = patch.object(profiles, target, value)
             patcher.start()

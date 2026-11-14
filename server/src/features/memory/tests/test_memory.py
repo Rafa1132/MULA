@@ -27,7 +27,7 @@ class MemoryTests(AccountFixture, unittest.TestCase):
     def folder(self, account_id=None):
         if account_id is None:
             account_id = self.account["id"]
-        return accounts.DB_PATH.parent / "workspaces" / account_id / "memory"
+        return self.data_dir / "workspaces" / account_id / "memory"
 
     def test_store_and_summary_are_private_to_the_account(self):
         entry = self.add("business", "Our coffee supplier is Aroma, with deliveries on Tuesdays.")["entry"]

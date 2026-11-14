@@ -40,7 +40,7 @@ Prompt/reference changes guide how Forecasting talks and explains only. They do 
 
 ## Storage and API
 
-Both tables live in `.runtime/accounts.sqlite3` (or `LARAS_ACCOUNT_DB`). `agent_settings` is keyed by account/agent; `forecast_runs` contains account-owned reports and their latest explanation. Latest 20 reports per account are retained. A report includes selected historical dates/values, future estimates, parameters and scores. Original uploaded files and unused CSV columns are not retained. These reports are not automatically added to RAG memory.
+Both tables live in the PostgreSQL application database (`MULA_DATABASE_URL`, see `server/README.md`, "Database"). `agent_settings` is keyed by account/agent; `forecast_runs` contains account-owned reports and their latest explanation. Latest 20 reports per account are retained. A report includes selected historical dates/values, future estimates, parameters and scores. Original uploaded files and unused CSV columns are not retained. These reports are not automatically added to RAG memory.
 
 Authenticated endpoints:
 
@@ -51,14 +51,14 @@ Authenticated endpoints:
 Read-only inspection:
 
 ```sh
-sqlite3 -readonly /Users/rafa/Desktop/LARAS/.runtime/accounts.sqlite3
+psql "$(grep ^MULA_DATABASE_URL= server/.env.hermes | cut -d= -f2-)"
 ```
 
 ```sql
-.schema agent_settings
-.schema forecast_runs
+\d agent_settings
+\d forecast_runs
 SELECT agent_id, revision FROM agent_settings;
-SELECT id, created_at FROM forecast_runs ORDER BY rowid DESC LIMIT 20;
+SELECT id, created_at FROM forecast_runs ORDER BY seq DESC LIMIT 20;
 ```
 
-Tables are created lazily when their feature is used. Avoid manually changing the database while the server is running. Restart the backend after upgrading; a process already on port 8000 does not reload Python code automatically.
+Tables are created by the migrations in `server/migrations` when the backend starts. Avoid manually changing the database while the server is running. Restart the backend after upgrading; a process already on port 8000 does not reload Python code automatically.

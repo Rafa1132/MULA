@@ -2,6 +2,36 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 14 November 2026 — Agents are defined by files in server/agents/ (Muhammad Rafandi, with Claude)
+
+Request: "there should be an agent folder", so agent configuration lives in readable files rather than in code or the database.
+
+Changed:
+- **Agent folder.** `server/agents/operator.md` and `forecasting.md` hold each agent's name, description, display order, owner-toggleable capabilities, Mula tools and delegation targets as YAML front matter, with the persona as the body. The personas moved unchanged from `features/operator/prompts/` and `features/forecasting/prompts/`, which are gone.
+- **Loader.** `src/common/agent_catalog.py` reads the folder once at startup and refuses a broken file with its name: missing or unknown keys, unknown Mula tools, delegation to an agent without a file or without `ask_agent`, an empty persona. `team.AGENTS`, the agents feature's `PERSONAS` and `AGENT_TOOLS`, and the Operator's prompt now come from it. The API shape of `/api/team` is unchanged and still hides the persona.
+- **Unchanged on purpose.** Owner settings stay per account in the database. The per-turn tool instructions in `agents/service.py::tool_context` stay in code because they describe how each tool behaves. The web app's agent allowlists stay, so a new agent file needs frontend work before owners can use it.
+
+Evidence: both personas loaded from the new files compared byte-identical to the old prompt files before those were removed. The backend suite passes (169 tests, including 10 new loader tests, one of which checks that the known Mula tools match the tool server).
+
+## 14 November 2026 — The application database moves to PostgreSQL (Muhammad Rafandi, with Claude)
+
+Request: move Mula's primary database from `.runtime/accounts.sqlite3` to PostgreSQL with behaviour unchanged and the data intact. Decisions (approved plan): psycopg 3 with a pool and raw SQL, Alembic for the schema; the per-account memory stores stay SQLite for now; no SQLite fallback in the backend or the tests.
+
+Changed:
+- **Data access.** `src/common/database.py` holds the pool; `database()` keeps its shape: one transaction per block, rows as dicts. `MULA_DATABASE_URL` is required, and `MULA_DATABASE_SCHEMA` exists for tests and rehearsals. The per-module `CREATE TABLE IF NOT EXISTS`, `PRAGMA table_info` and `ALTER TABLE` code is gone.
+- **Schema.** `migrations/versions/0001_initial.py` holds the nine tables in PostgreSQL types. `messages.id`, `forecast_runs.seq` and `agent_requests.seq` are identity columns; the two `seq` columns keep insertion order, which SQLite gave through its hidden rowid. The JSON text columns are JSONB. `approved_in_advance` is a boolean, `forecast_runs.created_at` is a timestamp with time zone, and `accounts.created_at` is new. Epoch-second columns stay integers. The backend migrates at startup.
+- **Locking.** SQLite's database-wide `BEGIN IMMEDIATE` became narrower locks. Settings saves take a transaction-scoped advisory lock per account and agent. Request approvals and declines take `SELECT … FOR UPDATE`.
+- **Copy.** `scripts/migrate_sqlite_to_postgres.py` does a dry run by default and opens the file read-only. It copies in one transaction with message ids kept, then compares row counts. It refuses to write into a non-empty target without `--replace`, and it skips the leftover `memory_*` tables.
+- **Local development.** `docker-compose.yml` defines a `postgres:17` service whose credentials sit in an ignored `.env.postgres`. `./run.sh` reuses a running PostgreSQL, starts the compose service when Docker is present, and otherwise says what to do. `setup_hermes.py` writes `MULA_DATABASE_URL`.
+- **Memory folder.** The memory folder no longer derives from the database path; `MULA_DATA_DIR` (default `.runtime`) sets it.
+- **Tests.** Each test runs in its own throwaway schema in `MULA_TEST_DATABASE_URL`. New tests cover the schema, concurrency (one winner for a settings save and for a request claim, distinct message ids) and the copy script (counts, types, id preservation, refusal, `--replace`, mismatch exit, source unchanged). The setup test now covers the database URL and the compose password.
+
+Evidence: the backend suite passes against PostgreSQL 17 (159 tests, each in its own schema). A rehearsal copied a snapshot of the real file into a scratch schema. The real copy then went into `mula` with the stack stopped. Row counts matched on both sides: accounts 1, sessions 1, messages 102, agent_settings 1, agent_map_positions 2, agent_tickets 5, and 0 for the other three tables. A per-table content fingerprint was identical for every table. The SQLite file's hash was unchanged, and the next message id continues at 103. After the restart, the live backend answered from PostgreSQL and no longer opened the SQLite file, and the server log was clean.
+
+Also during the restart: the runtime's generated launchers (`.runtime/hermes-source/.hermes/bin/hermes`, `hermes-acp`) reached the bundled Python through `LARAS/backend/..`. A `backend` folder had existed only as a leftover and was gone, so the runtime could not start. Both launchers now use the equivalent `LARAS/.runtime/...` path; copies of the originals were kept outside the repo. A reinstall with `install_hermes.sh` would regenerate them correctly.
+
+Open: the memory stores and the runtime's own `state.db` stay SQLite. After the copy was verified, the owner had `.runtime/accounts.sqlite3` deleted; PostgreSQL is now the only copy, so back it up with `pg_dump`.
+
 ## 14 November 2026 — One runtime profile per account, and a memory Mula owns (Muhammad Rafandi, with Claude)
 
 Request: give each account its own runtime profile so `MEMORY.md`/`USER.md` are never shared; let Mula own the whole memory store (append-only, timestamped, per account) and decide what gets saved; regenerate `MEMORY.md` as a short summary that the agent never edits. Decision: "Hermes behaviour, Mula storage": the Operator saves on its own with a `remember` tool and gets the memory back every turn, with no approval cards; the storage, the filtering and the history are Mula's.

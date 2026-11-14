@@ -53,9 +53,11 @@ Each paragraph becomes one entry through the pipeline. Preferences and fun facts
 
 ## Inspect the store
 
+The memory store is the one part of Mula that stays SQLite: accounts, chats and settings are in the PostgreSQL application database (see `server/README.md`, "Database"). Find an account id there, then open its store:
+
 ```sh
 cd /Users/rafa/Desktop/LARAS
-sqlite3 -readonly .runtime/accounts.sqlite3 "SELECT id, username FROM accounts;"
+psql "$(grep ^MULA_DATABASE_URL= server/.env.hermes | cut -d= -f2-)" -c "SELECT id, username FROM accounts;"
 sqlite3 -readonly ".runtime/workspaces/<account-id>/memory/store.sqlite3"
 ```
 
@@ -69,7 +71,7 @@ SELECT id, action, entry_id, actor, occurred_at, detail FROM audit ORDER BY id D
 SELECT entries.id, fact FROM entries_fts JOIN entries ON entries.id = entries_fts.rowid WHERE entries_fts MATCH 'coffee OR supplier';
 ```
 
-Do not write to the store by hand. Deleting or updating a row is refused by the database's own triggers; corrections go through the Memory page or the Operator. If `LARAS_ACCOUNT_DB` is set, the workspaces live next to that database.
+Do not write to the store by hand. Deleting or updating a row is refused by the database's own triggers; corrections go through the Memory page or the Operator. If `MULA_DATA_DIR` is set, the workspaces live under that folder instead of `.runtime`.
 
 ## Implementation boundaries
 

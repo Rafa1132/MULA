@@ -11,21 +11,21 @@ import hashlib
 import json
 import secrets
 import time
-from pathlib import Path
 from uuid import UUID, uuid4, uuid5
 
 from ..auth import accounts
-from ..operator.agent import OPERATOR_PROMPT
 from ..operator.csv_files import CsvFile, prepare_csv
 from ..operator.runtime import chat
 from ..team import service as team
 from ...common import brains
+from ...common.agent_catalog import CATALOG
+from ...common.database import Jsonb
 
-FORECASTING_PROMPT = (Path(__file__).parents[1] / "forecasting" / "prompts" / "forecasting.md").read_text(encoding="utf-8")
-PERSONAS = {"operator": OPERATOR_PROMPT, "forecasting": FORECASTING_PROMPT}
+# Each agent's persona and Mula tools come from its file in server/agents/.
+PERSONAS = {agent_id: agent["persona"] for agent_id, agent in CATALOG.items()}
 # Runtime tools each agent may call. The runtime offers every agent the same
 # list, so the tools themselves enforce this.
-AGENT_TOOLS = {"operator": {"ask_agent", "remember"}, "forecasting": {"calculate_forecast", "latest_forecast"}}
+AGENT_TOOLS = {agent_id: agent["runtime_tools"] for agent_id, agent in CATALOG.items()}
 TICKET_SECONDS = 15 * 60
 REQUEST_SECONDS = 24 * 60 * 60
 CSV_PREVIEW_ROWS = 5
@@ -35,34 +35,24 @@ class ToolDenied(Exception):
     """A tool call the ticket does not allow; the message is shown to the model."""
 
 
-def schema(db):
-    db.execute('''CREATE TABLE IF NOT EXISTS agent_tickets (
-        token_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id),
-        agent_id TEXT NOT NULL, attachment TEXT, message_id INTEGER,
-        depth INTEGER NOT NULL, expires INTEGER NOT NULL)''')
-    db.execute('''CREATE TABLE IF NOT EXISTS agent_requests (
-        id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id),
-        from_agent TEXT NOT NULL, to_agent TEXT NOT NULL, question TEXT NOT NULL,
-        attachment TEXT, ticket_hash TEXT NOT NULL, message_id INTEGER,
-        status TEXT NOT NULL, answer TEXT, created INTEGER NOT NULL,
-        approved_in_advance INTEGER NOT NULL DEFAULT 0)''')
-
-
 def ticket_hash(token):
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def stored_attachment(attachment: CsvFile | None):
+    """The attachment as a JSONB value, or None. Tables are defined in server/migrations."""
+    if attachment is None:
+        return None
+    return Jsonb(attachment.model_dump())
 
 
 def issue_ticket(account_id, agent_id, attachment: CsvFile | None = None, message_id=None, depth=0):
     token = secrets.token_urlsafe(24)
     now = int(time.time())
-    stored_attachment = None
-    if attachment is not None:
-        stored_attachment = attachment.model_dump_json()
     with accounts.database() as db:
-        schema(db)
-        db.execute("DELETE FROM agent_tickets WHERE expires <= ?", (now,))
-        db.execute("INSERT INTO agent_tickets VALUES (?, ?, ?, ?, ?, ?, ?)",
-                   (ticket_hash(token), account_id, agent_id, stored_attachment, message_id, depth, now + TICKET_SECONDS))
+        db.execute("DELETE FROM agent_tickets WHERE expires <= %s", (now,))
+        db.execute("INSERT INTO agent_tickets (token_hash, account_id, agent_id, attachment, message_id, depth, expires) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                   (ticket_hash(token), account_id, agent_id, stored_attachment(attachment), message_id, depth, now + TICKET_SECONDS))
     return token
 
 
@@ -71,8 +61,7 @@ def resolve_ticket(token, tool):
     if not isinstance(token, str) or not token:
         raise ToolDenied("Pass the tool ticket from your instructions as `ticket`.")
     with accounts.database() as db:
-        schema(db)
-        row = db.execute("SELECT * FROM agent_tickets WHERE token_hash = ? AND expires > ?", (ticket_hash(token), int(time.time()))).fetchone()
+        row = db.execute("SELECT * FROM agent_tickets WHERE token_hash = %s AND expires > %s", (ticket_hash(token), int(time.time()))).fetchone()
     if row is None:
         raise ToolDenied("This tool ticket is invalid or expired. Tell the owner to send the request again.")
     caller = dict(row)
@@ -83,9 +72,10 @@ def resolve_ticket(token, tool):
 
 
 def load_attachment(stored):
+    """A JSONB attachment back as a CsvFile, or None."""
     if stored is None:
         return None
-    return CsvFile.model_validate_json(stored)
+    return CsvFile.model_validate(stored)
 
 
 def csv_preview(attachment: CsvFile | None):
@@ -144,20 +134,18 @@ def delegated_message(caller_name, question):
 
 def create_request(caller, token, to_agent, question, approved_in_advance):
     request_id = str(uuid4())
-    attachment = None
-    if caller["attachment"] is not None:
-        attachment = caller["attachment"].model_dump_json()
     with accounts.database() as db:
-        schema(db)
-        db.execute("INSERT INTO agent_requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)", (
-            request_id, caller["account_id"], caller["agent_id"], to_agent, question, attachment,
-            ticket_hash(token), caller["message_id"], int(time.time()), int(approved_in_advance)))
+        db.execute('''INSERT INTO agent_requests (id, account_id, from_agent, to_agent, question, attachment, ticket_hash,
+            message_id, status, answer, created, approved_in_advance)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', NULL, %s, %s)''', (
+            request_id, caller["account_id"], caller["agent_id"], to_agent, question, stored_attachment(caller["attachment"]),
+            ticket_hash(token), caller["message_id"], int(time.time()), bool(approved_in_advance)))
     return request_id
 
 
 def finish_request(request_id, status, answer):
     with accounts.database() as db:
-        db.execute("UPDATE agent_requests SET status = ?, answer = ? WHERE id = ?", (status, answer, request_id))
+        db.execute("UPDATE agent_requests SET status = %s, answer = %s WHERE id = %s", (status, answer, request_id))
 
 
 def ask_agent(token, agent, question):
@@ -200,15 +188,13 @@ def public_request(row):
 
 def requests_for_ticket(token):
     with accounts.database() as db:
-        schema(db)
-        rows = db.execute("SELECT * FROM agent_requests WHERE ticket_hash = ? ORDER BY created", (ticket_hash(token),)).fetchall()
+        rows = db.execute("SELECT * FROM agent_requests WHERE ticket_hash = %s ORDER BY created, seq", (ticket_hash(token),)).fetchall()
     return [public_request(row) for row in rows]
 
 
 def conversation_requests(account_id):
     with accounts.database() as db:
-        schema(db)
-        rows = db.execute("SELECT * FROM agent_requests WHERE account_id = ? AND from_agent = 'operator' ORDER BY created", (account_id,)).fetchall()
+        rows = db.execute("SELECT * FROM agent_requests WHERE account_id = %s AND from_agent = 'operator' ORDER BY created, seq", (account_id,)).fetchall()
     return [public_request(row) for row in rows]
 
 
@@ -219,16 +205,15 @@ def start_request(account_id, request_id):
     call started it; only a claimed request carries its attachment.
     """
     with accounts.database() as db:
-        schema(db)
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT * FROM agent_requests WHERE id = ? AND account_id = ?", (request_id, account_id)).fetchone()
+        # The row lock holds until the transaction ends, so two approvals cannot both claim it.
+        row = db.execute("SELECT * FROM agent_requests WHERE id = %s AND account_id = %s FOR UPDATE", (request_id, account_id)).fetchone()
         if row is None:
             return None
         request = public_request(row)
         request["claimed"] = False
         if request["status"] != "pending":
             return request
-        db.execute("UPDATE agent_requests SET status = 'running' WHERE id = ?", (request_id,))
+        db.execute("UPDATE agent_requests SET status = 'running' WHERE id = %s", (request_id,))
     request["status"] = "running"
     request["claimed"] = True
     request["attachment"] = load_attachment(row["attachment"])
@@ -237,13 +222,11 @@ def start_request(account_id, request_id):
 
 def decline_request(account_id, request_id):
     with accounts.database() as db:
-        schema(db)
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT * FROM agent_requests WHERE id = ? AND account_id = ?", (request_id, account_id)).fetchone()
+        row = db.execute("SELECT * FROM agent_requests WHERE id = %s AND account_id = %s FOR UPDATE", (request_id, account_id)).fetchone()
         if row is None:
             return None
         request = public_request(row)
         if request["status"] == "pending":
-            db.execute("UPDATE agent_requests SET status = 'declined' WHERE id = ?", (request_id,))
+            db.execute("UPDATE agent_requests SET status = 'declined' WHERE id = %s", (request_id,))
             request["status"] = "declined"
     return request

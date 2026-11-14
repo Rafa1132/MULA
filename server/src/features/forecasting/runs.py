@@ -1,50 +1,46 @@
-"""Saved forecast reports, shared by the forecast runner and the Forecasting agent's tools."""
-import json
+"""Saved forecast reports, shared by the forecast runner and the Forecasting agent's tools.
+
+Table `forecast_runs` is defined in server/migrations; `report` is a JSONB column and `seq`
+an identity column that gives runs their order.
+"""
 from uuid import uuid4
 
 from ..auth import accounts
+from ...common.database import Jsonb
 
 # Recent reports kept per account; the raw source CSV is never stored.
 KEEP_RUNS = 20
-
-
-def schema(db):
-    db.execute('''CREATE TABLE IF NOT EXISTS forecast_runs (
-        id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id),
-        report TEXT NOT NULL, explanation TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)''')
 
 
 def save_run(account_id, report):
     """Store a report under a new id, which is also set on the report, and drop old ones."""
     report["id"] = str(uuid4())
     with accounts.database() as db:
-        schema(db)
-        db.execute("INSERT INTO forecast_runs (id, account_id, report) VALUES (?, ?, ?)", (report["id"], account_id, json.dumps(report)))
-        db.execute("DELETE FROM forecast_runs WHERE account_id = ? AND id NOT IN (SELECT id FROM forecast_runs WHERE account_id = ? ORDER BY rowid DESC LIMIT ?)", (account_id, account_id, KEEP_RUNS))
+        db.execute("INSERT INTO forecast_runs (id, account_id, report) VALUES (%s, %s, %s)", (report["id"], account_id, Jsonb(report)))
+        db.execute("DELETE FROM forecast_runs WHERE account_id = %s AND seq NOT IN (SELECT seq FROM forecast_runs WHERE account_id = %s ORDER BY seq DESC LIMIT %s)",
+                   (account_id, account_id, KEEP_RUNS))
     return report
 
 
 def latest_run(account_id):
     with accounts.database() as db:
-        schema(db)
-        row = db.execute("SELECT report, explanation FROM forecast_runs WHERE account_id = ? ORDER BY rowid DESC LIMIT 1", (account_id,)).fetchone()
+        row = db.execute("SELECT report, explanation FROM forecast_runs WHERE account_id = %s ORDER BY seq DESC LIMIT 1", (account_id,)).fetchone()
     if row:
-        return {"report": json.loads(row["report"]), "explanation": row["explanation"]}
+        return {"report": row["report"], "explanation": row["explanation"]}
     return {"report": None, "explanation": None}
 
 
 def find_run(account_id, run_id):
     with accounts.database() as db:
-        schema(db)
-        row = db.execute("SELECT report FROM forecast_runs WHERE account_id = ? AND id = ?", (account_id, run_id)).fetchone()
+        row = db.execute("SELECT report FROM forecast_runs WHERE account_id = %s AND id = %s", (account_id, run_id)).fetchone()
     if row is None:
         return None
-    return json.loads(row["report"])
+    return row["report"]
 
 
 def save_explanation(account_id, run_id, explanation):
     with accounts.database() as db:
-        db.execute("UPDATE forecast_runs SET explanation = ? WHERE id = ? AND account_id = ?", (explanation, run_id, account_id))
+        db.execute("UPDATE forecast_runs SET explanation = %s WHERE id = %s AND account_id = %s", (explanation, run_id, account_id))
 
 
 def summary_for_model(report):

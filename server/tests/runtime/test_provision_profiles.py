@@ -1,7 +1,6 @@
 import contextlib
 import io
 from pathlib import Path
-import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -10,13 +9,15 @@ from uuid import uuid4
 import yaml
 
 from scripts import provision_profiles
-from src.common import profiles
+from src.common import database, profiles
+from tests.support.database_fixture import DatabaseFixture
 
 CONFIG = "model:\n  default: huihui_ai/qwen3-abliterated:latest\ngateway:\n  api_server:\n    port: 8642\n"
 
 
-class ProvisionProfilesTests(unittest.TestCase):
+class ProvisionProfilesTests(DatabaseFixture, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
@@ -27,16 +28,17 @@ class ProvisionProfilesTests(unittest.TestCase):
         self.home.mkdir()
         (self.home / "config.yaml").write_text(CONFIG)
         (self.home / ".env").write_text("API_SERVER_KEY=gateway-key\nMULA_TOOLS_KEY=tools-key\n")
-        self.database = root / "accounts.sqlite3"
         self.ids = [str(uuid4()), str(uuid4())]
-        with sqlite3.connect(self.database) as db:
-            db.execute("CREATE TABLE accounts (id TEXT PRIMARY KEY, username TEXT)")
-            db.executemany("INSERT INTO accounts VALUES (?, ?)", [(account_id, account_id[:4]) for account_id in self.ids])
+        with database.database() as db:
+            for index, account_id in enumerate(self.ids):
+                db.execute("INSERT INTO accounts (id, username, salt, password_hash, conversation_id) VALUES (%s, %s, 'salt', 'hash', %s)",
+                           (account_id, f"owner{index}", str(uuid4())))
         for module, name, value in ((provision_profiles, "BACKEND", self.backend), (provision_profiles, "RUNTIME_HOME", self.home)):
             patcher = patch.object(module, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        env = patch.dict("os.environ", {"LARAS_ACCOUNT_DB": str(self.database)})
+        # The script reads the database from the process environment first, as a rehearsal would.
+        env = patch.dict("os.environ", {"MULA_DATABASE_URL": database.DATABASE_URL, "MULA_DATABASE_SCHEMA": self.schema})
         env.start()
         self.addCleanup(env.stop)
 
@@ -90,3 +92,9 @@ class ProvisionProfilesTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.run_script("--apply")
         self.assertFalse((self.home / "profiles").exists())
+
+    def test_missing_database_url_is_a_clear_error(self):
+        with patch.dict("os.environ", {"MULA_DATABASE_URL": ""}):
+            with self.assertRaises(SystemExit) as failure:
+                self.run_script()
+        self.assertIn("MULA_DATABASE_URL is missing", str(failure.exception))

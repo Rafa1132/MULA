@@ -1,6 +1,7 @@
-"""Account-owned agent instructions, brain choice, delegation and allowlisted application tools."""
-import json
-import sqlite3
+"""Account-owned agent instructions, brain choice, delegation and allowlisted application tools.
+
+Tables `agent_settings` and `agent_map_positions` are defined in server/migrations.
+"""
 from typing import Literal
 
 from fastapi import HTTPException
@@ -8,20 +9,21 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..auth import accounts
 from ...common import brains
+from ...common.agent_catalog import CATALOG
+from ...common.database import Jsonb
 
-AGENTS = {
-    "operator": {
-        "name": "Operator", "description": "Your everyday partner for questions, planning and business context.",
-        "tools": {"csv_read": "Read attached CSVs", "memory_read": "Retrieve account memory", "memory_write": "Save explicit /remember requests"},
-        # Agents this one may ask for help through the runtime's ask_agent tool.
-        "delegates_to": ["forecasting"],
-    },
-    "forecasting": {
-        "name": "Forecasting", "description": "Turn a sales or demand history into a practical statistical forecast.",
-        "tools": {"naive": "Last value", "moving_average": "Moving average", "exponential_smoothing": "Exponential smoothing", "seasonal_naive": "Seasonal repeat", "drift": "Trend (drift)", "explain": "Explain results in words"},
-        "delegates_to": [],
-    },
-}
+
+def public_definition(agent):
+    """The part of an agent file the API shows: no persona, no runtime tool list.
+
+    `tools` are the owner-toggleable capabilities; `delegates_to` lists the agents
+    this one may ask for help through the runtime's ask_agent tool.
+    """
+    return {"name": agent["name"], "description": agent["description"], "tools": dict(agent["capabilities"]), "delegates_to": list(agent["delegates_to"])}
+
+
+# Defined by the files in server/agents/ (see common/agent_catalog.py), in display order.
+AGENTS = {agent_id: public_definition(agent) for agent_id, agent in CATALOG.items()}
 # What happens when an agent wants to ask another: wait for the owner, go ahead, or never.
 DELEGATION_MODES = ("ask", "auto", "off")
 DEFAULT_DELEGATION = "ask"
@@ -38,31 +40,6 @@ class SettingsInput(BaseModel):
     delegation: Literal["ask", "auto", "off"] | None = None
 
 
-def schema(db):
-    db.execute('''CREATE TABLE IF NOT EXISTS agent_settings (
-        account_id TEXT NOT NULL REFERENCES accounts(id), agent_id TEXT NOT NULL,
-        prompt TEXT NOT NULL, data TEXT NOT NULL, tools TEXT NOT NULL, revision INTEGER NOT NULL,
-        PRIMARY KEY (account_id, agent_id))''')
-    # Older databases lack these columns. NULL means the default brain or delegation mode.
-    for column in ("brain", "delegation"):
-        add_column(db, column)
-
-
-def add_column(db, column):
-    if has_column(db, column):
-        return
-    try:
-        db.execute(f"ALTER TABLE agent_settings ADD COLUMN {column} TEXT")
-    except sqlite3.OperationalError:
-        # A concurrent request may have added it first; anything else is a real failure.
-        if not has_column(db, column):
-            raise
-
-
-def has_column(db, column):
-    return any(row["name"] == column for row in db.execute("PRAGMA table_info(agent_settings)"))
-
-
 def definition(agent_id):
     if agent_id not in AGENTS:
         raise HTTPException(404, "This agent is not available.")
@@ -72,13 +49,12 @@ def definition(agent_id):
 def settings(account_id, agent_id):
     agent = definition(agent_id)
     with accounts.database() as db:
-        schema(db)
-        row = db.execute("SELECT prompt, data, tools, revision, brain, delegation FROM agent_settings WHERE account_id = ? AND agent_id = ?", (account_id, agent_id)).fetchone()
+        row = db.execute("SELECT prompt, data, tools, revision, brain, delegation FROM agent_settings WHERE account_id = %s AND agent_id = %s", (account_id, agent_id)).fetchone()
     result = {"id": agent_id, **agent, "available_tools": agent["tools"], "prompt": "", "data": "", "revision": 0, "brain": None, "delegation": None}
     result["tools"] = list(agent["tools"])
     if row:
+        # `tools` is a JSONB column, so it already arrives as a list.
         result.update(dict(row))
-        result["tools"] = json.loads(row["tools"])
     result["available_brains"] = {
         brain_id: {"name": brain["name"], "description": brain["description"], "location": brain["location"]}
         for brain_id, brain in brains.BRAINS.items()
@@ -104,21 +80,21 @@ def save(account_id, agent_id, value):
     if not agent["delegates_to"] and value.delegation is not None:
         raise HTTPException(422, "This agent does not ask other agents.")
     with accounts.database() as db:
-        schema(db)
-        # A write lock makes the revision check and write one atomic operation.
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT revision FROM agent_settings WHERE account_id = ? AND agent_id = ?", (account_id, agent_id)).fetchone()
+        # A transaction-scoped advisory lock on this account's agent makes the revision check and
+        # the write one atomic step, including the first save, when there is no row to lock yet.
+        db.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"agent_settings:{account_id}:{agent_id}",))
+        row = db.execute("SELECT revision FROM agent_settings WHERE account_id = %s AND agent_id = %s", (account_id, agent_id)).fetchone()
         revision = 0
         if row:
             revision = row["revision"]
         if revision != value.revision:
             raise HTTPException(409, "Settings changed in another tab. Reload before saving.")
         db.execute('''INSERT INTO agent_settings (account_id, agent_id, prompt, data, tools, revision, brain, delegation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT(account_id, agent_id) DO UPDATE SET
             prompt=excluded.prompt, data=excluded.data, tools=excluded.tools, revision=excluded.revision,
             brain=excluded.brain, delegation=excluded.delegation''',
-            (account_id, agent_id, value.prompt.strip(), value.data.strip(), json.dumps(value.tools), revision + 1, value.brain, value.delegation))
+            (account_id, agent_id, value.prompt.strip(), value.data.strip(), Jsonb(value.tools), revision + 1, value.brain, value.delegation))
     return settings(account_id, agent_id)
 
 
@@ -134,18 +110,10 @@ class LayoutInput(BaseModel):
     positions: dict[str, Position] = Field(max_length=20)
 
 
-def layout_schema(db):
-    # Kept apart from agent_settings: moving a card must not bump the settings revision.
-    db.execute('''CREATE TABLE IF NOT EXISTS agent_map_positions (
-        account_id TEXT NOT NULL REFERENCES accounts(id), agent_id TEXT NOT NULL,
-        x REAL NOT NULL, y REAL NOT NULL,
-        PRIMARY KEY (account_id, agent_id))''')
-
-
 def layout(account_id):
+    # agent_map_positions is kept apart from agent_settings: moving a card must not bump the settings revision.
     with accounts.database() as db:
-        layout_schema(db)
-        rows = db.execute("SELECT agent_id, x, y FROM agent_map_positions WHERE account_id = ?", (account_id,)).fetchall()
+        rows = db.execute("SELECT agent_id, x, y FROM agent_map_positions WHERE account_id = %s", (account_id,)).fetchall()
     # Rows for agents no longer defined are kept but not reported.
     return {row["agent_id"]: {"x": row["x"], "y": row["y"]} for row in rows if row["agent_id"] in AGENTS}
 
@@ -155,20 +123,18 @@ def save_layout(account_id, value):
     if unknown:
         raise HTTPException(422, "Arrange only agents shown on the map.")
     with accounts.database() as db:
-        layout_schema(db)
-        # Replace the whole layout atomically; the map is cosmetic, so the last write wins.
-        db.execute("BEGIN IMMEDIATE")
-        db.execute("DELETE FROM agent_map_positions WHERE account_id = ?", (account_id,))
-        db.executemany("INSERT INTO agent_map_positions VALUES (?, ?, ?, ?)", [
-            (account_id, agent_id, position.x, position.y) for agent_id, position in value.positions.items()
-        ])
+        # Replace the whole layout in one transaction; the map is cosmetic, so the last write wins.
+        db.execute("DELETE FROM agent_map_positions WHERE account_id = %s", (account_id,))
+        with db.cursor() as cursor:
+            cursor.executemany("INSERT INTO agent_map_positions (account_id, agent_id, x, y) VALUES (%s, %s, %s, %s)", [
+                (account_id, agent_id, position.x, position.y) for agent_id, position in value.positions.items()
+            ])
     return layout(account_id)
 
 
 def reset_layout(account_id):
     with accounts.database() as db:
-        layout_schema(db)
-        db.execute("DELETE FROM agent_map_positions WHERE account_id = ?", (account_id,))
+        db.execute("DELETE FROM agent_map_positions WHERE account_id = %s", (account_id,))
     return {}
 
 

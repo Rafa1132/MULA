@@ -6,7 +6,7 @@ Makes every agent in My agents a Mula agent: each one answers on its own brain, 
 
 1. The backend issues a **ticket** for the turn (`issue_ticket`): a random token whose sha256 hash is stored in `agent_tickets` with the account, the agent, the turn's CSV attachment, the reply's message id and a depth. Tickets expire after 15 minutes (`TICKET_SECONDS`).
 2. The ticket goes into that turn's system prompt (`tool_context`), with instructions for the agent's tools. The model passes it as `ticket` on every tool call.
-3. Mula sends tool calls to the backend's MCP endpoint at `/mcp` (`tools.py`). The endpoint resolves the ticket to its account and agent, refuses tools that agent may not use (`AGENT_TOOLS`), and checks the owner's tool settings through `team.require_tool`.
+3. Mula sends tool calls to the backend's MCP endpoint at `/mcp` (`tools.py`). The endpoint resolves the ticket to its account and agent, refuses tools that agent may not use (`AGENT_TOOLS`, from each file's `runtime_tools` in `server/agents/`), and checks the owner's tool settings through `team.require_tool`.
 
 MCP calls carry no caller identity, only the shared `MULA_TOOLS_KEY`. The ticket is what scopes a call to one account, one agent and one turn. Only the hash is stored, but the plain ticket appears in Mula's own session log for that turn.
 
@@ -50,11 +50,11 @@ The Operator chat (`features/operator`) sends a `request` event for each request
 
 ## Storage
 
-In `accounts.sqlite3`, created on first use:
+In the PostgreSQL application database (`server/migrations`):
 
-- `agent_tickets(token_hash, account_id, agent_id, attachment, message_id, depth, expires)`. Expired rows are removed when a new ticket is issued.
-- `agent_requests(id, account_id, from_agent, to_agent, question, attachment, ticket_hash, message_id, status, answer, created, approved_in_advance)`.
-- `messages.agent_id` (in `features/auth`) keeps direct chats apart from the Operator conversation. Older rows become `operator`.
+- `agent_tickets(token_hash, account_id, agent_id, attachment JSONB, message_id, depth, expires)`. Expired rows are removed when a new ticket is issued.
+- `agent_requests(id, account_id, from_agent, to_agent, question, attachment JSONB, ticket_hash, message_id, status, answer, created, approved_in_advance BOOLEAN)`. Approving or declining locks the row (`SELECT … FOR UPDATE`), so only one approval can start a request.
+- `messages.agent_id` (in `features/auth`) keeps direct chats apart from the Operator conversation. Rows written without it are `operator`.
 
 ## Files
 

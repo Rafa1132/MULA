@@ -15,6 +15,8 @@ python3 server/scripts/setup_hermes.py
 bash server/scripts/install_hermes.sh
 ```
 
+Then create the database once (see "Database" below): `createdb mula` with a Homebrew PostgreSQL, or nothing with Docker, since `./run.sh` starts the compose service.
+
 If the existing backend virtual environment is installed, keep it. `setup_hermes.py` generates matching random server-side credentials in `server/.env.hermes` and `.runtime/hermes/.env`, and copies `server/hermes/config.yaml` into `.runtime/hermes/config.yaml`. It also generates `MULA_TOOLS_KEY`, which Mula uses to call the backend's agent tools at `/mcp` (see "Agent tools"). It never overwrites existing configuration. Credentials and runtime state are ignored by Git; files holding credentials are created with owner-only permissions.
 
 The installer downloads the pinned upstream checkout into `.runtime/hermes-source` and uses its locked dependency installation stage. Hermes manages its own Python and dependencies; they are not added to FastAPI's environment. The script skips browser/computer-use installation and does not install a global launcher or modify shell startup files. The upstream installer can still download its core runtime tools and dependencies.
@@ -96,7 +98,7 @@ Failures after headers are sent emit `type: error` with a safe `detail` and `sta
 
 **Stop** closes the stream through Next.js and FastAPI to Hermes. The pinned gateway interrupts the agent when it detects the closed SSE connection; this is cooperative cancellation, not a rollback of completed work. No business-action tools are enabled here. Interrupted/failed turns may already be in Hermes history; retrying submits a new turn.
 
-The UI reopens the account conversation after login and refresh. There is no New chat button. Application history is persisted in `.runtime/accounts.sqlite3`; Hermes retains its own model transcript. Old chats from before accounts were added are not assigned to a new account automatically.
+The UI reopens the account conversation after login and refresh. There is no New chat button. Application history is persisted in the PostgreSQL database (see "Database"); Hermes retains its own model transcript. Old chats from before accounts were added are not assigned to a new account automatically.
 
 ## Brains (model choice)
 
@@ -146,7 +148,8 @@ It writes a fresh shared key to `server/.env.hermes` and `.runtime/hermes/.env`,
 
 ## Files and extension points
 
-- `src/features/operator/prompts/operator.md`: Operator role and current business limitations.
+- `agents/`: one Markdown file per agent, with its settings in front matter and its persona as the body (see `agents/README.md`).
+- `src/common/agent_catalog.py`: loads and validates the agent folder at startup.
 - `src/features/operator/agent.py`: role entry point, delegating execution to the runtime adapter.
 - `src/features/operator/runtime.py`: Hermes HTTP/SSE transport, model-alias check, completion validation and error handling.
 - `src/common/brains.py`: the selectable brains and their gateway routes.
@@ -168,11 +171,12 @@ Mula runs two agents, Operator and Forecasting. The API platform has only Mula's
 ## Checks
 
 ```sh
+createdb mula_test   # once
 cd server
 .venv/bin/python -m unittest discover -s . -t . -v
 ```
 
-Tests use a simulated Hermes transport and make no model calls. For a live check, start both services, check `/ready`, send a unique fact with a session UUID, ask about it using the same UUID, and verify another UUID does not recall it. Also test Stop during generation. Credentials must stay on the server and out of screenshots/logs.
+Tests need a reachable PostgreSQL: `MULA_TEST_DATABASE_URL`, default `postgresql://localhost/mula_test`. Each test creates its own schema there, migrates it and drops it afterwards, so the development database is never touched. Tests use a simulated Hermes transport and make no model calls. For a live check, start both services, check `/ready`, send a unique fact with a session UUID, ask about it using the same UUID, and verify another UUID does not recall it. Also test Stop during generation. Credentials must stay on the server and out of screenshots/logs.
 
 ### Simple accounts
 
@@ -185,7 +189,37 @@ Create an account through the UI with a 3–40 character username and a 10–128
 
 Passwords use salted scrypt hashes. Opaque random sessions are stored as SHA-256 hashes and expire after seven days. Failed login attempts are limited to five per username per 15 minutes. The frontend proxy checks mutation origins and forwards private cookies server-side. Account creation remains open in this local first version.
 
-The SQLite file defaults to `.runtime/accounts.sqlite3`; `LARAS_ACCOUNT_DB` overrides the path. Preserve it to preserve accounts and visible history. Set `LARAS_SECURE_COOKIES=true` when serving through HTTPS.
+Accounts and visible history live in the PostgreSQL database; back it up with `pg_dump` to preserve them. Set `LARAS_SECURE_COOKIES=true` when serving through HTTPS.
+
+## Database
+
+The application database is PostgreSQL (`src/common/database.py`): accounts, login sessions, chat history, agent settings, map positions, forecast runs, tool tickets and agent requests. `MULA_DATABASE_URL` in `server/.env.hermes` names it. The backend runs the Alembic migrations in `migrations/` at startup and refuses to start without the URL or with an unreachable server. Each account's memory store stays a SQLite file under `.runtime/workspaces/` (see `docs/memory-and-sqlite.md`); `MULA_DATA_DIR` moves that folder.
+
+Two ways to run PostgreSQL locally:
+
+- **Native (Homebrew).** `brew services start postgresql@17`, then once `createdb mula`. The URL is `postgresql://localhost/mula`. `./run.sh` uses it as it is and never starts or stops it.
+- **Docker.** `setup_hermes.py` writes a random password to `.env.postgres` (git-ignored) and the matching URL. `./run.sh` runs `docker compose up -d postgres` when the database does not answer. The container keeps running after Ctrl+C; `docker compose down` stops it, and the `mula-postgres` volume keeps the data.
+
+Inspect it read-only:
+
+```sh
+psql "$(grep ^MULA_DATABASE_URL= server/.env.hermes | cut -d= -f2-)" -c '\dt'
+```
+
+Schema changes are new revisions under `migrations/versions/`, applied by the backend at the next start, or by hand with `server/.venv/bin/alembic -c server/alembic.ini upgrade head` (it needs `MULA_DATABASE_URL` in the environment).
+
+### Moving from the old SQLite file
+
+Installations from before PostgreSQL kept everything in `.runtime/accounts.sqlite3`. Copy it once:
+
+```sh
+createdb mula                                                                    # Homebrew; skip with Docker
+echo "MULA_DATABASE_URL=postgresql://localhost/mula" >> server/.env.hermes        # if setup did not write it
+server/.venv/bin/python server/scripts/migrate_sqlite_to_postgres.py             # report counts
+server/.venv/bin/python server/scripts/migrate_sqlite_to_postgres.py --apply     # copy, then ./run.sh
+```
+
+The script opens the file read-only and never changes it. It copies every table in one transaction, keeps message ids, and compares row counts on both sides; a difference exits with status 1. It refuses to write into tables that already hold rows unless you add `--replace`. The leftover `memory_*` tables from the old memory service are listed and not copied. Keep the SQLite file until you have checked the app on PostgreSQL; until then, rolling back is checking out the previous commit. After that, back up with `pg_dump -Fc mula > mula.dump`.
 
 ## Account profiles and memory
 
@@ -202,7 +236,7 @@ server/.venv/bin/python server/scripts/migrate_memory_entries.py --apply   # old
 ./run.sh
 ```
 
-Both scripts report without `--apply`, and neither moves or deletes anything. Runtime sessions start fresh in the new profiles; the visible chat history in `accounts.sqlite3` is unchanged.
+Both scripts report without `--apply`, and neither moves or deletes anything. Runtime sessions start fresh in the new profiles; the visible chat history in the application database is unchanged.
 
 Memory itself is an append-only SQLite store per account with a regenerated `MEMORY.md` summary; the Operator saves through `remember`, the owner through `/remember` or the Memory page, all through one pipeline. See `src/features/memory/README.md` and `docs/memory-and-sqlite.md`.
 

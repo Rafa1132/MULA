@@ -1,11 +1,12 @@
-from pathlib import Path
 from uuid import UUID
 
+from ...common.agent_catalog import CATALOG
 from ...common.config import HERMES_MODEL
 from .runtime import chat, stream_chat
 
 
-OPERATOR_PROMPT = (Path(__file__).parent / "prompts" / "operator.md").read_text(encoding="utf-8")
+# The Operator's persona is the body of server/agents/operator.md.
+OPERATOR_PROMPT = CATALOG["operator"]["persona"]
 
 
 async def operator_reply(account_id: str, message: str, session_id: UUID, memory_context: str = "", model: str = HERMES_MODEL) -> tuple[str, bool]:

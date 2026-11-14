@@ -8,7 +8,6 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from scripts import migrate_memory_entries
-from src.features.auth import accounts
 from src.features.memory import service, store
 
 
@@ -25,7 +24,8 @@ class MigrateMemoryTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
-        patcher = patch.object(accounts, "DB_PATH", root / "accounts.sqlite3")
+        # The memory stores live under the data folder; the migration never needs the application database.
+        patcher = patch.object(store, "DATA_DIR", root)
         patcher.start()
         self.addCleanup(patcher.stop)
         self.account_id = str(uuid4())

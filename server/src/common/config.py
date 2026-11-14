@@ -15,6 +15,13 @@ MULA_TOOLS_KEY = os.getenv("MULA_TOOLS_KEY", "").strip()
 MULA_PROFILE_KEY_SEED = os.getenv("MULA_PROFILE_KEY_SEED", "").strip()
 # The runtime home that holds the root profile and, under profiles/, one profile per account.
 HERMES_HOME = os.getenv("HERMES_HOME", "").strip()
+# The application database (accounts, sessions, chat history, agent settings, forecast runs,
+# tool tickets, agent requests). Empty means the backend refuses to start; see common/database.py.
+MULA_DATABASE_URL = os.getenv("MULA_DATABASE_URL", "").strip()
+# Schema inside that database; tests and rehearsals use one of their own.
+MULA_DATABASE_SCHEMA = os.getenv("MULA_DATABASE_SCHEMA", "public").strip() or "public"
+# Where per-account files live (the memory stores under workspaces/). Not the database.
+MULA_DATA_DIR = os.getenv("MULA_DATA_DIR", "").strip()
 
 url = urlsplit(HERMES_BASE_URL)
 if (

@@ -4,6 +4,8 @@ The list of available agents, plus each account's settings for each agent: extra
 
 ## Agent list (`AGENTS`)
 
+`AGENTS` is built from the files in `server/agents/` (see `server/agents/README.md` and `common/agent_catalog.py`), in their `order`. Each entry exposes only `name`, `description`, `tools` (the file's `capabilities`) and `delegates_to`; the persona and the runtime tool list stay on the server.
+
 | Agent | Tools |
 |---|---|
 | `operator` | `csv_read`, `memory_read`, `memory_write` |
@@ -17,11 +19,11 @@ Every agent has a selectable brain from `common/brains.py`. Its settings include
 
 ## Storage
 
-The `agent_settings(account_id, agent_id, prompt, data, tools JSON, revision, brain, delegation)` table in `accounts.sqlite3`, with primary key `(account_id, agent_id)`. If an account has no saved row, the agent uses an empty prompt and data, with **all tools enabled** and the default brain. Older databases get the nullable `brain` and `delegation` columns added on first use. `NULL`, or a brain no longer in the registry, means the default brain. For agents with `delegates_to`, a `NULL` delegation means `ask`; for the others `delegation` is always `null`.
+The `agent_settings(account_id, agent_id, prompt, data, tools JSONB, revision, brain, delegation)` table in the PostgreSQL application database, with primary key `(account_id, agent_id)`; map positions are in `agent_map_positions`. If an account has no saved row, the agent uses an empty prompt and data, with **all tools enabled** and the default brain. `NULL` in `brain`, or a brain no longer in the registry, means the default brain. For agents with `delegates_to`, a `NULL` delegation means `ask`; for the others `delegation` is always `null`.
 
-Saving is atomic: `BEGIN IMMEDIATE` locks the database, checks the revision (409 on mismatch), then upserts the row with `revision + 1`. Unknown or duplicate tool names return 422.
+Saving is atomic: a transaction-scoped advisory lock on the account's agent (`pg_advisory_xact_lock`) serialises saves, including the first one when no row exists yet. The save checks the revision (409 on mismatch), then upserts the row with `revision + 1`. Unknown or duplicate tool names return 422.
 
-Map positions live in a separate `agent_map_positions(account_id, agent_id, x, y)` table, created on first use. `x` and `y` are a card's centre as fractions (0–1) of the map. They are kept apart from `agent_settings` so dragging a card never bumps a settings `revision` and makes an open settings form fail with 409. The layout is cosmetic, so the last write wins. A save replaces all of the account's rows in one `BEGIN IMMEDIATE` transaction; a reset deletes them. Rows for agents no longer in `AGENTS` are ignored when read.
+Map positions live in a separate `agent_map_positions(account_id, agent_id, x, y)` table, created on first use. `x` and `y` are a card's centre as fractions (0–1) of the map. They are kept apart from `agent_settings` so dragging a card never bumps a settings `revision` and makes an open settings form fail with 409. The layout is cosmetic, so the last write wins. A save replaces all of the account's rows in one transaction; a reset deletes them. Rows for agents no longer in `AGENTS` are ignored when read.
 
 ## Endpoints
 
@@ -46,6 +48,6 @@ Used by `features/operator`, `features/forecasting` and `features/agents`.
 
 ## Limits and next steps
 
-- Agents are defined in code. There's no manifest, install or uninstall, versioning, or third-party agent support.
+- Agents are defined by files in `server/agents/`, read at startup. There's no install or uninstall, versioning, or third-party agent support, and the web app still allows only `operator` and `forecasting`.
 - Changes take effect on the next request; nothing is pushed to running sessions.
-- This module is the natural place to grow a Catalog registry: replace `AGENTS` with installable manifests and keep the per-account `agent_settings` row as the installation record.
+- This module is the natural place to grow a Catalog registry: grow the agent files into installable manifests and keep the per-account `agent_settings` row as the installation record.

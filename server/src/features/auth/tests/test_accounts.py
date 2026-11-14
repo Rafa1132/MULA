@@ -18,7 +18,7 @@ class AccountTests(AccountFixture, unittest.TestCase):
         with accounts.database() as db:
             record = db.execute('SELECT * FROM accounts').fetchone()
             self.assertNotEqual(record['password_hash'], 'long-password-123')
-            self.assertNotEqual(db.execute('SELECT token_hash FROM sessions').fetchone()[0], token)
+            self.assertNotEqual(db.execute('SELECT token_hash FROM sessions').fetchone()['token_hash'], token)
         self.client.post('/api/auth/logout')
         old = TestClient(app)
         old.cookies.set('mula_session', token)
@@ -32,7 +32,7 @@ class AccountTests(AccountFixture, unittest.TestCase):
 
     def test_expired_session_is_rejected(self):
         with accounts.database() as db:
-            db.execute('UPDATE sessions SET expires = ?', (int(time.time()) - 1,))
+            db.execute('UPDATE sessions SET expires = %s', (int(time.time()) - 1,))
         self.assertEqual(self.client.get('/api/auth/me').status_code, 401)
 
     def test_validation_duplicates_and_login_throttling(self):

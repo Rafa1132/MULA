@@ -52,6 +52,45 @@ def server_ready():
     return responds("http://127.0.0.1:8000/api/auth/me", statuses=(401,))
 
 
+def database_answers(url):
+    """Whether the application database accepts a connection (checked with the backend's driver)."""
+    import psycopg
+    try:
+        with psycopg.connect(url, connect_timeout=3) as connection:
+            connection.execute("SELECT 1")
+    except psycopg.Error:
+        return False
+    return True
+
+
+def ensure_database(url, timeout=60):
+    """Reuse a running PostgreSQL; otherwise start the compose service when Docker exists.
+
+    A compose container keeps running after Ctrl+C (`docker compose down` stops it); a native
+    PostgreSQL is never started or stopped by this launcher.
+    """
+    if not url:
+        raise RuntimeError("MULA_DATABASE_URL is missing from server/.env.hermes. See server/README.md, 'Database'.")
+    if database_answers(url):
+        print("Database is already running.", flush=True)
+        return
+    if shutil.which("docker") is None:
+        raise RuntimeError(
+            "The application database does not answer at MULA_DATABASE_URL. Start PostgreSQL "
+            "(Homebrew: brew services start postgresql@17; then createdb mula once) or install Docker "
+            "so ./run.sh can start the compose service. See server/README.md, 'Database'."
+        )
+    print("Starting Database…", flush=True)
+    subprocess.run(["docker", "compose", "up", "-d", "postgres"], cwd=ROOT, check=True)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if database_answers(url):
+            print("Database is ready.", flush=True)
+            return
+        time.sleep(1)
+    raise RuntimeError("The compose PostgreSQL did not become ready. See `docker compose logs postgres`.")
+
+
 def stop_children(children):
     for name, process in reversed(children):
         if process.poll() is None:
@@ -116,6 +155,7 @@ def main():
                    lambda: responds("http://127.0.0.1:11434/api/tags"), stack, children)
             launch("Hermes", ["bash", str(ROOT / "server/scripts/start_hermes.sh")], ROOT,
                    lambda: responds(f"{hermes}/v1/capabilities", headers=headers), stack, children)
+            ensure_database(settings.get("MULA_DATABASE_URL", ""))
             launch("Server", [str(ROOT / "server/.venv/bin/python"), "-m", "uvicorn", "src.main:app",
                    "--host", "127.0.0.1", "--port", "8000", "--env-file", str(env_file)],
                    ROOT / "server", server_ready, stack, children)

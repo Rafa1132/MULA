@@ -1,6 +1,6 @@
 # Auth (server)
 
-Local username/password accounts, login sessions and the account-owned visible chat history. Every other server feature depends on it: it provides `current_account()` and the shared SQLite connection.
+Local username/password accounts, login sessions and the account-owned visible chat history. Every other server feature depends on it: it provides `current_account()` and the shared database transaction (`database()`, PostgreSQL).
 
 ## What it does
 
@@ -25,20 +25,20 @@ Local username/password accounts, login sessions and the account-owned visible c
 | File | Purpose |
 |---|---|
 | `routes.py` | HTTP endpoints and cookie handling |
-| `service.py` | SQLite access, hashing, sessions, message records. Imported elsewhere as `accounts` |
+| `service.py` | Database access, hashing, sessions, message records. Imported elsewhere as `accounts` |
 | `__init__.py` | Exports `accounts` (the service) and `router` |
 | `tests/test_accounts.py` | Account and session tests |
 
 ## Storage
 
-`.runtime/accounts.sqlite3` (override with `LARAS_ACCOUNT_DB`). The folder is created with mode 0700 and the file is set to 0600. This module owns these tables:
+The PostgreSQL application database (`MULA_DATABASE_URL`, see `server/README.md`, "Database"). `service.database()` is the shared transaction every feature uses (`src/common/database.py`). The tables are defined in `server/migrations/versions/0001_initial.py`. This module owns:
 
-- `accounts(id, username, salt, password_hash, conversation_id)`
-- `sessions(token_hash, account_id, expires)`
-- `messages(id, account_id, role, text, note)`
+- `accounts(id, username, salt, password_hash, conversation_id, created_at)`
+- `sessions(token_hash, account_id, expires)`, with `expires` in epoch seconds
+- `messages(id, account_id, role, text, note, agent_id)`, with `id` an identity column
 - `login_failures(username, occurred)`
 
-Other features add their own tables to the same file: `agent_settings`, `forecast_runs` and `memory_*`.
+The same database holds `agent_settings`, `agent_map_positions` (team), `forecast_runs` (forecasting), `agent_tickets` and `agent_requests` (agents). Account memory is a separate SQLite store per account (features/memory).
 
 ## Used by
 

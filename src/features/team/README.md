@@ -48,4 +48,4 @@ The route is `src/app/agents/page.tsx`; `src/app/team/page.tsx` redirects to it.
 
 ## Note for the Catalog direction
 
-This page is the closest thing in the app to "installed capabilities". The list of agents is still hardcoded on both sides (the server's `AGENTS` dict and the proxy's allowlist). Pixel art and default map positions are keyed by agent id; a new agent works without them, using the fallback robot and a diagonal spread.
+This page is the closest thing in the app to "installed capabilities". The list of agents is still hardcoded on both sides (the server's agent files in `server/agents/` and the proxy's allowlist). Pixel art and default map positions are keyed by agent id; a new agent works without them, using the fallback robot and a diagonal spread.

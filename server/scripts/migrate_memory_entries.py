@@ -10,13 +10,11 @@ and fun facts become facts about the owner; everything else is about the busines
 nothing superseded reaches a prompt. The Markdown files are left exactly as they are.
 """
 import argparse
-import os
 from pathlib import Path
 import sys
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-from src.features.auth import service as accounts  # noqa: E402
 from src.features.memory import filters, pipeline, store  # noqa: E402
 from src.features.memory.filters import MemoryRefused  # noqa: E402
 
@@ -56,7 +54,7 @@ def legacy_files(folder: Path):
 
 
 def workspaces() -> list[Path]:
-    root = accounts.DB_PATH.parent / "workspaces"
+    root = store.DATA_DIR / "workspaces"
     if not root.is_dir():
         return []
     return sorted(entry for entry in root.iterdir() if (entry / "memory" / ".initialized").is_file())
@@ -108,7 +106,7 @@ def main(argv=None) -> None:
     arguments = parser.parse_args(argv)
     found = workspaces()
     if not found:
-        print(f"No old memory folders under {accounts.DB_PATH.parent / 'workspaces'}. Nothing to do.")
+        print(f"No old memory folders under {store.DATA_DIR / 'workspaces'}. Nothing to do.")
         return
     for workspace in found:
         counts = migrate(workspace, arguments.apply)
@@ -121,5 +119,4 @@ def main(argv=None) -> None:
 
 
 if __name__ == "__main__":
-    os.environ.setdefault("LARAS_ACCOUNT_DB", str(BACKEND.parent / ".runtime" / "accounts.sqlite3"))
     main()

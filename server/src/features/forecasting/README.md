@@ -1,6 +1,6 @@
 # Forecasting (server)
 
-The Forecasting specialist, a Mula agent with its own persona (`prompts/forecasting.md`) and brain. Its numbers come from small, deterministic statistical methods written in plain Python, with no model training and no generated code. The agent runs them through its `calculate_forecast` tool (`features/agents`) or the "Run a forecast" panel, and explains the results in words; it never makes numbers up.
+The Forecasting specialist, a Mula agent with its own persona (`server/agents/forecasting.md`) and brain. Its numbers come from small, deterministic statistical methods written in plain Python, with no model training and no generated code. The agent runs them through its `calculate_forecast` tool (`features/agents`) or the "Run a forecast" panel, and explains the results in words; it never makes numbers up.
 
 ## Methods (`service.py`)
 
@@ -41,11 +41,11 @@ Choosing a method that's disabled in My agents returns 403. Running auto with no
 
 ## Storage
 
-`forecast_runs(id, account_id, report JSON, explanation, created_at)` in `accounts.sqlite3`. Only the **last 20 runs per account** are kept. The report includes the selected date/value history; the original CSV isn't stored.
+`forecast_runs(seq, id, account_id, report JSONB, explanation, created_at)` in the PostgreSQL application database; `seq` orders the runs. Only the **last 20 runs per account** are kept. The report includes the selected date/value history; the original CSV isn't stored.
 
 ## Files
 
-`service.py` (methods), `runs.py` (saved runs and the model summary), `routes.py`, `prompts/forecasting.md`, `tests/test_forecasting.py`. See also `docs/forecasting.md`.
+`service.py` (methods), `runs.py` (saved runs and the model summary), `routes.py`, `tests/test_forecasting.py`. See also `docs/forecasting.md`.
 
 ## Limits
 

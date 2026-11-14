@@ -8,5 +8,7 @@ node_modules/
 *.tsbuildinfo
 .runtime/
 .env.hermes
+# PostgreSQL credentials for docker compose; written by server/scripts/setup_hermes.py.
+.env.postgres
 # Browser profiles hold cookies and saved logins; never commit them.
 tokopedia_session/

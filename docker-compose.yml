@@ -1,0 +1,24 @@
+# PostgreSQL for local development, for machines without a native PostgreSQL.
+# Credentials come from .env.postgres, written by server/scripts/setup_hermes.py (git-ignored).
+#   docker compose up -d postgres
+# The launcher (./run.sh) starts this service itself when MULA_DATABASE_URL does not answer
+# and Docker is installed. A Homebrew PostgreSQL on :5432 is used as is; see server/README.md.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: mula-postgres
+    env_file:
+      - .env.postgres
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - mula-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  mula-postgres:

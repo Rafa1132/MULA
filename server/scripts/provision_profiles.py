@@ -18,28 +18,41 @@ import argparse
 import os
 from pathlib import Path
 import secrets
-import sqlite3
 import sys
 
+import psycopg
 import yaml
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 from scripts.enable_claude import env_lines_without, mapping_at, write_private  # noqa: E402
-from src.common import profiles  # noqa: E402
+from src.common import database, profiles  # noqa: E402
 
 RUNTIME_HOME = BACKEND.parent / ".runtime" / "hermes"
 SEED_NAME = "MULA_PROFILE_KEY_SEED"
+DATABASE_NAME = "MULA_DATABASE_URL"
 
 
-def account_ids(database: Path) -> list[str]:
-    if not database.is_file():
-        return []
-    connection = sqlite3.connect(database)
+def connect_database(backend_env: Path) -> None:
+    """Point the shared database module at the backend's database.
+
+    The process environment wins (tests and rehearsals set it); otherwise the URL comes from
+    the backend env file, like every other setting the scripts read.
+    """
+    url = os.environ.get(DATABASE_NAME, "").strip() or profiles.env_values(backend_env).get(DATABASE_NAME, "")
+    if not url:
+        raise SystemExit(f"{DATABASE_NAME} is missing from server/.env.hermes. See server/README.md, 'Database'.")
+    schema = os.environ.get("MULA_DATABASE_SCHEMA", "").strip() or "public"
+    database.configure(url, schema)
+
+
+def account_ids() -> list[str]:
     try:
-        return [row[0] for row in connection.execute("SELECT id FROM accounts ORDER BY rowid")]
-    finally:
-        connection.close()
+        with database.database() as db:
+            rows = db.execute("SELECT id FROM accounts ORDER BY created_at, id").fetchall()
+    except psycopg.Error as error:
+        raise SystemExit(f"The application database did not answer ({type(error).__name__}). Is PostgreSQL running and migrated? Start the backend once, or see server/README.md.") from error
+    return [row["id"] for row in rows]
 
 
 def ensure_seed(backend_env: Path) -> str:
@@ -121,8 +134,8 @@ def main(argv=None) -> None:
     config_path = RUNTIME_HOME / "config.yaml"
     if not backend_env.is_file() or not config_path.is_file():
         raise SystemExit("Run setup_hermes.py first. See server/README.md.")
-    database = Path(os.getenv("LARAS_ACCOUNT_DB", str(BACKEND.parent / ".runtime" / "accounts.sqlite3")))
-    ids = account_ids(database)
+    connect_database(backend_env)
+    ids = account_ids()
     seed = profiles.env_values(backend_env).get(SEED_NAME, "")
     root_config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     multiplexed = isinstance(root_config.get("gateway"), dict) and root_config["gateway"].get("multiplex_profiles") is True

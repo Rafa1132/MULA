@@ -17,8 +17,13 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from ..auth import accounts
+from ...common.config import MULA_DATA_DIR
+from ...common.paths import PROJECT_ROOT
 
+# Per-account files live here, under workspaces/<account>/memory/. The application database is elsewhere.
+DATA_DIR = PROJECT_ROOT / ".runtime"
+if MULA_DATA_DIR:
+    DATA_DIR = Path(MULA_DATA_DIR)
 TARGETS = ("business", "owner")
 STOP_WORDS = set("a an the is are was to of and or for in on my me i you your what how can please with about this that it do does tell remember ingat saya aku yang dan di ke dari apa bagaimana untuk ini itu bisa tolong".split())
 SCHEMA = '''
@@ -78,7 +83,7 @@ def digest(text):
 def memory_folder(account_id):
     """The account's memory folder, created owner-only. Never a client-supplied path."""
     identity = str(UUID(account_id))
-    root = accounts.DB_PATH.parent / "workspaces"
+    root = DATA_DIR / "workspaces"
     folder = root / identity / "memory"
     for directory in (root, root / identity, folder):
         if directory.is_symlink():

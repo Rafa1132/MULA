@@ -89,13 +89,11 @@ class BrainSettingsTests(AccountFixture, unittest.TestCase):
             saved = self.save("operator", brain="qwen").json()
         self.assertEqual(saved["available_brains"]["claude-haiku"]["status"], "needs_setup")
 
-    def test_database_from_before_brains_is_migrated(self):
+    def test_settings_saved_before_brains_and_delegation_get_the_defaults(self):
+        # Rows copied from the old database carry NULL for brain and delegation.
         with accounts.database() as db:
-            db.execute("""CREATE TABLE agent_settings (
-                account_id TEXT NOT NULL REFERENCES accounts(id), agent_id TEXT NOT NULL,
-                prompt TEXT NOT NULL, data TEXT NOT NULL, tools TEXT NOT NULL, revision INTEGER NOT NULL,
-                PRIMARY KEY (account_id, agent_id))""")
-            db.execute("INSERT INTO agent_settings VALUES (?, 'operator', 'Old prompt', '', '[]', 1)", (self.account["id"],))
+            db.execute("INSERT INTO agent_settings (account_id, agent_id, prompt, data, tools, revision, brain, delegation) VALUES (%s, 'operator', 'Old prompt', '', '[]'::jsonb, 1, NULL, NULL)",
+                       (self.account["id"],))
         operator = self.client.get("/api/team").json()["agents"][0]
         self.assertEqual((operator["prompt"], operator["brain"], operator["delegation"]), ("Old prompt", DEFAULT_BRAIN, "ask"))
         saved = self.save("operator", brain="claude-haiku", revision=1, delegation="auto").json()

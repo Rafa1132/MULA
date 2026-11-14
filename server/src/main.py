@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from .common import profiles
+from .common import database, profiles
 from .common.config import HERMES_MODEL
 from .features.auth import router as auth_router
 from .features.operator import router as operator_router
@@ -24,9 +24,19 @@ async def lifespan(app: FastAPI):
     leaking = profiles.profiles_with_runtime_memory()
     if leaking:
         raise RuntimeError(f"{len(leaking)} account profile(s) have the runtime's memory on. Run server/scripts/provision_profiles.py --apply.")
+    # The schema is owned by the migrations; bring it up to date before serving anything.
+    try:
+        database.migrate()
+    except database.DatabaseNotConfigured as error:
+        raise RuntimeError(str(error)) from error
+    except Exception as error:
+        raise RuntimeError(f"The application database is not reachable or could not be migrated: {type(error).__name__}. Check MULA_DATABASE_URL and that PostgreSQL is running.") from error
     # A mounted app's own lifespan does not run, so start the agent tools here.
     async with tool_gateway.running():
-        yield
+        try:
+            yield
+        finally:
+            database.close()
 
 
 app = FastAPI(title="LARAS AI Backend", version="0.2.0", lifespan=lifespan)

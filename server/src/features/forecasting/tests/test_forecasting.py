@@ -133,4 +133,4 @@ class ForecastApiTests(AccountFixture, unittest.TestCase):
         for _ in range(22):
             self.assertEqual(self.client.post("/api/forecasting/run", json=request()).status_code, 200)
         with accounts.database() as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM forecast_runs").fetchone()[0], 20)
+            self.assertEqual(db.execute("SELECT count(*) AS kept FROM forecast_runs").fetchone()["kept"], 20)

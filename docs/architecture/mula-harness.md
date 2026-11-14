@@ -11,7 +11,7 @@ flowchart TB
     user["Business owner"] --> ui["Mula interface · Next.js · port 3000"]
     ui <-->|"Same-origin requests and streamed replies"| proxy["Next.js server proxy"]
     proxy <-->|"Private session cookie"| api["LARAS API · FastAPI · port 8000"]
-    api <-->|"Accounts, login sessions, visible chat history"| appdb[("Application SQLite database")]
+    api <-->|"Accounts, login sessions, visible chat history"| appdb[("Application database · PostgreSQL")]
     api -->|"Authenticated account selects its permanent conversation"| operator["Operator role and instructions"]
     operator <-->|"Runtime adapter · HTTP requests and SSE translation"| runtime["Mula agent runtime · port 8642"]
     runtime <-->|"Load and persist model conversation"| state[("Runtime session storage")]
@@ -68,7 +68,7 @@ One account currently represents one workspace and owns one Operator conversatio
 
 | Storage | Contents | Current location |
 |---|---|---|
-| Application SQLite database | Accounts, salted password hashes, hashed login tokens, conversation UUIDs, visible user/assistant messages and login failure records. | `.runtime/accounts.sqlite3` by default; configurable with `LARAS_ACCOUNT_DB`. |
+| Application database (PostgreSQL) | Accounts, salted password hashes, hashed login tokens, conversation UUIDs, visible user/assistant messages, login failure records, agent settings and map positions, forecast runs, tool tickets and agent requests. | `MULA_DATABASE_URL` (local Homebrew PostgreSQL or the `docker-compose.yml` service). Schema in `server/migrations`, applied at backend startup. |
 | Runtime session storage | Model conversation state and transcripts managed by the Mula runtime. | One profile per account under `.runtime/hermes/profiles/mula-<account>/`, served by the root profile under `.runtime/hermes`. |
 | Account memory store | Facts the Operator and the owner saved, their history and the audit log. | `.runtime/workspaces/<account>/memory/store.sqlite3`, with the regenerated `MEMORY.md` beside it. |
 
@@ -116,8 +116,10 @@ The launcher reuses reachable services, starts missing ones, waits for readiness
 - `server/src/main.py`: application composition, validation-error handling and health checks.
 - `server/src/features/auth/routes.py`: account HTTP endpoints.
 - `server/src/features/operator/routes.py`: chat authorization, orchestration and visible transcript persistence.
-- `server/src/features/auth/service.py`: SQLite accounts, login sessions and message records.
-- `server/src/features/operator/agent.py` and `server/src/features/operator/prompts/operator.md`: Operator role.
+- `server/src/features/auth/service.py`: accounts, login sessions and message records.
+- `server/src/common/database.py` and `server/migrations/`: the PostgreSQL pool, transactions and schema.
+- `server/agents/*.md` and `server/src/common/agent_catalog.py`: each agent's name, capabilities, Mula tools, delegation and persona, loaded at startup.
+- `server/src/features/operator/agent.py`: the Operator's entry point, using the persona from `server/agents/operator.md`.
 - `server/src/features/operator/runtime.py`: runtime transport adapter.
 - `server/hermes/config.yaml`: dedicated runtime profile template.
 - `server/scripts/apply_hermes_profile.py`: pinned-runtime context exception.
@@ -141,7 +143,7 @@ Next.js route handlers :3000
   │ server-to-server HTTP; cookie forwarded
   ▼
 FastAPI :8000
-  ├─ Account authorization → application SQLite
+  ├─ Account authorization → application database (PostgreSQL)
   ├─ Operator role instructions
   └─ Runtime HTTP adapter
        │ application bearer key + namespaced conversation ID
@@ -157,7 +159,7 @@ Mula gateway :8642
 Ollama :11434 → Qwen
 ```
 
-The application cookie and runtime bearer key serve different principals. The cookie identifies one account. The runtime key authenticates the application to the shared runtime profile. Qwen sees prompt content, not a capability to access either SQLite database.
+The application cookie and runtime bearer key serve different principals. The cookie identifies one account. The runtime key authenticates the application to the shared runtime profile. Qwen sees prompt content, not a capability to access the application database or the memory stores.
 
 The application currently has no end-user tool identity propagated to a business-tool executor. A conversation ID is a routing identifier, not a business permission grant.
 
@@ -220,7 +222,7 @@ Content-Type: application/json
 {
   "model": "hermes-agent",
   "messages": [
-    {"role": "system", "content": "<contents of operator.md>"},
+    {"role": "system", "content": "<persona from server/agents/operator.md>"},
     {"role": "user", "content": "What is our shop called?"}
   ],
   "stream": true,
@@ -273,7 +275,7 @@ runtime base instructions and applicable runtime context
 + assistant tool calls and tool results from earlier iterations of this turn
 ```
 
-The runtime assembles its own base prompt; `operator.md` is not necessarily the entire system prompt. `agent/system_prompt.py::build_system_prompt_parts()` groups base content into stable, context and volatile tiers. Role guidance, applicable workspace context, environment hints and enabled facilities can affect the final prompt. Disabled memory facilities do not contribute enabled personal-memory behavior.
+The runtime assembles its own base prompt; the Operator persona is not necessarily the entire system prompt. `agent/system_prompt.py::build_system_prompt_parts()` groups base content into stable, context and volatile tiers. Role guidance, applicable workspace context, environment hints and enabled facilities can affect the final prompt. Disabled memory facilities do not contribute enabled personal-memory behavior.
 
 Configured values:
 
@@ -291,7 +293,7 @@ compression:
 
 The absolute compression trigger caps the runtime's calculated ratio-based trigger. It is neither a fixed 24K prompt nor a hard 24K message truncation boundary. Recent-message protection is configuration for the compression algorithm; a long protected message can still consume substantial budget. Output reservation, summaries and runtime instructions also occupy context.
 
-Compression is a sanctioned rewrite of active model context. The application can still display old messages from its own SQLite database after those details have been summarized out of the model's active transcript. RAG-based recovery from that archive is not implemented. Long-workload compression quality, summarizer routing and all small-context recovery paths have not been validated end to end; the local context patch specifically adjusts the agent startup guard, not every auxiliary-model feasibility check in the upstream runtime.
+Compression is a sanctioned rewrite of active model context. The application can still display old messages from its own database after those details have been summarized out of the model's active transcript. RAG-based recovery from that archive is not implemented. Long-workload compression quality, summarizer routing and all small-context recovery paths have not been validated end to end; the local context patch specifically adjusts the agent startup guard, not every auxiliary-model feasibility check in the upstream runtime.
 
 ## 5. Tool selection, execution and the model loop
 
@@ -471,7 +473,7 @@ Application references:
 
 - `server/src/features/auth/service.py`: `current_account()`, `history()`, `add_message()`, `save_reply()`.
 - `server/src/features/operator/routes.py`: `chat_with_operator()`, `operator_events()`, `conversation()`.
-- `server/src/features/operator/agent.py`: `operator_reply()`, `operator_stream()` and loading `operator.md`.
+- `server/src/features/operator/agent.py`: `operator_reply()` and `operator_stream()`, using the persona from `server/agents/operator.md`.
 - `server/src/features/operator/runtime.py`: `request_headers()`, `stream_chat()`, `sse_events()`, `chat()`.
 - `src/common/services/server-proxy.ts`: `proxyBackend()`.
 - `src/features/workspace/components/Workspace.tsx`: `loadAccount()`, `sendMessage()` and `readChatStream()` usage.
@@ -510,7 +512,7 @@ Starting the microphone stops TTS. Stop allows a final recognition result, with 
 
 ## Agent configuration and statistical Forecasting
 
-`server/src/features/team/service.py` defines the two-agent catalog and allowlisted capability IDs. `agent_settings` stores prompt additions, reference data, tools and a monotonic revision, keyed by authenticated account and agent. PUT validates the allowlist and uses a SQLite write lock plus revision comparison to prevent lost updates. User settings cannot enable shell, arbitrary code or a runtime toolset. `/api/team` supplies the actual available catalog to the client.
+`server/src/features/team/service.py` defines the two-agent catalog and allowlisted capability IDs. `agent_settings` stores prompt additions, reference data, tools and a monotonic revision, keyed by authenticated account and agent. PUT validates the allowlist and uses a transaction-scoped advisory lock plus revision comparison to prevent lost updates. User settings cannot enable shell, arbitrary code or a runtime toolset. `/api/team` supplies the actual available catalog to the client.
 
 The Operator route checks `csv_read` before attachment ingestion and `memory_write` before `/remember` persistence. With `memory_read` disabled it skips new retrieval. Current settings are appended to per-request instructions and disabled capabilities are described to the model. This does not remove data previously included in runtime history. Existing accounts retain all current capabilities by default.
 

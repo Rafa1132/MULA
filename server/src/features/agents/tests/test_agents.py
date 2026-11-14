@@ -12,6 +12,7 @@ from src.features.auth import accounts
 from src.features.operator.csv_files import CsvFile
 from src.main import app
 from tests.support.account_fixture import AccountFixture
+from tests.support.database_fixture import DatabaseFixture
 from tests.support.runtime_fixture import answer, gateway, stream_response
 
 CSV = CsvFile(name="sales.csv", content="date,sales\n" + "\n".join(f"2026-01-{day:02d},{100 + day * 10}" for day in range(1, 31)))
@@ -50,7 +51,7 @@ class TicketTests(AgentFixture, unittest.TestCase):
             service.resolve_ticket(expired, "calculate_forecast")
         # Only the hash is stored.
         with accounts.database() as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM agent_tickets WHERE token_hash = ?", (forecasting,)).fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT count(*) AS stored FROM agent_tickets WHERE token_hash = %s", (forecasting,)).fetchone()["stored"], 0)
 
 
 class ForecastToolTests(AgentFixture, unittest.TestCase):
@@ -151,7 +152,7 @@ class ApprovalTests(AgentFixture, unittest.TestCase):
         self.assertEqual(statuses, ["running", "answered"])
         # Forecasting answers as itself, in its own session, with the CSV passed on in a new ticket.
         forecasting = json.loads(captured[0].content)
-        self.assertTrue(forecasting["messages"][0]["content"].startswith(service.FORECASTING_PROMPT))
+        self.assertTrue(forecasting["messages"][0]["content"].startswith(service.PERSONAS["forecasting"]))
         self.assertIn('"columns": ["date", "sales"]', forecasting["messages"][1]["content"])
         self.assertTrue(captured[0].headers["X-Hermes-Session-Id"].startswith("mula-forecasting-"))
         self.assertEqual(service.resolve_ticket(ticket_in(captured[0]), "calculate_forecast")["attachment"], CSV)
@@ -222,16 +223,15 @@ class DirectChatTests(AgentFixture, unittest.TestCase):
         self.assertEqual(self.client.get("/api/agents/operator/conversation").status_code, 404)
 
     def test_messages_from_before_agent_histories_stay_with_the_operator(self):
+        # A message written without an agent (as the old database did) belongs to the Operator.
         with accounts.database() as db:
-            db.execute("ALTER TABLE messages RENAME TO new_messages")
-            db.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id), role TEXT NOT NULL, text TEXT NOT NULL, note TEXT)")
-            db.execute("DROP TABLE new_messages")
-            db.execute("INSERT INTO messages (account_id, role, text) VALUES (?, 'user', 'Old question')", (self.account["id"],))
+            db.execute("INSERT INTO messages (account_id, role, text) VALUES (%s, 'user', 'Old question')", (self.account["id"],))
         self.assertEqual(self.client.get("/api/conversation").json()["messages"][0]["text"], "Old question")
         self.assertEqual(self.client.get("/api/agents/forecasting/conversation").json()["messages"], [])
 
 
-class ToolServerTests(unittest.TestCase):
+class ToolServerTests(DatabaseFixture, unittest.TestCase):
+    # Entering TestClient runs the app's startup, which migrates the database, so this needs a schema.
     INITIALIZE = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
         "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}}
     HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
