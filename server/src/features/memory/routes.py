@@ -1,16 +1,23 @@
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from ..auth import accounts
-from . import service
+from . import filters, pipeline, service
+from .filters import MemoryRefused
 
 router = APIRouter(prefix="/api/memory")
 
 
-class DocumentRequest(BaseModel):
+class EntryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    path: str = Field(min_length=1, max_length=100)
-    content: str = Field(max_length=8000)
-    revision: str = Field(max_length=64)
+    target: Literal["business", "owner"]
+    fact: str = Field(min_length=1, max_length=filters.MAX_LENGTH * 2)
+
+
+class CorrectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    fact: str = Field(min_length=1, max_length=filters.MAX_LENGTH * 2)
 
 
 class SearchRequest(BaseModel):
@@ -18,14 +25,34 @@ class SearchRequest(BaseModel):
     question: str = Field(min_length=1, max_length=1000)
 
 
+def saved(result):
+    return {"outcome": result["outcome"], "entry": result["entry"]}
+
+
 @router.get("")
 def list_memory(account: dict = Depends(accounts.current_account)):
     return service.overview(account["id"])
 
 
-@router.put("/document")
-def save_document(request: DocumentRequest, account: dict = Depends(accounts.current_account)):
-    return service.write_document(account["id"], request.path, request.content, request.revision)
+@router.post("/entries")
+def add_entry(request: EntryRequest, account: dict = Depends(accounts.current_account)):
+    return saved(service.owner_remember(account["id"], request.target, request.fact))
+
+
+@router.post("/entries/{entry_id}/supersede")
+def correct_entry(entry_id: int, request: CorrectionRequest, account: dict = Depends(accounts.current_account)):
+    previous = pipeline.store_entry(account["id"], entry_id)
+    if previous is None:
+        raise HTTPException(404, "This memory was not found.")
+    try:
+        return saved(pipeline.remember(account["id"], previous["target"], request.fact, "owner", replaces=entry_id))
+    except MemoryRefused as refusal:
+        raise HTTPException(422, str(refusal)) from refusal
+
+
+@router.post("/entries/{entry_id}/retire")
+def retire_entry(entry_id: int, account: dict = Depends(accounts.current_account)):
+    return {"entry": pipeline.retire(account["id"], entry_id, "owner")}
 
 
 @router.post("/search")

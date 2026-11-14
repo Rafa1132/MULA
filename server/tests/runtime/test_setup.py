@@ -38,6 +38,11 @@ class SetupTests(unittest.TestCase):
                 self.assertGreaterEqual(len(tools_key), 32)
                 self.assertEqual(tools_key, gateway_settings["MULA_TOOLS_KEY"])
                 self.assertNotEqual(tools_key, key)
+                # The seed for each account's profile key stays on the backend only.
+                seed = settings["MULA_PROFILE_KEY_SEED"]
+                self.assertGreaterEqual(len(seed), 32)
+                self.assertNotIn("MULA_PROFILE_KEY_SEED", gateway_settings)
+                self.assertNotIn(seed, output.getvalue())
                 self.assertNotIn(tools_key, output.getvalue())
                 self.assertEqual(backend_file.stat().st_mode & 0o777, 0o600)
                 self.assertEqual(gateway_file.stat().st_mode & 0o777, 0o600)

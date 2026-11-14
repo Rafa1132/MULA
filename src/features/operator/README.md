@@ -14,7 +14,7 @@ The building blocks for the Operator chat: the animated core, the reader for str
 |---|---|---|
 | `session` | `session_id` | The account's conversation UUID |
 | `attachment` | `note` | Filename and row/column summary for the attached CSV |
-| `memory` | `paths`, `note` | Memory files used for this reply, or confirmation of a `/remember` save |
+| `memory` | `paths` (empty), `note` | Memory ids used for this reply, a `/remember` result, or what the Operator saved during the turn (`Saved to memory: [12]`, sent before `done`) |
 | `token` | `content` | A piece of the answer text |
 | `request` | `request` | A request the Operator made to another agent during this turn (sent before `done`): `id`, `to_name`, `question`, `status`, `approved_in_advance`, `message_id` |
 | `done` | `truncated` | The reply finished; `truncated` is true if it hit the length limit |

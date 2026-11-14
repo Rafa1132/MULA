@@ -10,6 +10,11 @@ HERMES_TIMEOUT_SECONDS = float(os.getenv("HERMES_TIMEOUT_SECONDS", "120"))
 # Shared secret the Mula runtime sends to this backend's /mcp tool server.
 # Empty means agent tools are not connected and /mcp refuses every request.
 MULA_TOOLS_KEY = os.getenv("MULA_TOOLS_KEY", "").strip()
+# Seed for each account's runtime profile key (see common/profiles.py). Empty means
+# accounts get no profile of their own, and every agent turn is refused until setup.
+MULA_PROFILE_KEY_SEED = os.getenv("MULA_PROFILE_KEY_SEED", "").strip()
+# The runtime home that holds the root profile and, under profiles/, one profile per account.
+HERMES_HOME = os.getenv("HERMES_HOME", "").strip()
 
 url = urlsplit(HERMES_BASE_URL)
 if (

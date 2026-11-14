@@ -6,6 +6,7 @@ from uuid import UUID
 
 import httpx
 
+from ...common import profiles
 from ...common.config import HERMES_API_KEY, HERMES_BASE_URL, HERMES_MODEL, HERMES_TIMEOUT_SECONDS
 
 
@@ -15,10 +16,18 @@ class HermesError(RuntimeError):
         self.status_code = status_code
 
 
-def request_headers(session_id: UUID | None = None, agent_id: str = "operator") -> dict[str, str]:
+def request_headers(session_id: UUID | None = None, agent_id: str = "operator", account_id: str | None = None) -> dict[str, str]:
+    """Headers for the root profile, or for the account's own profile when `account_id` is given."""
     if not HERMES_API_KEY:
         raise HermesError("Hermes is not configured. Run the backend's Hermes setup first.")
-    headers = {"Authorization": f"Bearer {HERMES_API_KEY}"}
+    key = HERMES_API_KEY
+    if account_id is not None:
+        # A named profile only accepts its own key; the root key never opens it.
+        try:
+            key = profiles.profile_key(account_id)
+        except profiles.ProfileError as error:
+            raise HermesError(str(error)) from error
+    headers = {"Authorization": f"Bearer {key}"}
     if session_id is not None:
         # Without an explicit ID, Hermes derives identity from prompt text. That
         # could join unrelated chats with the same opening. Never rely on it here.
@@ -90,8 +99,20 @@ async def require_model(model: str) -> None:
         raise HermesError("The brain chosen in My agents is not set up on the Mula runtime. Choose another brain or finish its setup.", 409)
 
 
-async def stream_chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator"):
+def account_base_url(account_id: str) -> str:
+    """The account's profile URL, after making sure the profile exists on disk and the gateway serves it."""
+    try:
+        profiles.ensure_profile(account_id)
+        profiles.ensure_served(account_id)
+        return profiles.profile_base_url(HERMES_BASE_URL, account_id)
+    except profiles.ProfileError as error:
+        raise HermesError(str(error)) from error
+
+
+async def stream_chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator", *, account_id: str):
+    """One agent turn in the account's own runtime profile."""
     await require_model(model)
+    base_url = account_base_url(account_id)
     payload = {
         "model": model,
         "messages": [
@@ -101,7 +122,7 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID, model:
         "stream": True,
         "model_options": {"reasoning": {"enabled": False}},
     }
-    headers = request_headers(session_id, agent_id)
+    headers = request_headers(session_id, agent_id, account_id)
     saw_text = False
     finish_reason = None
     try:
@@ -110,7 +131,7 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID, model:
             follow_redirects=False,
         ) as client:
             async with client.stream(
-                "POST", f"{HERMES_BASE_URL}/v1/chat/completions", json=payload, headers=headers
+                "POST", f"{base_url}/v1/chat/completions", json=payload, headers=headers
             ) as response:
                 check_status(response)
                 if "text/event-stream" not in response.headers.get("content-type", ""):
@@ -168,11 +189,11 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID, model:
         raise HermesError("Cannot reach Hermes. Start the Hermes gateway and check its URL.") from error
 
 
-async def chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator") -> tuple[str, bool]:
+async def chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator", *, account_id: str) -> tuple[str, bool]:
     parts = []
     truncated = False
     # Both response formats use one execution path and identical failure semantics.
-    async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id)) as events:
+    async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id, account_id=account_id)) as events:
         async for event in events:
             if event["type"] == "token":
                 parts.append(event["content"])

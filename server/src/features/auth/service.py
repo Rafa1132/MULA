@@ -9,6 +9,7 @@ import sqlite3
 import time
 from uuid import uuid4
 
+from ...common import profiles
 from ...common.paths import PROJECT_ROOT
 
 from fastapi import Cookie, HTTPException
@@ -78,13 +79,28 @@ def token_hash(token):
 def create_account(username, password):
     salt = secrets.token_hex(16)
     digest = password_hash(password, salt)
+    account_id = str(uuid4())
     with database() as db:
         try:
             db.execute("INSERT INTO accounts VALUES (?, ?, ?, ?, ?)",
-                       (str(uuid4()), username, salt, digest, str(uuid4())))
+                       (account_id, username, salt, digest, str(uuid4())))
         except sqlite3.IntegrityError as error:
             raise HTTPException(409, "That username is already taken.") from error
+    provision_profile(account_id)
     return authenticate(username, password)
+
+
+def provision_profile(account_id):
+    """Each account gets its own runtime profile, so no runtime state is ever shared."""
+    if not profiles.configured():
+        # Without the seed there is nothing to derive a key from; every agent turn says so.
+        return
+    try:
+        profiles.ensure_profile(account_id)
+    except profiles.ProfileError as error:
+        raise HTTPException(503, str(error)) from error
+    # The gateway finds new profile folders on a 30-second rescan; asking now makes the first turn work.
+    profiles.announce_profile(account_id)
 
 
 def authenticate(username, password):

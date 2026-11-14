@@ -128,6 +128,13 @@ def main(argv=None) -> None:
         write_private(env_path, "\n".join(lines) + "\n")
         write_private(config_path, new_config)
         print("Added the Claude brains. The key was saved to the private runtime profile and not printed.")
+    # Account profiles read only their own .env, so each must mirror the Claude key (or lose it).
+    from scripts.provision_profiles import refresh_existing_profiles
+    refreshed = refresh_existing_profiles(BACKEND / ".env.hermes", RUNTIME_HOME)
+    if refreshed < 0:
+        print("Account profiles are not set up yet; run provision_profiles.py --apply.")
+    else:
+        print(f"Refreshed {refreshed} account profile(s) with the current secrets.")
     print("Restart the runtime: bash server/scripts/start_hermes.sh --replace")
 
 

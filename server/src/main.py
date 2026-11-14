@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from .common import profiles
 from .common.config import HERMES_MODEL
 from .features.auth import router as auth_router
 from .features.operator import router as operator_router
@@ -18,6 +19,11 @@ from .features.agents.tools import gateway as tool_gateway
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # An account profile with the runtime's own memory on would share nothing, but it
+    # would keep facts outside Mula's store. Refuse to start rather than run that way.
+    leaking = profiles.profiles_with_runtime_memory()
+    if leaking:
+        raise RuntimeError(f"{len(leaking)} account profile(s) have the runtime's memory on. Run server/scripts/provision_profiles.py --apply.")
     # A mounted app's own lifespan does not run, so start the agent tools here.
     async with tool_gateway.running():
         yield

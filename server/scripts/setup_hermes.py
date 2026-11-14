@@ -28,12 +28,15 @@ def main() -> None:
     key = secrets.token_urlsafe(32)
     # A separate secret for the opposite direction: the runtime calling the backend's agent tools.
     tools_key = secrets.token_urlsafe(32)
+    # Each account's runtime profile key is derived from this seed (src/common/profiles.py).
+    profile_seed = secrets.token_urlsafe(32)
     write_private(backend_env, (
         "HERMES_BASE_URL=http://127.0.0.1:8642\n"
         f"HERMES_API_KEY={key}\n"
         "HERMES_MODEL=hermes-agent\n"
         "HERMES_TIMEOUT_SECONDS=120\n"
         f"MULA_TOOLS_KEY={tools_key}\n"
+        f"MULA_PROFILE_KEY_SEED={profile_seed}\n"
     ))
     write_private(gateway_env, (
         "API_SERVER_ENABLED=true\n"

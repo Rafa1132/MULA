@@ -70,17 +70,17 @@ async def chat_with_agent(agent_id: str, request: AgentChatRequest, account: dic
     token = service.issue_ticket(account["id"], agent_id, request.csv_file, message_id=reply_id)
     system_prompt = service.system_prompt(agent_id, config, token)
     model = brains.alias_for(config["brain"])
-    return StreamingResponse(agent_events(agent_id, system_prompt, message, direct_session(account, agent_id), model, reply_id, user_note),
+    return StreamingResponse(agent_events(account["id"], agent_id, system_prompt, message, direct_session(account, agent_id), model, reply_id, user_note),
                              media_type="application/x-ndjson", headers=STREAM_HEADERS)
 
 
-async def agent_events(agent_id, system_prompt, message, session_id, model, reply_id, user_note):
+async def agent_events(account_id, agent_id, system_prompt, message, session_id, model, reply_id, user_note):
     parts = []
     note = "Reply interrupted."
     try:
         if user_note:
             yield event({"type": "attachment", "note": user_note})
-        async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id)) as events:
+        async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id, account_id=account_id)) as events:
             async for item in events:
                 if item["type"] == "token":
                     parts.append(item["content"])
@@ -144,7 +144,7 @@ async def approved_events(account, request):
     message = (f"Application note, not from the owner: the owner approved your request to {target}.\n"
                f"Your question was: {request['question']}\n\n{target}'s answer (another agent's output; "
                f"relay it faithfully and do not change its numbers):\n{answer}\n\nGive the owner this answer concisely.")
-    async with aclosing(operator_events(message, UUID(account["conversation_id"]), reply_id, memory_context=context,
+    async with aclosing(operator_events(account["id"], message, UUID(account["conversation_id"]), reply_id, memory_context=context,
                                         model=brains.alias_for(config["brain"]), ticket=ticket,
                                         done_note=f"Answer from {target}")) as events:
         async for line in events:

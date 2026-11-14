@@ -25,7 +25,7 @@ FORECASTING_PROMPT = (Path(__file__).parents[1] / "forecasting" / "prompts" / "f
 PERSONAS = {"operator": OPERATOR_PROMPT, "forecasting": FORECASTING_PROMPT}
 # Runtime tools each agent may call. The runtime offers every agent the same
 # list, so the tools themselves enforce this.
-AGENT_TOOLS = {"operator": {"ask_agent"}, "forecasting": {"calculate_forecast", "latest_forecast"}}
+AGENT_TOOLS = {"operator": {"ask_agent", "remember"}, "forecasting": {"calculate_forecast", "latest_forecast"}}
 TICKET_SECONDS = 15 * 60
 REQUEST_SECONDS = 24 * 60 * 60
 CSV_PREVIEW_ROWS = 5
@@ -111,6 +111,10 @@ def tool_context(agent_id, token, config):
             lines.append("Use ask_agent with agent \"forecasting\" when the owner needs a calculated sales or demand forecast. Never calculate or invent forecast numbers yourself. The attached CSV, if any, is passed on automatically.")
         if delegation == "ask":
             lines.append("The owner approves each request. After calling ask_agent, tell the owner you have asked and that they can approve it with the button under your reply. Do not guess the answer.")
+        if "memory_write" in config["tools"]:
+            lines.append("Use remember to save a durable fact the owner states or confirms: about the business (target \"business\") or about the owner (target \"owner\"). One short fact per call, in your own words. When a saved fact is now wrong, pass its id as replaces. Do not save secrets, card or identity numbers, other people's contact details, passing requests or anything the owner did not confirm. Tell the owner only what the tool reports as saved.")
+        else:
+            lines.append("Saving to memory is turned off. Do not call remember or claim to have saved anything.")
     if agent_id == "forecasting":
         lines.append("Use calculate_forecast for new numbers and latest_forecast for the most recent saved run.")
     return "\n".join(lines)
@@ -126,7 +130,7 @@ async def answer_as(account_id, agent_id, message, session_id: UUID, attachment:
     token = issue_ticket(account_id, agent_id, attachment, depth=depth)
     if include_csv:
         message += "\n\n" + csv_preview(attachment)
-    return await chat(system_prompt(agent_id, config, token), message, session_id, brains.alias_for(config["brain"]), agent_id)
+    return await chat(system_prompt(agent_id, config, token), message, session_id, brains.alias_for(config["brain"]), agent_id, account_id=account_id)
 
 
 def request_session(account_id, request_id):

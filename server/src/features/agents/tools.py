@@ -18,6 +18,8 @@ from pydantic import Field
 from ...common import config
 from ..forecasting import runs
 from ..forecasting.service import ForecastRequest, forecast
+from ..memory import pipeline as memory
+from ..memory.filters import MemoryRefused
 from ..operator.runtime import HermesError
 from ..team import service as team
 from . import service
@@ -28,12 +30,14 @@ server = MCPServer(
 )
 Ticket = Annotated[str, Field(description="The tool ticket from your instructions for this request.")]
 # Failures the model can read and act on. Anything else stays an opaque crash.
-EXPECTED = (service.ToolDenied, HTTPException, HermesError)
+EXPECTED = (service.ToolDenied, HTTPException, HermesError, MemoryRefused)
 
 
 def tool_failure(error: Exception) -> ToolError:
     if isinstance(error, HTTPException):
         return ToolError(str(error.detail))
+    if isinstance(error, MemoryRefused):
+        return ToolError(f"Not saved. {error}")
     if isinstance(error, HermesError):
         return ToolError(f"The other agent could not answer: {error}")
     return ToolError(str(error))
@@ -47,6 +51,28 @@ def ask_agent(ticket: Ticket,
         return service.ask_agent(ticket, agent, question)
     except EXPECTED as error:
         raise tool_failure(error) from error
+
+
+@server.tool(description="Operator only. Save one durable fact to the owner's memory: about the business, or about the owner. Pass replaces with a memory id when the fact corrects an earlier one. Never save secrets, card or identity numbers, or other people's contact details.",
+             annotations=ToolAnnotations(destructive_hint=False, open_world_hint=False))
+def remember(ticket: Ticket,
+             target: Annotated[Literal["business", "owner"], Field(description="What the fact is about.")],
+             fact: Annotated[str, Field(max_length=1000, description="One short fact in plain words, at most 500 characters.")],
+             replaces: Annotated[int | None, Field(ge=1, description="The id of the memory this fact replaces, when correcting one.")] = None) -> str:
+    try:
+        caller = service.resolve_ticket(ticket, "remember")
+        settings = team.settings(caller["account_id"], "operator")
+        if "memory_write" not in settings["tools"]:
+            raise service.ToolDenied("The owner has turned off saving to memory. Do not claim to have saved anything.")
+        result = memory.remember(caller["account_id"], target, fact, "operator", origin_message_id=caller["message_id"], replaces=replaces)
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    entry = result["entry"]
+    if result["outcome"] == "duplicate":
+        return f"Already in memory as [{entry['id']}]: {entry['fact']}"
+    if replaces is not None:
+        return f"Saved as memory [{entry['id']}], replacing [{replaces}]."
+    return f"Saved as memory [{entry['id']}]."
 
 
 @server.tool(description="Forecasting agent only; the Operator uses ask_agent instead. Calculate a statistical forecast from the CSV attached to this request and save it to the owner's forecast history.",

@@ -20,6 +20,7 @@ import yaml
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 from scripts.enable_claude import env_lines_without, mapping_at, write_private  # noqa: E402
+from scripts.provision_profiles import refresh_existing_profiles  # noqa: E402
 
 RUNTIME_HOME = BACKEND.parent / ".runtime" / "hermes"
 KEY_NAME = "MULA_TOOLS_KEY"
@@ -84,7 +85,16 @@ def main(argv=None) -> None:
         write_key(runtime_env, key)
         write_private(config_path, new_config)
         print("Connected agent tools. The shared key was saved to both private env files and not printed.")
+    report_profile_refresh(refresh_existing_profiles(backend_env, RUNTIME_HOME))
     print("Restart Mula and the backend: ./run.sh")
+
+
+def report_profile_refresh(count: int) -> None:
+    # Account profiles read only their own .env, so they must mirror the new key.
+    if count < 0:
+        print("Account profiles are not set up yet; run provision_profiles.py --apply.")
+    else:
+        print(f"Refreshed {count} account profile(s) with the current secrets.")
 
 
 if __name__ == "__main__":

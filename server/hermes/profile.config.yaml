@@ -1,0 +1,46 @@
+# One Mula account's runtime profile. Written by the backend (server/src/common/profiles.py)
+# into .runtime/hermes/profiles/<profile>/config.yaml; do not edit the copies by hand.
+# The gateway, its port and the brain routes come from the root profile's config.yaml.
+model:
+  default: huihui_ai/qwen3-abliterated:latest
+  provider: custom
+  base_url: http://127.0.0.1:11434/v1
+  # Actual Ollama window; the scoped Mula patch allows it while the only tools are Mula's own.
+  context_length: 40960
+
+agent:
+  max_turns: 8
+  mula_compact_operator: true
+
+# Agents get only the business tools the Mula backend serves at /mcp
+# (server/src/features/agents/tools.py). Terminal, file, web and delegation
+# tools stay off. The backend checks every call against a per-turn ticket and
+# the owner's settings, including approval before asking another agent.
+platform_toolsets:
+  api_server: [mula]
+  cli: [no_mcp]
+mcp_servers:
+  mula:
+    url: http://127.0.0.1:8000/mcp/
+    headers:
+      Authorization: Bearer ${MULA_TOOLS_KEY}
+    trust: full
+    timeout: 300
+    tools:
+      include: [ask_agent, calculate_forecast, latest_forecast, remember]
+      resources: false
+      prompts: false
+tools:
+  tool_search:
+    enabled: "off"
+# The runtime's own memory files stay off in every account profile. Mula keeps
+# each account's memory in its own store and supplies it with every turn.
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+compression:
+  enabled: true
+  threshold_tokens: 24000
+  protect_last_n: 6
+display:
+  interim_assistant_messages: false

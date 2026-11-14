@@ -8,6 +8,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 from src.features.operator.agent import OPERATOR_PROMPT
+from src.common import profiles
 from src.common.config import HERMES_MODEL
 from src.main import app
 from tests.support.account_fixture import AccountFixture
@@ -35,8 +36,10 @@ class OperatorTests(AccountFixture, unittest.TestCase):
         self.assertEqual(result['model'], HERMES_MODEL)
         self.assertFalse(result['truncated'])
         request = requests[0]
-        self.assertEqual(request.url.path, '/v1/chat/completions')
-        self.assertEqual(request.headers['Authorization'], 'Bearer test-key')
+        # The turn runs in the account's own runtime profile, with that profile's key.
+        self.assertEqual(request.url.path, f'/p/{profiles.profile_name(self.account["id"])}/v1/chat/completions')
+        self.assertEqual(request.headers['Authorization'], 'Bearer ' + profiles.profile_key(self.account['id']))
+        self.assertNotEqual(request.headers['Authorization'], 'Bearer test-key')
         self.assertEqual(request.headers['X-Hermes-Session-Id'], f'mula-operator-{session}')
         payload = json.loads(request.content)
         system, user = payload['messages']
@@ -140,6 +143,9 @@ if __name__ == '__main__':
 
 
 class OperatorBrainTests(AccountFixture, unittest.TestCase):
+    def chat_path(self):
+        return f'/p/{profiles.profile_name(self.account["id"])}/v1/chat/completions'
+
     def choose(self, brain):
         saved = self.client.put('/api/team/operator', json={
             'prompt': '', 'data': '', 'tools': ['csv_read', 'memory_read', 'memory_write'], 'revision': 0, 'brain': brain,
@@ -157,7 +163,7 @@ class OperatorBrainTests(AccountFixture, unittest.TestCase):
         with gateway(handler):
             result = self.client.post('/api/agents/operator/chat', json={'message': 'Hi'})
         self.assertEqual(result.json()['model'], HERMES_MODEL)
-        self.assertEqual([request.url.path for request in requests], ['/v1/chat/completions'])
+        self.assertEqual([request.url.path for request in requests], [self.chat_path()])
 
     def test_chosen_brain_is_sent_as_its_route_alias(self):
         self.choose('claude-sonnet')
@@ -175,7 +181,7 @@ class OperatorBrainTests(AccountFixture, unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()['model'], 'mula-claude-sonnet')
         self.assertEqual(json.loads(streamed.text.splitlines()[-1])['type'], 'done')
-        chats = [request for request in requests if request.url.path == '/v1/chat/completions']
+        chats = [request for request in requests if request.url.path == self.chat_path()]
         self.assertEqual([json.loads(request.content)['model'] for request in chats], ['mula-claude-sonnet'] * 2)
         self.assertFalse(json.loads(chats[0].content)['model_options']['reasoning']['enabled'])
 
@@ -196,5 +202,5 @@ class OperatorBrainTests(AccountFixture, unittest.TestCase):
         self.assertIn('not set up', result.json()['detail'])
         last = json.loads(streamed.text.splitlines()[-1])
         self.assertEqual((last['type'], last['status_code']), ('error', 409))
-        self.assertNotIn('/v1/chat/completions', [request.url.path for request in requests])
+        self.assertNotIn(self.chat_path(), [request.url.path for request in requests])
         self.assertTrue(all(message['text'] == '' for message in self.client.get('/api/conversation').json()['messages'] if message['role'] == 'assistant'))

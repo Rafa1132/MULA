@@ -69,11 +69,12 @@ One account currently represents one workspace and owns one Operator conversatio
 | Storage | Contents | Current location |
 |---|---|---|
 | Application SQLite database | Accounts, salted password hashes, hashed login tokens, conversation UUIDs, visible user/assistant messages and login failure records. | `.runtime/accounts.sqlite3` by default; configurable with `LARAS_ACCOUNT_DB`. |
-| Runtime session storage | Model conversation state and transcripts managed by the Mula runtime. | Dedicated profile under `.runtime/hermes`. |
+| Runtime session storage | Model conversation state and transcripts managed by the Mula runtime. | One profile per account under `.runtime/hermes/profiles/mula-<account>/`, served by the root profile under `.runtime/hermes`. |
+| Account memory store | Facts the Operator and the owner saved, their history and the audit log. | `.runtime/workspaces/<account>/memory/store.sqlite3`, with the regenerated `MEMORY.md` beside it. |
 
 These stores serve different purposes. The application database reloads what the user sees; the runtime store supplies the model's working conversation. The application does not replay its entire visible transcript into each runtime request.
 
-Conversation ownership is enforced by FastAPI. The runtime is a shared local service authenticated using an application credential; it is not independently authenticated as each business owner. Separate runtime memory profiles per account are not implemented.
+Conversation ownership is enforced by FastAPI. The runtime is one local service, but it serves a named profile per account (`gateway.multiplex_profiles`): each account's turns go to `/p/mula-<account>/v1/chat/completions` with that profile's own API key, derived server-side from `MULA_PROFILE_KEY_SEED` (`server/src/common/profiles.py`). A profile only accepts its own key, and it runs with its own config, sessions and secrets file. The runtime's built-in memory is off in every profile. The gateway picks up a new profile folder on a 30-second rescan, so the backend asks it over its control socket (`server/src/common/runtime_control.py`) to serve a new profile at signup and checks, before each turn, that the gateway serves the profile.
 
 Login uses username/password credentials, salted scrypt password hashes and an opaque HttpOnly, SameSite=Strict cookie. Sessions expire after seven days. The first version does not have employee roles, invitations or password recovery.
 
@@ -85,9 +86,9 @@ Login uses username/password credentials, salted scrypt password hashes and an o
 | Context compression | Enabled with a configured trigger cap of 24,000 tokens; the six most recent messages are protected by the configuration. Compression is lossy and is not a hard per-request token limit. |
 | Configured Qwen context window | 40,960 tokens. This is capacity, not a fixed charge or amount of work for every message. |
 | Smaller-context compatibility | A reproducible local patch admits only the explicitly configured tool-free API Operator with the selected model and an 8,192–40,960-token window. Other cases retain the upstream minimum. |
-| Structured long-term business memory | Account-scoped categorized Markdown files, explicit owner saves, SQLite FTS5 retrieval and a Memory inspector. See `docs/memory-and-sqlite.md`. |
-| Built-in persistent personal memory | Disabled in the shared runtime profile. |
-| RAG | Active over categorized memory files using SQLite FTS5. Saved transcripts and CSV files are not automatically indexed as durable memory. |
+| Long-term memory | An append-only per-account store that Mula owns. The Operator saves with a `remember` tool, the owner with `/remember` or the Memory page; every save goes through one pipeline (validation, sensitive-data filter, duplicate check, audit). A summary (`MEMORY.md`) is regenerated from the store and supplied on every turn with up to three keyword-matched facts. See `docs/memory-and-sqlite.md`. |
+| Built-in persistent personal memory | Off in the root profile and in every account profile; the backend refuses to start otherwise. |
+| RAG | SQLite FTS5 over the memory store's current facts. Saved transcripts and CSV files are not indexed as durable memory. |
 
 Short replies, same-conversation recall and separation between new runtime conversations have been exercised previously. Full-window quality, compression under a long business workload and production throughput have not been established.
 
@@ -492,7 +493,7 @@ These references document current code behavior and supported runtime machinery.
 
 ## Account memory retrieval
 
-The application-owned memory service lives in `server/src/features/memory/`. It keeps per-account Markdown files and a rebuildable SQLite FTS5 index. The Operator route retrieves memory before execution; `agent.py` appends current memory to the request's system instructions. This does not enable upstream personal memory or any runtime tools. `src/features/memory/` implements the editor, tree, search and last-retrieval inspector. See [memory and SQLite](../memory-and-sqlite.md) for bounds, explicit save commands and deletion/history semantics.
+The application-owned memory service lives in `server/src/features/memory/`: an append-only SQLite store per account (`store.py`), the save pipeline (`pipeline.py`, `filters.py`), the regenerated summary (`summary.py`) and retrieval (`service.py`). The Operator route puts the summary and the matched facts in the request's system instructions, and the Operator saves during the turn through the `remember` MCP tool (`features/agents/tools.py`), scoped by its ticket. This does not enable upstream personal memory. `src/features/memory/` implements the timeline, corrections, history, search and last-retrieval inspector. See [memory and SQLite](../memory-and-sqlite.md).
 
 ## Speech-to-text input
 

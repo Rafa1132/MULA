@@ -1,11 +1,15 @@
 import asyncio
 import json
+from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 from uuid import uuid4
 
 import httpx
 from fastapi.testclient import TestClient
 
+from src.common import profiles
 from src.features.operator.runtime import stream_chat
 from src.main import app
 from tests.support.account_fixture import AccountFixture
@@ -88,10 +92,20 @@ class GatedStream(httpx.AsyncByteStream):
 
 
 class AsyncStreamingTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # A throwaway runtime home for the account profile the turn is routed to.
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        for target, value in (("RUNTIME_HOME", Path(temporary.name)), ("KEY_SEED", "test-profile-seed")):
+            patcher = patch.object(profiles, target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.account = {'id': str(uuid4())}
+
     async def test_first_token_arrives_before_completion_and_close_reaches_upstream(self):
         upstream = GatedStream()
         with gateway(lambda request: httpx.Response(200, stream=upstream, headers={'content-type': 'text/event-stream'})):
-            stream = stream_chat('Instructions', 'Hello', uuid4())
+            stream = stream_chat('Instructions', 'Hello', uuid4(), account_id=self.account['id'])
             first = await asyncio.wait_for(anext(stream), timeout=1)
             self.assertEqual(first, {'type': 'token', 'content': 'Halo 👋'})
             self.assertFalse(upstream.release.is_set())
@@ -101,7 +115,7 @@ class AsyncStreamingTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancellation_while_waiting_closes_upstream(self):
         upstream = GatedStream()
         with gateway(lambda request: httpx.Response(200, stream=upstream, headers={'content-type': 'text/event-stream'})):
-            stream = stream_chat('Instructions', 'Hello', uuid4())
+            stream = stream_chat('Instructions', 'Hello', uuid4(), account_id=self.account['id'])
             await anext(stream)
             pending = asyncio.create_task(anext(stream))
             await asyncio.sleep(0)
