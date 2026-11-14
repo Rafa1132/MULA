@@ -1,0 +1,18 @@
+# Mula api: the FastAPI backend and the Hermes agent runtime in one container,
+# because they share the Hermes home, its profiles and the gateway control socket.
+FROM python:3.12-slim-bookworm
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bash ca-certificates curl git xz-utils \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY server/requirements.txt server/requirements.txt
+RUN pip install --no-cache-dir -r server/requirements.txt
+COPY server/ server/
+# Install the pinned Hermes revision at build time, at the same paths ./run.sh uses:
+# source in .runtime/hermes-source (stays in the image), tools in .runtime/hermes.
+# On first start the empty mula-hermes volume is seeded from this image's .runtime/hermes.
+RUN bash server/scripts/install_hermes.sh
+COPY docker/api-start.sh /usr/local/bin/mula-api-start
+RUN chmod +x /usr/local/bin/mula-api-start
+EXPOSE 8000
+CMD ["mula-api-start"]

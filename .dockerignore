@@ -1,0 +1,17 @@
+# Keep secrets, local state and machine-specific builds out of every image.
+.git
+.runtime
+**/.env
+**/.env.*
+!**/.env.example
+.env.postgres
+node_modules
+.next
+server/.venv
+**/__pycache__
+**/*.py[cod]
+*.tsbuildinfo
+output
+docs/storyboards
+**/.DS_Store
+tokopedia_session
