@@ -32,6 +32,11 @@ KEY_SEED = MULA_PROFILE_KEY_SEED
 # Secrets every account profile needs from the root profile's .env: a named profile
 # reads only its own file, never the root's or the process environment.
 MIRRORED_SECRETS = ("MULA_TOOLS_KEY", "ANTHROPIC_API_KEY")
+# The model address every profile config reads as ${MULA_MODEL_BASE_URL}. Not a secret, but a
+# profile only sees its own .env, so it is copied too. Order: backend environment, then the
+# root profile's .env, then local Ollama, so a missing value never leaves a literal placeholder.
+MODEL_BASE_URL_NAME = "MULA_MODEL_BASE_URL"
+DEFAULT_MODEL_BASE_URL = "http://127.0.0.1:11434/v1"
 # The runtime's own grammar for profile ids (hermes_constants.PROFILE_ID_RE at the pinned revision).
 PROFILE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 NO_SKILLS_MARKER = ".no-bundled-skills"
@@ -109,7 +114,16 @@ def profile_env(account_id: str) -> str:
     for name in MIRRORED_SECRETS:
         if root.get(name):
             lines.append(f"{name}={root[name]}")
+    lines.append(f"{MODEL_BASE_URL_NAME}={model_base_url(root)}")
     return "\n".join(lines) + "\n"
+
+
+def model_base_url(root: dict[str, str] | None = None) -> str:
+    """The model address for every profile; see MODEL_BASE_URL_NAME."""
+    if root is None:
+        root = env_values(RUNTIME_HOME / ".env")
+    value = os.getenv(MODEL_BASE_URL_NAME, "").strip() or root.get(MODEL_BASE_URL_NAME, "").strip()
+    return value or DEFAULT_MODEL_BASE_URL
 
 
 def profile_config() -> str:

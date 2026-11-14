@@ -55,6 +55,8 @@ def main() -> None:
     # Each account's runtime profile key is derived from this seed (src/common/profiles.py).
     profile_seed = secrets.token_urlsafe(32)
     database_url, compose_env = database_settings()
+    # The model address the Hermes config reads as ${MULA_MODEL_BASE_URL}; local Ollama by default.
+    model_url = os.getenv("MULA_MODEL_BASE_URL", "").strip() or "http://127.0.0.1:11434/v1"
     write_private(backend_env, (
         "HERMES_BASE_URL=http://127.0.0.1:8642\n"
         f"HERMES_API_KEY={key}\n"
@@ -72,6 +74,7 @@ def main() -> None:
         "API_SERVER_HOST=127.0.0.1\n"
         "API_SERVER_PORT=8642\n"
         f"MULA_TOOLS_KEY={tools_key}\n"
+        f"MULA_MODEL_BASE_URL={model_url}\n"
     ))
     write_private(config, (BACKEND / "hermes" / "config.yaml").read_text(encoding="utf-8"))
     print("Created the private Hermes profile and server/.env.hermes; no credentials were printed.")

@@ -23,7 +23,7 @@ The installer downloads the pinned upstream checkout into `.runtime/hermes-sourc
 
 ### Model compatibility
 
-The supplied profile selects `huihui_ai/qwen3-abliterated:latest` through `http://127.0.0.1:11434/v1` with the observed 40,960-token window.
+The supplied profile selects `huihui_ai/qwen3-abliterated:latest` through `MULA_MODEL_BASE_URL` (default `http://127.0.0.1:11434/v1`) with the observed 40,960-token window.
 
 Upstream Hermes enforces a 64,000-token startup minimum. `scripts/apply_hermes_profile.py` applies a small, reproducible exception against the pinned source revision. It allows only the explicitly enabled `agent.mula_compact_operator` API-server profile, the selected Qwen model, windows between 8,192 and 40,960, and at most five tools, all of them Mula's own (`mcp__mula__*`). The same exception covers the check upstream repeats before each request that offers tools (`_ollama_context_limit_error`). Terminal, file, web or any other server's tools, other models and other platforms all keep the upstream check. This is a local modification to Hermes, not an upstream configuration option.
 

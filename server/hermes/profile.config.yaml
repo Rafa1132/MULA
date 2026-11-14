@@ -4,7 +4,9 @@
 model:
   default: huihui_ai/qwen3-abliterated:latest
   provider: custom
-  base_url: http://127.0.0.1:11434/v1
+  # Set by MULA_MODEL_BASE_URL (default: local Ollama at http://127.0.0.1:11434/v1).
+  # Docker uses http://host.docker.internal:11434/v1; OpenRouter later.
+  base_url: ${MULA_MODEL_BASE_URL}
   # Actual Ollama window; the scoped Mula patch allows it while the only tools are Mula's own.
   context_length: 40960
 
