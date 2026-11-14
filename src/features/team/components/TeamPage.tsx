@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AccountForm } from "@/features/auth";
-import { Icon, MulaLogo, Sidebar } from "@/common/components";
+import { Icon, Sidebar } from "@/common/components";
 import { ForecastPanel } from "@/features/forecasting";
 import { Agent, Brain, Delegation, resetLayout, teamRequest } from "../services/team";
 import type { Layout } from "../services/map";
@@ -185,7 +185,7 @@ export default function TeamPage() {
   return <div className="team-shell">
     <Sidebar active="team" username={account.username} onSignOut={signOut} busy={signingOut} />
     <main className="team-main">
-      <header className="topbar"><span className="mobile-brand"><MulaLogo /></span><div className="topbar-actions"><a className="text-button" href="/memory">Memory</a><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={signingOut}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><span className="mobile-brand"><span className="brand-word">WORKSPACE</span></span><div className="topbar-actions"><a className="text-button" href="/memory">Memory</a><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={signingOut}><Icon name="exit" /></button></div></header>
       <div className="team-content">
         {error && <p className="error" role="alert">{error}</p>}
         <div className="agents-intro"><div><h1>My agents</h1><p>Meet the agents working for your business. <span className="map-hint">Drag a card to arrange your map, or focus it and use the arrow keys.</span></p></div><button type="button" className="map-reset" onClick={reset} disabled={resetting}>{resetting && "Resetting…"}{!resetting && "Reset layout"}</button></div>

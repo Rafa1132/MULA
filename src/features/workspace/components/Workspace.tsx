@@ -5,7 +5,6 @@ import type { FormEvent, KeyboardEvent } from "react";
 import { AccountForm } from "@/features/auth";
 import Markdown from "react-markdown";
 import { Icon, Sidebar } from "@/common/components";
-import { MulaLogo } from "@/common/components";
 import { OperatorCore, CsvAttachment } from "@/features/operator";
 import type { AgentRequest, CsvFile } from "@/features/operator";
 import { SpeechPlayer, useDictation, appendDictation, useLiveConversation } from "@/features/voice";
@@ -462,7 +461,7 @@ export default function Workspace() {
     setStatus("Ready when you are");
   }
 
-  if (loading) return <main className="account-screen"><p role="status"><span className="shimmer">Opening your workspace…</span></p></main>;
+  if (loading) return <main className="account-screen"><p role="status"><span className="shimmer">Opening your chat…</span></p></main>;
   if (accountError) return <main className="account-screen"><div><p role="alert">{accountError}</p><button onClick={() => { setLoading(true); loadAccount().catch((failure: Error) => setAccountError(failure.message)).finally(() => setLoading(false)); }}>Retry</button></div></main>;
   if (!account) return <AccountForm onSignedIn={loadAccount} />;
 
@@ -505,7 +504,7 @@ export default function Workspace() {
 
       <main className={mainClass}>
         <header className="topbar">
-          <a className="mobile-brand" href="/" aria-label="Mula home"><MulaLogo /></a>
+          <a className="mobile-brand" href="/"><span className="brand-word">WORKSPACE</span></a>
           <div className="topbar-actions"><a className="mobile-team-link" href="/agents">My agents</a><a className="mobile-team-link" href="/memory">Memory</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div>
         </header>
 

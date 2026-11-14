@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AccountForm } from "@/features/auth";
-import { Icon, Sidebar, MulaLogo } from "@/common/components";
+import { Icon, Sidebar } from "@/common/components";
 import "../memory.css";
 
 type Target = "business" | "owner";
@@ -166,7 +166,7 @@ export default function MemoryPage() {
   return <div className="memory-shell">
     <Sidebar active="memory" username={account.username} onSignOut={signOut} busy={busy} />
     <main className="memory-main">
-      <header className="topbar"><span className="mobile-brand"><MulaLogo /></span><div className="topbar-actions"><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><span className="mobile-brand"><span className="brand-word">WORKSPACE</span></span><div className="topbar-actions"><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
       <div className="memory-heading"><div className="eyebrow">WHAT MULA REMEMBERS</div><h1>Your memory, one fact at a time.</h1><p>The Operator saves facts you state or confirm, and you can add, correct or retire any of them. Nothing is ever rewritten: a correction keeps the old version in the history.</p><code>{data?.relative_root}/</code></div>
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <p className="memory-notice" role="status">{notice}</p>}

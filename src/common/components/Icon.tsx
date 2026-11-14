@@ -1,4 +1,4 @@
-type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options";
+type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app";
 
 const paths: Record<IconName, string> = {
   microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
@@ -16,6 +16,12 @@ const paths: Record<IconName, string> = {
   plus: "M12 5v14M5 12h14",
   live: "M4 11v2M8 8v8M12 4v16M16 8v8M20 11v2",
   options: "M4 7h9M17 7h3M15 4v6M4 17h3M11 17h9M9 14v6",
+  // An open book, for the Catalogue of agents and apps.
+  catalogue: "M2 5h6a4 4 0 0 1 4 4v11a3 3 0 0 0-3-3H2ZM22 5h-6a4 4 0 0 0-4 4v11a3 3 0 0 1 3-3h7Z",
+  // A person, for "Agent" badges.
+  agent: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0",
+  // Four tiles, for "App" badges.
+  app: "M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z",
 };
 
 export default function Icon({ name }: { name: IconName }) {

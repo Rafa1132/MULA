@@ -1,0 +1,84 @@
+/* Catalogue prototype: a search field over picture-first cards, in an Agents
+   grid and an Apps grid. The artwork carries the colour; the chrome stays quiet.
+   Agent and app cards differ in ways that do not depend on colour: the frame
+   (a tall portrait for agents, a wide landscape tile for apps), the section
+   heading, and the badge's shape, text and icon. */
+.catalogue-shell { display: grid; grid-template-columns: 232px minmax(0,1fr); min-height: 100dvh; background: var(--background); }
+.catalogue-shell > .sidebar { position: sticky; top: 0; height: 100dvh; }
+.catalogue-main { min-width: 0; max-width: 1180px; padding: 0 32px 56px; }
+.catalogue-main > .topbar { padding-inline: 0; }
+.catalogue-heading { margin: 26px 0 22px; }
+.catalogue-heading h1 { margin: 12px 0; font-size: 34px; }
+.catalogue-heading p { max-width: 650px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+
+.catalogue-search { margin-bottom: 30px; }
+.catalogue-search label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
+.catalogue-search-field { display: flex; align-items: center; max-width: 560px; padding: 4px 16px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: var(--radius-pill); background: var(--surface); }
+.catalogue-search-field:focus-within { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.catalogue-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); padding: 10px 0; font-size: 14px; }
+/* The field's ring shows focus, so the input's own outline would draw a second one. */
+.catalogue-search input:focus-visible { outline: 0; }
+.catalogue-count { margin: 8px 0 0 16px; color: var(--muted); font-size: 11px; }
+.catalogue-notice { margin: -14px 0 24px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 12px; max-width: 560px; }
+
+.catalogue-section { margin-bottom: 40px; }
+.catalogue-section h2 { margin: 0 0 16px; font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: .02em; }
+.catalogue-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 34px 22px; }
+/* Portrait agents can be narrower than landscape apps and still read well. */
+.catalogue-grid-agent { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.catalogue-grid-app { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.catalogue-card { min-width: 0; }
+.catalogue-card article { display: flex; flex-direction: column; gap: 12px; }
+
+/* The picture is the card: no box around it, just a rounded frame with depth. */
+.catalogue-media { position: relative; }
+.catalogue-frame { position: relative; overflow: hidden; width: 100%; background: var(--raised); box-shadow: var(--shadow); outline: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); outline-offset: -1px; }
+.catalogue-frame-agent { aspect-ratio: 4 / 5; border-radius: 22px; }
+.catalogue-frame-app { aspect-ratio: 4 / 3; border-radius: 12px; }
+.catalogue-frame img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease); }
+.catalogue-card:hover .catalogue-frame img { transform: scale(1.03); }
+.catalogue-card:hover .catalogue-frame { box-shadow: var(--shadow-hover); }
+.catalogue-fallback { display: grid; place-items: center; width: 100%; height: 100%; color: var(--muted); font-size: 48px; font-weight: 500; }
+
+/* Status sits on the picture as a solid chip, so it stays readable on any artwork. */
+.catalogue-status { position: absolute; top: 12px; left: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--ink); font-size: 11px; font-weight: 500; box-shadow: 0 1px 3px rgb(0 0 0 / .12); backdrop-filter: blur(6px); }
+/* The dot repeats the word; the word alone carries the meaning. */
+.catalogue-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; }
+.catalogue-status[data-status="available"]::before { background: var(--accent); border-color: var(--accent); }
+.catalogue-status[data-status="added"]::before { background: currentColor; }
+.catalogue-status[data-status="coming_soon"] { color: var(--muted); }
+
+.catalogue-caption { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-inline: 2px; }
+.catalogue-text { min-width: 0; }
+.catalogue-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.catalogue-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.catalogue-type { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; font-size: 10.5px; font-weight: 500; line-height: 1.5; }
+.catalogue-type svg { width: 12px; height: 12px; }
+.catalogue-type-agent { border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-text); }
+.catalogue-type-app { border-radius: 4px; background: var(--raised); color: var(--muted); }
+/* One sentence, cut off after two lines; the full text is in the title tooltip. */
+.catalogue-description { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+
+.catalogue-action { flex-shrink: 0; display: inline-block; padding: 6px 14px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 500; text-decoration: none; }
+.catalogue-action:hover:not(:disabled) { border-color: var(--muted); }
+.catalogue-action-primary { border-color: var(--ink); background: var(--ink); color: var(--background); }
+.catalogue-action-primary:hover:not(:disabled) { opacity: .85; }
+
+.catalogue-empty { max-width: 560px; padding: 28px; border: 1px dashed var(--line); border-radius: 20px; }
+.catalogue-empty h2 { margin: 0 0 6px; font-size: 17px; overflow-wrap: anywhere; }
+.catalogue-empty p { margin: 0 0 16px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+
+@media (prefers-reduced-motion: reduce) { .catalogue-frame img { transition: none; } .catalogue-card:hover .catalogue-frame img { transform: none; } }
+@media (max-width: 1050px) { .catalogue-shell { grid-template-columns: 196px minmax(0,1fr); } .catalogue-main { padding-inline: 22px; } }
+@media (max-width: 650px) {
+  .catalogue-shell { display: block; }
+  .catalogue-shell > .sidebar { display: none; }
+  .catalogue-main { padding: 0 16px 32px; }
+  .catalogue-heading { margin-top: 15px; }
+  .catalogue-heading h1 { font-size: 28px; }
+  .catalogue-grid { gap: 26px 14px; }
+  .catalogue-grid-agent { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalogue-grid-app { grid-template-columns: minmax(0, 1fr); }
+  .catalogue-caption { flex-direction: column; gap: 8px; }
+  .catalogue-grid-app .catalogue-caption { flex-direction: row; }
+}

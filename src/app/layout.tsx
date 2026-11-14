@@ -6,7 +6,7 @@ import "@/common/styles/globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Mula · Your workspace",
+  title: "Mula",
   description: "A little clarity for your everyday operations.",
 };
 

@@ -90,7 +90,9 @@ button:active:not(:disabled) { transform: scale(.97); transition-duration: .08s;
 /* Shell: a quiet sidebar and the main panel. */
 .app-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); height: 100dvh; min-height: 620px; background: var(--background); }
 .sidebar { padding: 36px 20px 24px; display: flex; flex-direction: column; background: var(--background); min-width: 0; }
-.brand { display: block; width: 104px; margin: 0 12px 40px; }
+.brand { display: block; margin: 0 12px 40px; text-decoration: none; }
+/* The top-left wordmark, in place of the logo image (sidebar and phone top bar). */
+.brand-word { display: block; color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: .14em; line-height: 1; }
 .mula-logo { display: block; width: 100%; height: auto; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 13px; text-decoration: none; width: 100%; }
@@ -105,7 +107,7 @@ button:active:not(:disabled) { transform: scale(.97); transition-duration: .08s;
 .main-panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .topbar { display: none; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; min-height: 60px; }
 .topbar-actions { display: flex; align-items: center; gap: 4px; }
-.mobile-brand { width: 84px; }
+.mobile-brand { text-decoration: none; }
 .mobile-team-link { color: var(--muted); font-size: 12px; text-decoration: none; padding: 8px; }
 .mobile-team-link:hover { color: var(--ink); }
 

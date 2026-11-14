@@ -35,8 +35,9 @@ LARAS/
 │       ├── voice/               # Speech playback and tests
 │       ├── memory/              # Editable categorized notes and retrieval inspector
 │       ├── team/                # Available agents, account settings and browser checks
+│       ├── catalogue/           # Prototype catalogue of agents and apps (mock data)
 │       ├── forecasting/         # Forecast inputs, chart, report and CSV export
-│       └── workspace/           # Workspace screen
+│       └── workspace/           # Chat screen
 ├── server/                     # Separate Python service
 │   ├── src/
 │   │   ├── main.py
