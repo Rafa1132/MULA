@@ -16,7 +16,7 @@ The main screen at `/`. It combines the sidebar, the Operator core, the saved co
   - The microphone button runs `useDictation`
   - The live-conversation button (labelled **Start live conversation** / **End live conversation**) runs `useLiveConversation`
   - Playback stops when the tab is hidden
-- **Layout:** the Operator core, one welcome line and the status line above the conversation; an **Expand chat** control hides the core. An empty conversation offers three suggestion chips. The sidebar is the logo, the navigation (Workspace, My agents, Memory, plus Reports and My website shown as "Soon") and the account. On phones the sidebar gives way to a small top bar.
+- **Layout:** the Operator core, one welcome line and the status line above the conversation; an **Expand chat** control hides the core. An empty conversation offers three suggestion chips. The sidebar is the logo, the navigation (Chat, Catalogue, My apps, My agents, Memory) and the account. On phones the sidebar gives way to a small top bar.
 
 ## Files
 

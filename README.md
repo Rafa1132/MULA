@@ -36,6 +36,7 @@ LARAS/
 │       ├── memory/              # Editable categorized notes and retrieval inspector
 │       ├── team/                # Available agents, account settings and browser checks
 │       ├── catalogue/           # Prototype catalogue of agents and apps (mock data)
+│       ├── apps/                # Prototype My apps: added apps, their connection and actions
 │       ├── forecasting/         # Forecast inputs, chart, report and CSV export
 │       └── workspace/           # Chat screen
 ├── server/                     # Separate Python service

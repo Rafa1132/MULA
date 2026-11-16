@@ -1,8 +1,9 @@
 import type { CatalogueEntry } from "../data.ts";
+import { publisherFor } from "./publishers.ts";
 
-/** The text a search looks through: name, description and tags. */
+/** The text a search looks through: name, description, tags and publisher name. */
 function searchableText(entry: CatalogueEntry) {
-  return [entry.name, entry.description, ...entry.tags].join(" ").toLocaleLowerCase();
+  return [entry.name, entry.description, ...entry.tags, publisherFor(entry).name].join(" ").toLocaleLowerCase();
 }
 
 /**
@@ -11,12 +12,14 @@ function searchableText(entry: CatalogueEntry) {
  * "tokopedia stock" finds the store sync app even though no single field holds both.
  */
 export function filterEntries(entries: CatalogueEntry[], query: string) {
+  return entries.filter((entry) => matchesQuery(entry, query));
+}
+
+/** Whether `entry` holds every word of `query` in its name, description, tags or publisher. Blank matches. */
+export function matchesQuery(entry: CatalogueEntry, query: string) {
   const words = query.toLocaleLowerCase().split(/\s+/).filter((word) => word.length > 0);
-  if (words.length === 0) return entries;
-  return entries.filter((entry) => {
-    const text = searchableText(entry);
-    return words.every((word) => text.includes(word));
-  });
+  const text = searchableText(entry);
+  return words.every((word) => text.includes(word));
 }
 
 /** "1 result" or "3 results", for the live count under the search field. */

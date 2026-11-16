@@ -1,0 +1,10 @@
+/* The search field shared by Catalogue and My apps (components/SearchField.tsx). */
+.catalogue-search { margin-bottom: 30px; }
+.catalogue-search label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
+.catalogue-search-field { display: flex; align-items: center; max-width: 560px; padding: 4px 16px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: var(--radius-pill); background: var(--surface); }
+.catalogue-search-field:focus-within { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.catalogue-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); padding: 10px 0; font-size: 14px; }
+/* The field's ring shows focus, so the input's own outline would draw a second one. */
+.catalogue-search input:focus-visible { outline: 0; }
+/* Plain --muted is 4.42:1 on the page background; a little ink brings it above 4.5:1. */
+.catalogue-count { margin: 8px 0 0 16px; color: color-mix(in srgb, var(--muted) 82%, var(--ink)); font-size: 11px; }

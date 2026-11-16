@@ -1,0 +1,67 @@
+/* My apps prototype: a summary, a search field and a grid of added apps.
+   Connection states carry an icon and words, never colour alone. Small grey text
+   uses --apps-quiet: plain --muted measures 4.42:1 on the page background, just
+   under 4.5:1, so a little ink is mixed in. */
+.apps-shell { --apps-quiet: color-mix(in srgb, var(--muted) 82%, var(--ink)); --apps-warn: color-mix(in srgb, var(--accent-text) 72%, var(--ink)); display: grid; grid-template-columns: 232px minmax(0,1fr); min-height: 100dvh; background: var(--background); }
+.apps-shell > .sidebar { position: sticky; top: 0; height: 100dvh; }
+.apps-main { min-width: 0; max-width: 1180px; padding: 0 32px 56px; }
+.apps-main > .topbar { padding-inline: 0; }
+.apps-heading { margin: 26px 0 22px; }
+.apps-heading h1 { margin: 12px 0; font-size: 34px; }
+.apps-heading h1:focus { outline: 0; }
+.apps-heading p { max-width: 650px; color: var(--apps-quiet); font-size: 12px; line-height: 1.8; }
+.apps-notice { margin: 0 0 22px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 12px; max-width: 560px; }
+
+.apps-summary { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 24px; padding: 0; }
+.apps-summary-item { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1px solid var(--edge); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--shadow); color: var(--ink); font-size: 13px; font-weight: 500; }
+.apps-summary-item svg { width: 18px; height: 18px; }
+.apps-summary-attention { background: var(--accent-soft); color: var(--apps-warn); }
+
+.apps-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 22px; }
+.apps-card { min-width: 0; }
+.apps-card article { display: flex; flex-direction: column; height: 100%; padding: 12px; border: 1px solid var(--edge); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+/* A problem card gets a visible edge as well as its "Needs attention" line. */
+.apps-card[data-connection="needs_attention"] article { border: 1px solid var(--accent); }
+.apps-card-body { display: flex; flex-direction: column; flex: 1; gap: 6px; padding: 14px 4px 2px; min-width: 0; }
+.apps-card h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.apps-description { margin: 0; color: var(--apps-quiet); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apps-connection { display: inline-flex; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.apps-connection svg { width: 16px; height: 16px; }
+.apps-connection[data-connection="needs_attention"] { color: var(--apps-warn); }
+.apps-connection[data-connection="not_connected"] { color: var(--apps-quiet); }
+.apps-attention-note { margin: 0; color: var(--ink); font-size: 12px; line-height: 1.5; }
+.apps-meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 8px 0 0; font-size: 12px; }
+.apps-meta div { display: contents; }
+.apps-meta dt { color: var(--apps-quiet); }
+.apps-meta dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.apps-plugins { margin: 10px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); }
+.apps-plugins h3 { margin: 0 0 4px; color: var(--apps-quiet); font-size: 12px; font-weight: 500; }
+.apps-plugins ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.apps-plugins li { display: flex; align-items: center; gap: 6px; color: var(--ink); font-size: 12.5px; }
+.apps-plugins svg { width: 14px; height: 14px; color: var(--apps-quiet); }
+
+.apps-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 14px; }
+.apps-button { display: inline-block; padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 500; text-decoration: none; }
+.apps-button:hover:not(:disabled) { border-color: var(--muted); }
+.apps-button-primary { border-color: var(--ink); background: var(--ink); color: var(--background); }
+.apps-button-primary:hover:not(:disabled) { opacity: .85; }
+.apps-button-quiet { margin-left: auto; border-color: transparent; background: transparent; color: var(--apps-quiet); }
+.apps-button-quiet:hover:not(:disabled) { color: var(--ink); border-color: var(--line); }
+.apps-button-danger { border-color: var(--apps-warn); background: var(--apps-warn); color: var(--background); }
+.apps-confirm { margin-top: auto; padding-top: 14px; }
+.apps-confirm p { margin: 0; padding: 10px 12px 0; border-top: 1px solid var(--line); font-size: 12.5px; font-weight: 500; }
+.apps-confirm .apps-actions { margin-top: 0; padding-top: 10px; }
+
+.apps-empty { max-width: 560px; padding: 28px; border: 1px dashed var(--line); border-radius: 20px; }
+.apps-empty h2 { margin: 0 0 6px; font-size: 17px; overflow-wrap: anywhere; }
+.apps-empty p { margin: 0 0 16px; color: var(--apps-quiet); font-size: 12.5px; line-height: 1.7; }
+
+@media (max-width: 1050px) { .apps-shell { grid-template-columns: 196px minmax(0,1fr); } .apps-main { padding-inline: 22px; } }
+@media (max-width: 650px) {
+  .apps-shell { display: block; }
+  .apps-shell > .sidebar { display: none; }
+  .apps-main { padding: 0 16px 32px; }
+  .apps-heading { margin-top: 15px; }
+  .apps-heading h1 { font-size: 28px; }
+  .apps-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}

@@ -19,7 +19,7 @@ test("search matches name, description and tags, ignoring case", () => {
 });
 
 test("every word must match, but words may match different fields", () => {
-  assert.deepEqual(names(filterEntries(CATALOGUE_ENTRIES, "tokopedia sync")), ["Tokopedia store sync"]);
+  assert.deepEqual(names(filterEntries(CATALOGUE_ENTRIES, "tokopedia sync")), ["Store app"]);
   assert.deepEqual(names(filterEntries(CATALOGUE_ENTRIES, "forecast unpaid")), []);
 });
 

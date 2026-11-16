@@ -28,12 +28,19 @@ try {
   assert.deepEqual(labels.slice(0, 2), ["Chat", "Catalogue"]);
   assert.equal(await nav.getByRole("link", { name: "Catalogue" }).getAttribute("aria-current"), "page");
 
-  // Cards: seven entries, each with a type badge and a status.
+  // Cards: nine entries (the two plugins never get cards), each with a type badge and a status.
   const cards = page.locator(".catalogue-card");
-  assert.equal(await cards.count(), 7);
+  assert.equal(await cards.count(), 9);
+  assert.equal(await page.getByRole("article", { name: "Store monitor" }).count(), 0);
   const operator = page.getByRole("article", { name: "Operator" });
   await operator.getByText("Agent", { exact: true }).waitFor();
   await operator.getByText("Added", { exact: true }).waitFor();
+  // Publisher line: plain text "by Mula" with a 16 px avatar, on every card.
+  assert.equal(await page.locator(".catalogue-publisher", { hasText: "by Mula" }).count(), 9);
+  assert.equal(await operator.locator(".catalogue-publisher a").count(), 0);
+  const avatar = await operator.locator(".catalogue-publisher img").boundingBox();
+  assert.equal(Math.round(avatar.width), 16);
+  assert.equal(Math.round(avatar.height), 16);
   assert.equal(await operator.getByRole("link", { name: "Open Operator" }).getAttribute("href"), "/");
   assert.equal(await page.getByRole("img", { name: "Portrait of the Operator agent" }).count(), 1);
   assert.ok(await page.getByRole("button", { name: "Add Store (coming soon)" }).isDisabled());
@@ -48,12 +55,12 @@ try {
   assert.ok(agentFrame.height > operatorCard.height * 0.7, "the picture takes most of the card");
   // Each type has its own labelled section.
   assert.equal(await page.getByRole("region", { name: "Agents" }).locator(".catalogue-card").count(), 3);
-  assert.equal(await page.getByRole("region", { name: "Apps" }).locator(".catalogue-card").count(), 4);
+  assert.equal(await page.getByRole("region", { name: "Apps" }).locator(".catalogue-card").count(), 6);
 
   // The failed image shows the initial tile.
   const invoice = page.getByRole("article", { name: "Invoice maker" });
   await invoice.locator(".catalogue-fallback", { hasText: "I" }).waitFor();
-  assert.equal(await invoice.locator("img").count(), 0);
+  assert.equal(await invoice.locator(".catalogue-frame img").count(), 0);
   await page.screenshot({ path: `${screenshots}/catalogue-desktop.png`, fullPage: true });
 
   // Search with the keyboard: name, description and tag matches, live count.
@@ -62,27 +69,40 @@ try {
   await search.focus();
   await page.keyboard.type("STOCK");
   await page.getByRole("status").filter({ hasText: "3 results" }).waitFor();
-  assert.deepEqual(await page.locator(".catalogue-card h3").allInnerTexts(), ["Store", "Tokopedia store sync", "Stock sheet"]);
+  assert.deepEqual(await page.locator(".catalogue-card h3").allInnerTexts(), ["Store", "Store app", "Stock sheet"]);
   // A section with no matches disappears.
   await search.fill("invoice");
   await page.getByRole("status").filter({ hasText: "1 result" }).waitFor();
   assert.equal(await page.getByRole("region", { name: "Agents" }).count(), 0);
   await page.keyboard.press("Escape");
-  await page.getByRole("status").filter({ hasText: "7 results" }).waitFor();
+  await page.getByRole("status").filter({ hasText: "9 results" }).waitFor();
+
+  // The publisher name is searchable.
+  await search.fill("mula");
+  await page.getByRole("status").filter({ hasText: "9 results" }).waitFor();
+
+  // A plugin match shows its parent card with a hint, never the plugin itself.
+  await search.fill("alerts");
+  await page.getByRole("status").filter({ hasText: "1 result" }).waitFor();
+  assert.deepEqual(await page.locator(".catalogue-card h3").allInnerTexts(), ["Store app"]);
+  await page.getByRole("article", { name: "Store app" }).getByText("Includes Store monitor").waitFor();
+  await search.fill("orders");
+  await page.getByRole("status").filter({ hasText: "2 results" }).waitFor();
+  assert.equal(await page.locator(".catalogue-hint").innerText(), "Includes Store monitor");
 
   // Empty state, then Clear search puts everything back and returns focus to the field.
   await search.fill("submarine");
   await page.getByRole("heading", { name: "Nothing matches “submarine”" }).waitFor();
   await page.getByRole("button", { name: "Clear search" }).click();
-  assert.equal(await cards.count(), 7);
+  assert.equal(await cards.count(), 9);
   assert.equal(await page.evaluate(() => document.activeElement?.id), "catalogue-search");
 
-  // Add is local to this visit; an added placeholder app has no page and says so.
-  await page.getByRole("button", { name: "Add Tokopedia store sync" }).click();
-  const sync = page.getByRole("article", { name: "Tokopedia store sync" });
+  // Adding an app puts it in My apps, and its Open button then goes there.
+  await page.getByRole("button", { name: "Add Store app" }).click();
+  const sync = page.getByRole("article", { name: "Store app" });
   await sync.getByText("Added", { exact: true }).waitFor();
-  await sync.getByRole("button", { name: "Open Tokopedia store sync" }).click();
-  await page.getByText("Tokopedia store sync is a placeholder, so it has no page yet.").waitFor();
+  await page.getByText("Store app added. Find it in My apps.").waitFor();
+  assert.equal(await sync.getByRole("link", { name: "Open Store app" }).getAttribute("href"), "/apps");
   assert.deepEqual(errors, []);
 
   // Phone width: no sideways scroll, the top bar replaces the sidebar.

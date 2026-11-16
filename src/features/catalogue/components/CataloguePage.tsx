@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccountForm } from "@/features/auth";
 import { Icon, Sidebar } from "@/common/components";
+import { addApp, useAddedApps } from "../../apps/services/addedApps.ts";
 import { CATALOGUE_ENTRIES } from "../data.ts";
 import type { CatalogueEntry, CatalogueStatus, CatalogueType } from "../data.ts";
-import { filterEntries, resultCount } from "../services/search.ts";
+import { includesHint, searchCatalogue } from "../services/plugins.ts";
+import { resultCount } from "../services/search.ts";
 import CatalogueCard from "./CatalogueCard";
+import SearchField from "./SearchField";
 import "../catalogue.css";
 
 const SECTIONS: { type: CatalogueType; title: string }[] = [{ type: "agent", title: "Agents" }, { type: "app", title: "Apps" }];
@@ -17,6 +20,13 @@ function initialStatuses() {
   return statuses;
 }
 
+/** An entry as the page shows it: added apps come from the shared store and open My apps. */
+function withCurrentStatus(entry: CatalogueEntry, agentStatuses: Record<string, CatalogueStatus>, addedApps: readonly string[]): CatalogueEntry {
+  if (entry.type === "agent") return { ...entry, status: agentStatuses[entry.id] };
+  if (addedApps.includes(entry.id)) return { ...entry, status: "added", href: "/apps" };
+  return entry;
+}
+
 export default function CataloguePage() {
   const [account, setAccount] = useState<{ username: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,8 +34,10 @@ export default function CataloguePage() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
-  // Prototype only: "Add" changes the card for this visit and is not saved.
+  // Prototype only: adding an agent changes its card for this visit and is not saved.
   const [statuses, setStatuses] = useState(initialStatuses);
+  // Added apps are shared with My apps through one store (apps/services/addedApps.ts).
+  const addedApps = useAddedApps();
   const searchField = useRef<HTMLInputElement>(null);
 
   // Only the account check reaches the backend, as on every signed-in page.
@@ -53,12 +65,18 @@ export default function CataloguePage() {
     finally { setBusy(false); }
   }
 
-  const entries = useMemo(() => CATALOGUE_ENTRIES.map((entry) => ({ ...entry, status: statuses[entry.id] })), [statuses]);
-  const matches = filterEntries(entries, query);
+  const entries = useMemo(() => CATALOGUE_ENTRIES.map((entry) => withCurrentStatus(entry, statuses, addedApps)), [statuses, addedApps]);
+  // Plugins never get cards; a plugin that matches brings in its parent instead.
+  const matches = searchCatalogue(entries, query);
 
   function add(entry: CatalogueEntry) {
+    if (entry.type === "app") {
+      addApp(entry.id);
+      setNotice(`${entry.name} added. Find it in My apps.`);
+      return;
+    }
     setStatuses({ ...statuses, [entry.id]: "added" });
-    setNotice(`${entry.name} added for this visit. This prototype does not save it yet.`);
+    setNotice(`${entry.name} added for this visit. This prototype does not save agents yet.`);
   }
 
   function openWithoutPage(entry: CatalogueEntry) {
@@ -87,14 +105,14 @@ export default function CataloguePage() {
     // Agents are portraits and apps are landscape tiles, so each type gets its own
     // grid and rows stay even. A type with no matches is left out.
     results = SECTIONS.map((section) => {
-      const sectionMatches = matches.filter((entry) => entry.type === section.type);
+      const sectionMatches = matches.filter((match) => match.entry.type === section.type);
       if (sectionMatches.length === 0) return null;
       const headingId = `catalogue-section-${section.type}`;
       return (
         <section key={section.type} className="catalogue-section" aria-labelledby={headingId}>
           <h2 id={headingId}>{section.title}</h2>
           <ul className={`catalogue-grid catalogue-grid-${section.type}`}>
-            {sectionMatches.map((entry) => <CatalogueCard key={entry.id} entry={entry} onAdd={add} onOpenWithoutPage={openWithoutPage} />)}
+            {sectionMatches.map((match) => <CatalogueCard key={match.entry.id} entry={match.entry} hint={includesHint(match.matchedPlugins)} onAdd={add} onOpenWithoutPage={openWithoutPage} />)}
           </ul>
         </section>
       );
@@ -108,26 +126,11 @@ export default function CataloguePage() {
       <div className="catalogue-heading">
         <div className="eyebrow">CATALOGUE</div>
         <h1>Agents and apps for your business.</h1>
-        <p>A prototype with sample entries. Adding something here lasts only for this visit and is not saved.</p>
+        <p>A prototype with sample entries. Added apps appear in My apps and are remembered in this browser; added agents last only for this visit.</p>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="catalogue-search">
-        <label htmlFor="catalogue-search">Search the catalogue</label>
-        <div className="catalogue-search-field">
-          <input
-            ref={searchField}
-            id="catalogue-search"
-            type="search"
-            value={query}
-            placeholder="Name, task or tag, such as “stock”"
-            autoComplete="off"
-            aria-describedby="catalogue-count"
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); setQuery(""); } }}
-          />
-        </div>
-        <p id="catalogue-count" className="catalogue-count" role="status">{resultCount(matches.length)}</p>
-      </div>
+      <SearchField id="catalogue-search" label="Search the catalogue" placeholder="Name, task or tag, such as “stock”"
+        query={query} onQueryChange={setQuery} resultText={resultCount(matches.length)} inputRef={searchField} />
       {notice && <p className="catalogue-notice" role="status">{notice}</p>}
       {results}
     </main>

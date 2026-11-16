@@ -1,4 +1,4 @@
-type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app";
+type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified";
 
 const paths: Record<IconName, string> = {
   microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
@@ -22,6 +22,12 @@ const paths: Record<IconName, string> = {
   agent: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21a8 8 0 0 1 16 0",
   // Four tiles, for "App" badges.
   app: "M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z",
+  // App connection states on My apps: a ticked circle, a warning triangle, a broken link.
+  connected: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M8 12l3 3 5-6",
+  attention: "M12 3 2 20h20ZM12 10v4M12 17h.01",
+  // A rosette with a tick, for verified publishers.
+  verified: "M12 2.5l2.3 1.9 3-.3.9 2.9 2.6 1.5-1 2.8 1 2.8-2.6 1.5-.9 2.9-3-.3L12 21.5l-2.3-1.9-3 .3-.9-2.9-2.6-1.5 1-2.8-1-2.8 2.6-1.5.9-2.9 3 .3ZM8.5 12l2.4 2.4 4.6-4.8",
+  unlinked: "M9 15l-1.5 1.5a3.5 3.5 0 0 1-5-5L5 9M15 9l1.5-1.5a3.5 3.5 0 0 1 5 5L19 15M8 4v3M4 8h3M16 20v-3M20 16h-3",
 };
 
 export default function Icon({ name }: { name: IconName }) {

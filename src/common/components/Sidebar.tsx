@@ -1,7 +1,7 @@
 import Icon from "./Icon";
 
 type Props = {
-  active: "workspace" | "catalogue" | "team" | "memory";
+  active: "workspace" | "catalogue" | "apps" | "team" | "memory";
   username: string;
   onSignOut: () => void;
   busy?: boolean;
@@ -13,11 +13,14 @@ export default function Sidebar({ active, username, onSignOut, busy = false }: P
   let memoryClass = "nav-item";
   let catalogueClass = "nav-item";
   let catalogueCurrent: "page" | undefined;
+  let appsClass = "nav-item";
+  let appsCurrent: "page" | undefined;
   let memoryCurrent: "page" | undefined;
   let workspaceCurrent: "page" | undefined;
   let teamCurrent: "page" | undefined;
   if (active === "workspace") { workspaceClass += " active-nav"; workspaceCurrent = "page"; }
   if (active === "catalogue") { catalogueClass += " active-nav"; catalogueCurrent = "page"; }
+  if (active === "apps") { appsClass += " active-nav"; appsCurrent = "page"; }
   if (active === "team") { teamClass += " active-nav"; teamCurrent = "page"; }
   if (active === "memory") { memoryClass += " active-nav"; memoryCurrent = "page"; }
   return (
@@ -26,8 +29,7 @@ export default function Sidebar({ active, username, onSignOut, busy = false }: P
         <nav aria-label="Main navigation">
           <a className={workspaceClass} href="/" aria-current={workspaceCurrent}><Icon name="home" />Chat</a>
           <a className={catalogueClass} href="/catalogue" aria-current={catalogueCurrent}><Icon name="catalogue" />Catalogue</a>
-          <button className="nav-item" disabled title="Reports are coming soon"><Icon name="report" />Reports<span className="soon">Soon</span></button>
-          <button className="nav-item" disabled title="Website builder is coming soon"><Icon name="website" />My website<span className="soon">Soon</span></button>
+          <a className={appsClass} href="/apps" aria-current={appsCurrent}><Icon name="app" />My apps</a>
           <a className={teamClass} href="/agents" aria-current={teamCurrent}><Icon name="team" />My agents</a>
           <a className={memoryClass} href="/memory" aria-current={memoryCurrent}><Icon name="memory" />Memory</a>
         </nav>

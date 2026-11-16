@@ -1,0 +1,9 @@
+/* The framed artwork shared by Catalogue and My apps (components/CatalogueImage.tsx):
+   a 4:5 portrait for agents, a 4:3 tile for apps, and a neutral tile with the initial
+   when the image is missing. */
+.catalogue-frame { position: relative; overflow: hidden; width: 100%; background: var(--raised); box-shadow: var(--shadow); outline: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); outline-offset: -1px; }
+.catalogue-frame-agent { aspect-ratio: 4 / 5; border-radius: 22px; }
+.catalogue-frame-app { aspect-ratio: 4 / 3; border-radius: 12px; }
+.catalogue-frame-screenshot { aspect-ratio: 16 / 10; border-radius: 16px; }
+.catalogue-frame img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease); }
+.catalogue-fallback { display: grid; place-items: center; width: 100%; height: 100%; color: var(--muted); font-size: 48px; font-weight: 500; }

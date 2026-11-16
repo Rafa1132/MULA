@@ -11,14 +11,7 @@
 .catalogue-heading h1 { margin: 12px 0; font-size: 34px; }
 .catalogue-heading p { max-width: 650px; color: var(--muted); font-size: 12px; line-height: 1.8; }
 
-.catalogue-search { margin-bottom: 30px; }
-.catalogue-search label { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
-.catalogue-search-field { display: flex; align-items: center; max-width: 560px; padding: 4px 16px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: var(--radius-pill); background: var(--surface); }
-.catalogue-search-field:focus-within { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
-.catalogue-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); padding: 10px 0; font-size: 14px; }
-/* The field's ring shows focus, so the input's own outline would draw a second one. */
-.catalogue-search input:focus-visible { outline: 0; }
-.catalogue-count { margin: 8px 0 0 16px; color: var(--muted); font-size: 11px; }
+/* The search field's styles are in search-field.css, shared with My apps. */
 .catalogue-notice { margin: -14px 0 24px; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 12px; max-width: 560px; }
 
 .catalogue-section { margin-bottom: 40px; }
@@ -28,17 +21,22 @@
 .catalogue-grid-agent { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 .catalogue-grid-app { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
 .catalogue-card { min-width: 0; }
-.catalogue-card article { display: flex; flex-direction: column; gap: 12px; }
+.catalogue-card article { position: relative; display: flex; flex-direction: column; gap: 12px; }
+/* The stretched link: the name's link covers the whole card, so a click anywhere opens
+   the detail page. Its focus ring is drawn around the card, not just the name. */
+.catalogue-card-link { color: inherit; text-decoration: none; }
+.catalogue-card-link::after { content: ""; position: absolute; inset: -6px; border-radius: 26px; }
+.catalogue-card-link:focus-visible { outline: 0; }
+.catalogue-card-link:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+.catalogue-card-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* The action sits above the stretched link, so clicking it never opens the page. */
+.catalogue-card .catalogue-action { position: relative; z-index: 1; }
 
 /* The picture is the card: no box around it, just a rounded frame with depth. */
 .catalogue-media { position: relative; }
-.catalogue-frame { position: relative; overflow: hidden; width: 100%; background: var(--raised); box-shadow: var(--shadow); outline: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); outline-offset: -1px; }
-.catalogue-frame-agent { aspect-ratio: 4 / 5; border-radius: 22px; }
-.catalogue-frame-app { aspect-ratio: 4 / 3; border-radius: 12px; }
-.catalogue-frame img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease); }
+/* Frame shapes and the fallback tile are in image.css, shared with My apps. */
 .catalogue-card:hover .catalogue-frame img { transform: scale(1.03); }
 .catalogue-card:hover .catalogue-frame { box-shadow: var(--shadow-hover); }
-.catalogue-fallback { display: grid; place-items: center; width: 100%; height: 100%; color: var(--muted); font-size: 48px; font-weight: 500; }
 
 /* Status sits on the picture as a solid chip, so it stays readable on any artwork. */
 .catalogue-status { position: absolute; top: 12px; left: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--ink); font-size: 11px; font-weight: 500; box-shadow: 0 1px 3px rgb(0 0 0 / .12); backdrop-filter: blur(6px); }
@@ -54,8 +52,20 @@
 .catalogue-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .catalogue-type { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; font-size: 10.5px; font-weight: 500; line-height: 1.5; }
 .catalogue-type svg { width: 12px; height: 12px; }
-.catalogue-type-agent { border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-text); }
+/* --accent-text on --accent-soft measured 3.88:1; mixing in ink brings the light theme above 4.5:1. */
+.catalogue-type-agent { border-radius: var(--radius-pill); background: var(--accent-soft); color: color-mix(in srgb, var(--accent-text) 72%, var(--ink)); }
 .catalogue-type-app { border-radius: 4px; background: var(--raised); color: var(--muted); }
+/* "by Mula" under the name. --muted alone is 4.42:1 on the page background, so a little ink is mixed in. */
+.catalogue-publisher { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; color: color-mix(in srgb, var(--muted) 82%, var(--ink)); font-size: 11.5px; }
+.publisher-avatar { display: inline-block; flex-shrink: 0; border-radius: 50%; background: var(--surface); object-fit: contain; outline: 1px solid var(--line); outline-offset: -1px; }
+.publisher-avatar-16 { width: 16px; height: 16px; }
+.publisher-avatar-32 { width: 32px; height: 32px; }
+.publisher-avatar-fallback { display: inline-grid; place-items: center; background: var(--raised); color: var(--ink); font-weight: 600; line-height: 1; }
+.publisher-avatar-16.publisher-avatar-fallback { font-size: 9px; }
+.publisher-avatar-32.publisher-avatar-fallback { font-size: 14px; }
+/* "Includes Store monitor": shown when a search matched one of the card's plugins. */
+.catalogue-hint { display: flex; align-items: center; gap: 5px; margin: 6px 0 0; color: var(--ink); font-size: 12px; font-weight: 500; }
+.catalogue-hint svg { width: 13px; height: 13px; color: var(--accent-text); }
 /* One sentence, cut off after two lines; the full text is in the title tooltip. */
 .catalogue-description { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 
