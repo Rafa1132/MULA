@@ -4,7 +4,6 @@ import type { Agent, Brain } from "../services/team";
 import { INSTRUCTIONS_LIMIT, TOOL_LIMIT } from "./SimpleSettings";
 
 export const REFERENCE_LIMIT = 8000;
-const LOCATION_LABELS: Record<Brain["location"], string> = { local: "on this computer", cloud: "Anthropic cloud" };
 
 type Props = {
   agent: Agent;
@@ -19,9 +18,20 @@ type Props = {
 };
 
 function brainOption(brain: Brain) {
-  let text = `${brain.name} (${LOCATION_LABELS[brain.location]})`;
+  let place = brain.host;
+  if (brain.location === "local") place = `on ${brain.host}`;
+  let text = `${brain.name} (${place})`;
   if (brain.status === "needs_setup") text += " · needs setup";
   return text;
+}
+
+/** One setup line per script, for the brains that still need setup. Several Claude brains share one script. */
+function setupSteps(brains: Brain[]) {
+  const steps = new Map<string, Brain>();
+  for (const brain of brains) {
+    if (brain.status === "needs_setup" && brain.setup_script && brain.setup_key) steps.set(brain.setup_script, brain);
+  }
+  return [...steps.entries()];
 }
 
 function ReadOnly({ label, value }: { label: string; value: string }) {
@@ -32,7 +42,7 @@ function ReadOnly({ label, value }: { label: string; value: string }) {
 export default function AdvancedSettings({ agent, profile, tools, brain, onBrain, data, onData, busy }: Props) {
   const brains = agent.available_brains;
   const chosen = brains[brain];
-  const setupNeeded = Object.values(brains).some((option) => option.status === "needs_setup");
+  const setup = setupSteps(Object.values(brains));
   let profileText = "Assigned by the Mula runtime";
   if (profile) profileText = profile;
   const list = (ids: string[]) => {
@@ -49,9 +59,10 @@ export default function AdvancedSettings({ agent, profile, tools, brain, onBrain
           // A brain that lost its setup stays selectable while it is the saved choice, so it still shows as chosen.
           <option key={id} value={id} disabled={option.status === "needs_setup" && id !== agent.brain}>{brainOption(option)}</option>)}
       </select>
-      {chosen && chosen.location === "cloud" && <p className="settings-help">{chosen.name} sends each message, with retrieved memory, your instructions, reference data and attached CSVs, to Anthropic. Usage is billed to the Anthropic API key set up on the Mula runtime.</p>}
+      {chosen && chosen.location === "cloud" && <p className="settings-help">{chosen.name} sends each message, with retrieved memory, your instructions, reference data and attached CSVs, to {chosen.host}. Usage is billed per token to the API key set up on the Mula runtime.</p>}
       {chosen && chosen.status === "needs_setup" && <p className="error" role="alert">{chosen.name} is not set up on the Mula runtime, so chats will fail. Choose another brain or finish its setup.</p>}
-      {setupNeeded && <p className="settings-help">To add the Claude brains, run <code>server/.venv/bin/python server/scripts/enable_claude.py</code> with a Claude Console API key, then restart Mula.</p>}
+      {setup.map(([script, option]) =>
+        <p key={script} className="settings-help">To add the {option.host} brains, run <code>server/.venv/bin/python server/scripts/{script}</code> with {option.setup_key}, then restart Mula.</p>)}
     </section>
 
     <section className="panel-section">

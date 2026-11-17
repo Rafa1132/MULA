@@ -59,8 +59,8 @@ test("arrow keys nudge, Shift nudges further, other keys do nothing", () => {
 
 test("card status reflects the brain", () => {
   const brains = {
-    qwen: { name: "Qwen (local)", description: "", location: "local", status: "ready" },
-    "claude-opus": { name: "Claude Opus 5.5", description: "", location: "cloud", status: "needs_setup" },
+    qwen: { name: "Qwen (local)", description: "", location: "local", host: "this computer", status: "ready" },
+    "claude-opus": { name: "Claude Opus 5.5", description: "", location: "cloud", host: "Anthropic", status: "needs_setup" },
   };
   const operator = { id: "operator", tools: ["csv_read"], brain: "qwen", available_brains: brains };
   assert.deepEqual(agentStatus(operator), { text: "Ready · Qwen (local)", warning: false });

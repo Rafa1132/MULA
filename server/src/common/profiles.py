@@ -35,7 +35,7 @@ if HERMES_HOME:
 KEY_SEED = MULA_PROFILE_KEY_SEED
 # Secrets every account profile needs from the root profile's .env: a named profile
 # reads only its own file, never the root's or the process environment.
-MIRRORED_SECRETS = ("MULA_TOOLS_KEY", "ANTHROPIC_API_KEY")
+MIRRORED_SECRETS = ("MULA_TOOLS_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY")
 # The model address every profile config reads as ${MULA_MODEL_BASE_URL}. Not a secret, but a
 # profile only sees its own .env, so it is copied too. Order: backend environment, then the
 # root profile's .env, then local Ollama, so a missing value never leaves a literal placeholder.

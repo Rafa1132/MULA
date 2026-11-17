@@ -110,6 +110,7 @@ Each account chooses each agent's brain in **My agents**; Operator and Forecasti
 | Claude Haiku 5.5 | `mula-claude-haiku` | `claude-haiku-5-5` |
 | Claude Sonnet 5.5 | `mula-claude-sonnet` | `claude-sonnet-5-5` |
 | Claude Opus 5.5 | `mula-claude-opus` | `claude-opus-5-5` |
+| Qwen 3.8 27B | `mula-qwen-openrouter` | `qwen/qwen3.8-27b` through OpenRouter, hosted by Chutes |
 
 The Claude brains are `gateway.api_server.model_routes` entries, so the request's `model` field picks the brain per message without restarting Hermes. Hermes answers an alias it doesn't know with its default model, so before sending a non-default brain the adapter checks `GET /v1/models` and refuses the turn with 409 if the alias is missing. A Claude choice never gets a Qwen reply. Switching brains keeps the same Hermes session and history. The `model.context_length` pin and the compact-profile patch apply only to the default Qwen model; Claude routes use their own context windows and the upstream 64K check. Hermes maps the adapter's "reasoning off" to what each Claude model accepts.
 
@@ -125,6 +126,21 @@ The script stores `ANTHROPIC_API_KEY` in `.runtime/hermes/.env` and writes the r
 Only Console API keys (`sk-ant-api…`) are accepted. Anthropic doesn't allow products to serve their users through Claude Free/Pro/Max subscription credentials. Without an API key, Hermes would fall back to the computer owner's Claude Code login. To prevent that, the script refuses subscription tokens and profiles that define `ANTHROPIC_TOKEN` or `CLAUDE_CODE_OAUTH_TOKEN`, writes the key before the routes (and removes it after them), and `start_hermes.sh` unsets those two variables from the launching shell. If you delete the key by hand, also run `--disable`.
 
 Claude brains send each message for that agent, with its system prompt, retrieved memory, owner instructions, reference data and attached CSV rows, to Anthropic. Usage is billed per token to the key.
+
+### OpenRouter brains
+
+To add the OpenRouter brains, create an API key at openrouter.ai, then:
+
+```sh
+server/.venv/bin/python server/scripts/enable_openrouter.py  # prompts for the key; input is hidden
+bash server/scripts/start_hermes.sh --replace
+```
+
+The script works like `enable_claude.py` (both use `scripts/cloud_brains.py`): it stores `OPENROUTER_API_KEY` in `.runtime/hermes/.env`, writes only the OpenRouter routes, keeps every other route, refreshes the account profiles, and `--disable` removes the routes and the key. Keys start with `sk-or-`. Each provider's script writes only its own routes, because a route without its key fails every turn.
+
+OpenRouter can serve one model from many hosts. Each OpenRouter brain is pinned to one host in both runtime templates (`provider_routing.models.<model>.only`, currently Chutes for `qwen/qwen3.8-27b`), so a request never moves to a host the owner did not choose; if that host is down, the turn fails instead. A test keeps the pins in step with `openrouter_only` in `src/common/brains.py`.
+
+OpenRouter brains send the same content as Claude brains (system prompt, memory, instructions, reference data, CSV rows) to OpenRouter and the pinned host. Usage is billed per token to the OpenRouter account.
 
 ## Agent tools
 
@@ -154,6 +170,8 @@ It writes a fresh shared key to `server/.env.hermes` and `.runtime/hermes/.env`,
 - `src/features/operator/runtime.py`: Hermes HTTP/SSE transport, model-alias check, completion validation and error handling.
 - `src/common/brains.py`: the selectable brains and their gateway routes.
 - `scripts/enable_claude.py`: adds or removes the Claude brains in the private runtime profile.
+- `scripts/enable_openrouter.py`: adds or removes the OpenRouter brains in the private runtime profile.
+- `scripts/cloud_brains.py`: the steps both scripts share.
 - `src/main.py`: Mula API composition, validation-error handling and health checks.
 - `src/features/auth/`: account routes and storage, with feature tests.
 - `src/features/operator/routes.py`: chat routes and account-owned conversation routing.
@@ -223,7 +241,7 @@ The script opens the file read-only and never changes it. It copies every table 
 
 ## Account profiles and memory
 
-Each account has its own runtime profile at `.runtime/hermes/profiles/mula-<account>/`, so runtime sessions, config and secrets are never shared between owners. The root profile's config has `gateway.multiplex_profiles: true`, and the backend sends each turn to `/p/<profile>/v1/chat/completions` with that profile's own `API_SERVER_KEY`, derived from `MULA_PROFILE_KEY_SEED` in `server/.env.hermes` (`src/common/profiles.py`); nothing per account is stored or logged. A profile reads only its own `.env`, so it carries a copy of `MULA_TOOLS_KEY` and, when the Claude brains are on, `ANTHROPIC_API_KEY`; `connect_agents.py` and `enable_claude.py` refresh every profile after changing those. The profile config comes from `hermes/profile.config.yaml` and keeps the runtime's memory off; the backend refuses to start if any profile has it on.
+Each account has its own runtime profile at `.runtime/hermes/profiles/mula-<account>/`, so runtime sessions, config and secrets are never shared between owners. The root profile's config has `gateway.multiplex_profiles: true`, and the backend sends each turn to `/p/<profile>/v1/chat/completions` with that profile's own `API_SERVER_KEY`, derived from `MULA_PROFILE_KEY_SEED` in `server/.env.hermes` (`src/common/profiles.py`); nothing per account is stored or logged. A profile reads only its own `.env`, so it carries a copy of `MULA_TOOLS_KEY` and, when those brains are on, `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY`; `connect_agents.py`, `enable_claude.py` and `enable_openrouter.py` refresh every profile after changing those. The profile config comes from `hermes/profile.config.yaml` and keeps the runtime's memory off; the backend refuses to start if any profile has it on.
 
 The gateway finds a new profile folder on its own only every 30 seconds, and a turn sent before that fails inside the gateway with `profile_mismatch`. So the backend talks to the gateway's control socket (`gateway.sock` in the runtime home, or the path in `gateway.sock.path`; `src/common/runtime_control.py`): signup asks for a `rescan-profiles`, and before every turn `profiles.ensure_served` checks `gateway_state.json`, asks for a rescan when the profile is missing, and refuses the turn with "Try again in a moment" only if a running gateway still does not serve it after 12 seconds. When no gateway answers, the turn is sent as before and fails on its own connection error. Nothing is written for an account whose key cannot be derived; a missing `MULA_PROFILE_KEY_SEED` leaves no half profile behind.
 

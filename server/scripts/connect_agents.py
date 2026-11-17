@@ -19,7 +19,7 @@ import yaml
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-from scripts.enable_claude import env_lines_without, mapping_at, write_private  # noqa: E402
+from scripts.cloud_brains import env_lines_without, mapping_at, write_private  # noqa: E402
 from scripts.provision_profiles import refresh_existing_profiles  # noqa: E402
 
 RUNTIME_HOME = BACKEND.parent / ".runtime" / "hermes"

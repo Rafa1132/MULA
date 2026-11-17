@@ -48,6 +48,12 @@ tools:
 memory:
   memory_enabled: false
   user_profile_enabled: false
+# OpenRouter brains (src/common/brains.py) are pinned to the host the owner chose, so
+# OpenRouter never serves them from another provider. Keep in sync with `openrouter_only`.
+provider_routing:
+  models:
+    qwen/qwen3.8-27b:
+      only: [chutes]
 compression:
   enabled: true
   threshold_tokens: 24000

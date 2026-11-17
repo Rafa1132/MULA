@@ -9,9 +9,10 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const ACCOUNT_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
 const BRAINS = {
-  qwen: { name: "Qwen (local)", description: "Runs locally.", location: "local", status: "ready" },
-  "claude-sonnet": { name: "Claude Sonnet 5.5", description: "Cloud.", location: "cloud", status: "ready" },
-  "claude-opus": { name: "Claude Opus 5.5", description: "Cloud.", location: "cloud", status: "needs_setup" },
+  qwen: { name: "Qwen (local)", description: "Runs locally.", location: "local", host: "this computer", status: "ready" },
+  "claude-sonnet": { name: "Claude Sonnet 5.5", description: "Cloud.", location: "cloud", host: "Anthropic", setup_script: "enable_claude.py", setup_key: "a Claude Console API key", status: "ready" },
+  "claude-opus": { name: "Claude Opus 5.5", description: "Cloud.", location: "cloud", host: "Anthropic", setup_script: "enable_claude.py", setup_key: "a Claude Console API key", status: "needs_setup" },
+  "qwen-openrouter": { name: "Qwen 3.8 27B", description: "Cloud.", location: "cloud", host: "OpenRouter · Chutes", setup_script: "enable_openrouter.py", setup_key: "an OpenRouter API key", status: "ready" },
 };
 
 function agent(id, name, description, extra) {
@@ -159,10 +160,16 @@ try {
   const brain = panel.getByLabel("Brain", { exact: true });
   assert.equal(await brain.evaluate((node) => node.tagName), "SELECT");
   assert.equal(await brain.inputValue(), "qwen");
-  assert.deepEqual(await brain.locator("option").allInnerTexts(), ["Qwen (local) (on this computer)", "Claude Sonnet 5.5 (Anthropic cloud)", "Claude Opus 5.5 (Anthropic cloud) · needs setup"]);
+  assert.deepEqual(await brain.locator("option").allInnerTexts(), ["Qwen (local) (on this computer)", "Claude Sonnet 5.5 (Anthropic)", "Claude Opus 5.5 (Anthropic) · needs setup", "Qwen 3.8 27B (OpenRouter · Chutes)"]);
   assert.equal(await brain.locator('option[value="claude-opus"]').isDisabled(), true);
+  // Setup help names only the providers that still need it, with their own script.
+  await panel.getByText(/To add the Anthropic brains, run .*enable_claude\.py with a Claude Console API key/).waitFor();
+  assert.equal(await panel.getByText(/enable_openrouter\.py/).count(), 0);
+  // A cloud brain names its own host, never another provider's.
+  await brain.selectOption("qwen-openrouter");
+  await panel.getByText("Qwen 3.8 27B sends each message, with retrieved memory, your instructions, reference data and attached CSVs, to OpenRouter · Chutes. Usage is billed per token to the API key set up on the Mula runtime.").waitFor();
   await brain.selectOption("claude-sonnet");
-  await panel.getByText(/sends each message/).waitFor();
+  await panel.getByText(/sends each message, .* to Anthropic\./).waitFor();
   await panel.getByText("Unsaved changes").waitFor();
   assert.ok(await panel.getByText("Set in config").count() >= 6);
   await panel.getByText("mula-0f8fad5bd9cb469fa16570867728950e").waitFor();

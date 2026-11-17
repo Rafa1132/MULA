@@ -4,6 +4,11 @@ export type Brain = {
   name: string;
   description: string;
   location: "local" | "cloud";
+  // Who receives this agent's messages, for example "this computer" or "OpenRouter · Chutes".
+  host: string;
+  // Cloud brains only: the server script that sets the brain up and the key it asks for.
+  setup_script?: string;
+  setup_key?: string;
   // "unchecked" means the runtime could not be reached to confirm the brain is set up.
   status: "ready" | "needs_setup" | "unchecked";
 };

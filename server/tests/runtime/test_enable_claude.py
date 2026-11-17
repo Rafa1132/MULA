@@ -54,8 +54,11 @@ class EnableClaudeTests(unittest.TestCase):
         self.assertNotIn(API_KEY, output)
         routes = config["gateway"]["api_server"]["model_routes"]
         self.assertEqual(routes["owner-route"], {"model": "other-model"})
-        for alias, route in runtime_routes().items():
+        for alias, route in runtime_routes("anthropic").items():
             self.assertEqual(routes[alias], route)
+        # Another provider's brains need their own key, so enabling Claude never adds them.
+        for alias in runtime_routes("openrouter"):
+            self.assertNotIn(alias, routes)
         self.assertEqual(config["gateway"]["api_server"]["port"], 8642)
         self.assertEqual(config["model"]["default"], "huihui_ai/qwen3-abliterated:latest")
         for name in (".env", "config.yaml"):

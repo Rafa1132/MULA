@@ -10,7 +10,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 function agent(id, name, extra = {}) {
   return {
     id, name, description: `${name} test agent.`, prompt: "", data: "", tools: [], available_tools: {}, revision: 1, brain: "qwen",
-    available_brains: { qwen: { name: "Qwen (local)", description: "Runs locally.", location: "local", status: "ready" } },
+    available_brains: { qwen: { name: "Qwen (local)", description: "Runs locally.", location: "local", host: "this computer", status: "ready" } },
     delegates_to: [], delegation: null, ...extra,
   };
 }

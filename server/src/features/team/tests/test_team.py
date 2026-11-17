@@ -65,6 +65,17 @@ class BrainSettingsTests(AccountFixture, unittest.TestCase):
                 self.assertEqual(list(agent["available_brains"]), list(BRAINS))
                 self.assertNotIn("alias", json.dumps(agent["available_brains"]))
 
+    def test_each_brain_names_its_own_host_and_setup(self):
+        brains = self.client.get("/api/team").json()["agents"][0]["available_brains"]
+        self.assertEqual(brains["qwen"]["host"], "this computer")
+        self.assertNotIn("setup_script", brains["qwen"])
+        self.assertEqual((brains["claude-sonnet"]["host"], brains["claude-sonnet"]["setup_script"]), ("Anthropic", "enable_claude.py"))
+        # The OpenRouter brain must never be described as Anthropic's.
+        openrouter = brains["qwen-openrouter"]
+        self.assertEqual((openrouter["host"], openrouter["setup_script"]), ("OpenRouter · Chutes", "enable_openrouter.py"))
+        self.assertNotIn("Anthropic", json.dumps(openrouter))
+        self.assertNotIn("runtime_model", json.dumps(brains))
+
     def test_brain_choice_is_validated_and_persisted(self):
         self.assertEqual(self.save("operator").status_code, 422)
         self.assertEqual(self.save("operator", brain="gpt-4o").status_code, 422)

@@ -46,6 +46,15 @@ def definition(agent_id):
     return AGENTS[agent_id]
 
 
+def public_brain(brain):
+    """What the brain picker shows; the gateway alias and runtime model stay on the server."""
+    result = {"name": brain["name"], "description": brain["description"], "location": brain["location"], "host": brain["host"]}
+    if "setup_script" in brain:
+        result["setup_script"] = brain["setup_script"]
+        result["setup_key"] = brain["setup_key"]
+    return result
+
+
 def settings(account_id, agent_id):
     agent = definition(agent_id)
     with accounts.database() as db:
@@ -55,10 +64,7 @@ def settings(account_id, agent_id):
     if row:
         # `tools` is a JSONB column, so it already arrives as a list.
         result.update(dict(row))
-    result["available_brains"] = {
-        brain_id: {"name": brain["name"], "description": brain["description"], "location": brain["location"]}
-        for brain_id, brain in brains.BRAINS.items()
-    }
+    result["available_brains"] = {brain_id: public_brain(brain) for brain_id, brain in brains.BRAINS.items()}
     # A brain removed from the registry falls back to the default rather than failing every chat.
     if result["brain"] not in brains.BRAINS:
         result["brain"] = brains.DEFAULT_BRAIN
