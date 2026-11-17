@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CARD, CARD_LEDGE, DEFAULT_POSITIONS, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampFraction, clampToCanvas, dragTo, isDrag, nudge, positionFor } from "../services/map.ts";
+import { CARD, CARD_LEDGE, DEFAULT_POSITIONS, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampFraction, clampToCanvas, dragTo, isDrag, nudge, positionFor, viewStorageKey } from "../services/map.ts";
 
 test("saved positions win, then defaults, then a spread for new agents", () => {
   assert.deepEqual(positionFor("operator", { operator: { x: 0.9, y: 0.1 } }, 0), { x: 0.9, y: 0.1 });
@@ -81,4 +81,8 @@ test("links follow the store's connections; only runtime-supported ones are acti
   assert.deepEqual(agentLinks(team, { operator: ["inventory"], forecasting: ["inventory"] }).map((link) => [link.from, link.to, link.state]), [["operator", "inventory", "planned"], ["forecasting", "inventory", "planned"]]);
   // Removed connections draw nothing; unknown and self targets are ignored.
   assert.deepEqual(agentLinks(team, { operator: [], forecasting: ["forecasting", "ghost"] }), []);
+});
+
+test("the map view is remembered per user", () => {
+  assert.equal(viewStorageKey("rafa"), "mula.team.view.rafa");
 });

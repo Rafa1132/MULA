@@ -42,7 +42,28 @@ With `memory_read` on, `retrieve` finds up to three current facts matching the r
 | POST | `/api/memory/entries` | `{ target, fact }` → `{ outcome: saved \| duplicate, entry }` |
 | POST | `/api/memory/entries/{id}/supersede` | `{ fact }` → the replacement; 409 if already corrected |
 | POST | `/api/memory/entries/{id}/retire` | — → the retired entry; 409 if already corrected |
-| POST | `/api/memory/search` | `{ question (≤1,000) }` → up to 8 current facts |
+| POST | `/api/memory/search` | `{ question (≤1,000) }` → up to 8 current facts (`kind: fact`), then up to 8 notes (`kind: note`, with a snippet) |
+| GET | `/api/memory/graph` | — scans the vault, then every active note, the two Facts notes and ghost nodes, the links between them (`edges`), tag counts, the vault's `folders` (empty ones too) and the files `skipped`, with a reason |
+| GET | `/api/memory/notes/{id}` | — the note's newest version: `text` for the editor, `body`, `frontmatter`, `tags`, resolved `links`, `mentions` (linked mentions from notes and facts), `version`, `versions`, `warning` (why the file looks wrong, or null) |
+| POST | `/api/memory/notes` | `{ folder, title, text }` → 201 `{ outcome, note }` |
+| PUT | `/api/memory/notes/{id}` | `{ folder, title, text, base_version }` → `{ outcome: saved \| unchanged, renamed_from, stale_links, stale_facts, note }`; 409 when stale (changed in Mula or in Obsidian) or a file already has that name |
+| POST | `/api/memory/notes/{id}/relink` | `{ from_folder, from_title }` → `{ updated, stale_facts }` |
+| POST | `/api/memory/notes/{id}/archive` | — → `{ note_id }`; moves the file to `.trash/`; 409 if already archived |
+| POST | `/api/memory/folders` | `{ folder }` → 201 `{ folder }`; a new, empty folder in the vault; 409 if it exists, 422 for a bad name or `Facts` |
+
+## Notes
+
+Besides facts, the owner keeps Obsidian-style notes: Markdown files with YAML frontmatter in the account's vault, `memory/notes/`, which Obsidian can open as is. The folder is the note's folder and the file name its title. Links are `[[Title]]`, `[[Title|alias]]`, `[[Title#Heading]]` or `[[folder/Title]]`; tags are `#tag` in the body or the frontmatter `tags` list. Parsing is in `notes.py`.
+
+- **The vault is the source of truth (`vault.py`):** `scan` walks `memory/notes/` (skipping names that start with a dot and symbolic links) and compares each file's size and modified time with `vault_files`; only changed files are read and hashed. A changed file is a new version by actor `vault`; a new file whose hash matches a missing one is the same note moved (`note_moved`); a new file at the path of a note saved before the vault existed adopts that note; anything else is a new note; a missing file archives its note. `parse` is strict for Mula's own writes; `read_file` is lenient for the vault's, turning bad YAML or something that looks sensitive into a `warning`. Files over 400 KB, files that aren't UTF-8 and a top-level `Facts` folder are reported in `skipped`. Scans and writes for one account take one lock.
+- **History, append-only:** `notes` (one row per note, archived at most once, never deleted) and `note_versions` (every save is a new version). Triggers enforce both, as for `entries`.
+- **Index, derived:** `note_index`, `note_aliases`, `note_links`, `note_tags` and `notes_fts` are rebuilt for one note on each save from its newest version. This is the one deliberate exception to append-only, and an archived note leaves the index. `notes_fts` is separate from `entries_fts`, so fact retrieval ranks as before.
+- **Links resolve when read:** a target with a folder matches a path, otherwise a title (case-insensitive), then an alias. The titles `About the business` and `About the owner` are the two Facts notes generated from the fact store; `[[links]]` inside facts count too. A link that matches nothing is a ghost.
+- **Saving (`pipeline.save_note`):** scan first; validate the folder (at most eight levels, not `Facts`) and title (no `/ \ : * ? " < > | [ ] # ^`), size (100,000 characters) and frontmatter (`essential` must be true or false; nested values are kept as JSON text); run the sensitive-data filter line by line; refuse an edit whose `base_version` is not the newest, so an Obsidian edit is never overwritten (409); refuse a path another note or any file already uses, compared without case (409); add the version, then write the file exactly as typed (atomically, owner-only), moving it first on a rename. Audit `note_created`, `note_saved`, `note_moved`, `note_relinked`, `note_archived`, `note_refused` or `folder_created` with a hash, never text. Titles may repeat across folders.
+- **Renames:** links are never rewritten silently. A rename returns `stale_links` (notes still linking to the old title) and `stale_facts`; `relink` updates those notes, each as a new audited version. Facts are not rewritten.
+- **Nothing is deleted:** archiving moves the file to `memory/notes/.trash/` (adding " 1", " 2"… on a clash), as Obsidian does. Mula never deletes a file or removes a folder, and never writes over a file it hasn't read.
+- **Links resolve deterministically:** when two folders hold the same title, `[[Title]]` means the one nearest the top (then alphabetical); `[[folder/Title]]` names one.
+- **Not sent to the Operator:** `retrieve` and `context_for` read facts only.
 
 ## Migrating the old Markdown files
 
@@ -50,7 +71,7 @@ With `memory_read` on, `retrieve` finds up to three current facts matching the r
 
 ## Files
 
-`store.py` (schema, triggers, search), `filters.py`, `pipeline.py`, `summary.py`, `service.py` (overview, retrieval, prompt text, `/remember`), `routes.py`, `tests/test_memory.py`. `__init__.py` is intentionally empty. See also `docs/memory-and-sqlite.md`.
+`store.py` (schema, triggers, search), `notes.py` (note parsing), `note_store.py` (note reads and writes), `vault.py` (scanning and writing the vault), `filters.py`, `pipeline.py`, `summary.py`, `service.py` (overview, retrieval, prompt text, `/remember`, graph, notes), `routes.py`, `tests/test_memory.py`, `tests/test_notes.py`. `__init__.py` is intentionally empty. See also `docs/memory-and-sqlite.md`.
 
 ## Limits
 

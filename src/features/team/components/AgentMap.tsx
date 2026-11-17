@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
 import { Agent, saveLayout } from "../services/team";
 import type { Connections } from "../services/agentStore";
-import { Layout, Position, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampPosition, dragTo, isDrag, nudge, positionFor } from "../services/map";
+import { LOW_DETAIL_ZOOM, Layout, Position, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampPosition, dragTo, isDrag, nudge, positionFor, viewStorageKey } from "../services/map";
 import { Rect, routeConnector } from "../services/connectors";
-import { LOW_DETAIL_ZOOM, boundsOf, viewStorageKey } from "../services/viewport";
-import { staminaOf, staminaView } from "../services/stamina";
-import { useViewport } from "../hooks/useViewport";
-import MapControls from "./MapControls";
+import { boundsOf } from "@/common/viewport/viewport";
+import { STAMINA_EXPLANATION, staminaOf, staminaView } from "../services/stamina";
+import { useViewport } from "@/common/viewport/useViewport";
+import MapControls from "@/common/viewport/MapControls";
 import PixelAgent from "./PixelAgent";
 import StaminaBar from "./StaminaBar";
 
@@ -46,7 +46,7 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
 
   // Cards, connectors and the fit box all come from the same world-pixel rectangles.
   const rects = new Map<string, Rect>(agents.map((agent, index) => [agent.id, cardRect(centreOf(positions[agent.id] ?? positionFor(agent.id, saved, index)))]));
-  const viewport = useViewport(viewStorageKey(username), boundsOf([...rects.values()]));
+  const viewport = useViewport(viewStorageKey(username), boundsOf([...rects.values()]), { world: WORLD, ownDrags: ".map-card" });
 
   // A reset remounts the map; a pending keyboard save must not restore the old layout.
   useEffect(() => () => {
@@ -212,6 +212,7 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
       </div>
     </div>
     <p id="map-keys" className="sr-only">Plus and minus zoom, 0 resets to 100%, F fits every agent, and the arrow keys pan the map. With a card focused, the arrow keys move that card.</p>
-    <MapControls zoom={zoom} onZoomIn={viewport.zoomIn} onZoomOut={viewport.zoomOut} onReset={viewport.resetZoom} onFit={viewport.fit} />
+    <MapControls zoom={zoom} onZoomIn={viewport.zoomIn} onZoomOut={viewport.zoomOut} onReset={viewport.resetZoom} onFit={viewport.fit}
+      info={{ id: "map-stamina-info", label: "What is stamina?", text: STAMINA_EXPLANATION }} />
   </div>;
 }

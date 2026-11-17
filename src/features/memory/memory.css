@@ -1,46 +1,259 @@
-.memory-shell { display: grid; grid-template-columns: 232px minmax(0,1fr); min-height: 100dvh; background: var(--background); }
+.memory-shell { display: grid; grid-template-columns: 232px minmax(0,1fr); min-height: 100dvh; background: var(--background);
+  /* Secondary text that may sit on --raised (hovered rows, mentions, properties), where --muted falls below 4.5:1. */
+  --quiet: color-mix(in srgb, var(--ink) 72%, var(--background));
+  /* Accent text placed on --accent-soft (tag chips): pulled toward --ink so it stays above 4.5:1 in both themes. */
+  --chip-text: color-mix(in srgb, var(--accent-text) 65%, var(--ink));
+  /* Map folder colours, each at least 3:1 against --surface. Facts takes the first (the accent). */
+  --map-0: #b45f32; --map-1: #2f6db5; --map-2: #2e7d4f; --map-3: #7b4fb0; --map-4: #17808a; --map-5: #b03a63; }
+@media (prefers-color-scheme: dark) {
+  .memory-shell { --map-0: #e9a77d; --map-1: #7fb0ef; --map-2: #6fcf97; --map-3: #b99bf0; --map-4: #5cc6d0; --map-5: #f08aac; }
+}
+
+/* Folders and Map tabs. */
+.memory-tabs { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); }
+.memory-tabs [role="tab"] { margin: 0; border: 0; border-radius: var(--radius-pill); padding: 7px 18px; background: transparent; color: var(--quiet); font-size: 13px; font-weight: 500; cursor: pointer; }
+.memory-tabs [role="tab"]:hover { color: var(--ink); }
+.memory-tabs [role="tab"][aria-selected="true"] { background: var(--ink); color: var(--background); }
+.memory-tabs [role="tab"]:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .memory-shell > .sidebar { position: sticky; top: 0; height: 100dvh; }
-.memory-main { min-width: 0; max-width: 980px; padding: 0 32px 40px; }
+.memory-main { min-width: 0; max-width: 1240px; padding: 0 32px 40px; }
 .memory-main > .topbar { padding-inline: 0; }
-.memory-heading { margin: 26px 0 26px; }
+.memory-heading { margin: 26px 0 22px; }
 .memory-heading h1 { margin: 12px 0; font-size: 34px; }
-.memory-heading p, .memory-help, .memory-inspection p, .memory-changes p { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.memory-heading p, .memory-help, .memory-changes p { color: var(--muted); font-size: 12px; line-height: 1.8; }
 .memory-heading p { max-width: 650px; }
 .memory-heading code, .memory-help code, .memory-changes code, .memory-entry code, .memory-result code { color: var(--accent-text); font-size: 11px; font-family: var(--mono); overflow-wrap: anywhere; }
-.memory-add { display: flex; gap: 10px; align-items: center; padding: 10px 10px 10px 14px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: var(--radius-pill); background: var(--surface); margin-bottom: 30px; }
-.memory-add select { border: 0; background: transparent; color: var(--muted); font-size: 12px; }
-.memory-add input, .memory-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); padding: 9px 4px; font-size: 14px; }
-.memory-add input:focus, .memory-search input:focus { outline: 0; }
-.memory-add:focus-within, .memory-search:focus-within { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
-.memory-add button, .memory-search button { margin: 0; padding: 9px 16px; font-size: 12px; }
-.memory-sections { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
-.memory-section { min-width: 0; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 18px; padding: 22px; background: var(--surface); }
-.memory-section h2, .memory-summary h2, .memory-inspection h2, .memory-changes h2 { font-size: 17px; }
-.memory-list { list-style: none; margin: 14px 0 0; padding: 0; }
+.memory-notice { color: var(--ink); font-size: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--accent-soft); margin-bottom: 18px; }
+
+/* Folders view: the tree and search on the left, the open note on the right. On phones the left side is a drawer. */
+.notes-layout { display: grid; grid-template-columns: 290px minmax(0,1fr); gap: 24px; align-items: start; }
+/* Full height like Obsidian's sidebar, so there is empty space to right-click for the top level. */
+.notes-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); overflow: auto; padding: 16px; border: 1px solid var(--edge); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.notes-nav-head { display: flex; gap: 8px; align-items: center; }
+/* The explorer's icon buttons, as in Obsidian: New note, New folder, Collapse all. */
+.notes-actions { display: flex; gap: 2px; flex: 1; }
+.notes-action { display: grid; place-items: center; width: 32px; height: 32px; margin: 0; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--quiet); cursor: pointer; }
+.notes-action:hover:not(:disabled) { background: var(--raised); color: var(--ink); }
+.notes-action:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+.notes-action:disabled { opacity: .5; cursor: not-allowed; }
+.notes-action svg { width: 18px; height: 18px; }
+.notes-drawer-close, .notes-drawer-open, .notes-scrim { display: none; }
+.notes-search { display: flex; gap: 6px; align-items: center; padding: 4px 4px 4px 12px; border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.notes-search:focus-within { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.notes-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); padding: 7px 0; font-size: 13px; }
+.notes-search input:focus { outline: 0; }
+.notes-search button { margin: 0; padding: 7px 12px; font-size: 12px; }
+.notes-filter { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin: 0; font-size: 12px; color: var(--muted); }
+.notes-filter strong { color: var(--ink); font-weight: 600; }
+/* Vault files the server couldn't show (too large, not UTF-8, in a folder called Facts). */
+.notes-skipped { font-size: 12px; color: var(--quiet); }
+.notes-skipped summary { cursor: pointer; padding: 4px 0; }
+.notes-skipped ul { margin: 6px 0 0; padding-left: 16px; display: grid; gap: 4px; line-height: 1.5; }
+.notes-skipped code { font-family: var(--mono); font-size: 11px; color: var(--ink); overflow-wrap: anywhere; }
+.note-warning { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--accent-text); border-radius: 12px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.6; }
+.notes-empty { color: var(--muted); font-size: 12.5px; line-height: 1.7; margin: 6px 0; }
+.notes-results ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.notes-results button { display: grid; gap: 2px; width: 100%; text-align: left; border: 0; border-radius: 10px; padding: 9px 10px; background: transparent; color: var(--ink); font-size: 12.5px; line-height: 1.5; }
+.notes-results button:hover, .notes-results button:focus-visible { background: var(--raised); }
+.notes-results span:last-child { color: var(--quiet); overflow-wrap: anywhere; }
+.result-kind { color: var(--accent-text); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+
+.folder-tree { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.tree-row { display: flex; align-items: center; gap: 6px; min-height: 32px; padding-block: 4px; padding-inline-end: 8px; border-radius: 9px; cursor: pointer; color: var(--ink); line-height: 1.35; }
+.tree-row:hover { background: var(--raised); }
+.tree-row:focus-visible { outline: 2px solid var(--accent-text); outline-offset: -2px; }
+.tree-note[aria-selected="true"] { background: var(--accent-soft); font-weight: 600; }
+.tree-folder { color: var(--quiet); font-weight: 500; }
+/* The folder last clicked: where New note and New folder put things. */
+.tree-folder[data-active="true"] { background: var(--raised); color: var(--ink); }
+.folder-tree-area { flex: 1; min-height: 120px; }
+.tree-draft-row { cursor: default; }
+.tree-draft-row:hover { background: transparent; }
+.tree-draft-row .tree-icon { width: 5px; height: 5px; border-radius: 50%; background: var(--line); margin-inline: 2px 4px; flex: none; }
+.tree-draft-row[data-kind="folder"] .tree-icon { width: 0; height: 0; border-radius: 0; background: none; border-block: 4px solid transparent; border-inline-start: 5px solid var(--quiet); }
+.tree-draft { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.tree-draft input { width: 100%; min-width: 0; padding: 4px 8px; border: 1px solid var(--accent-text); border-radius: 6px; background: var(--background); color: var(--ink); font: inherit; }
+.tree-draft input:focus { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.tree-draft-error { color: var(--accent-text); font-size: 11.5px; line-height: 1.5; }
+/* Right-click menu on a folder. */
+.tree-menu { position: fixed; z-index: 40; min-width: 160px; margin: 0; padding: 4px; list-style: none; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow-hover); font-size: 13px; }
+.tree-menu [role="menuitem"] { padding: 7px 10px; border-radius: 6px; cursor: pointer; color: var(--ink); }
+.tree-menu [role="menuitem"]:focus { outline: 0; background: var(--raised); }
+.tree-chevron { width: 0; height: 0; border-block: 4px solid transparent; border-inline-start: 5px solid currentColor; transition: rotate .15s var(--ease); flex: none; }
+.tree-folder[data-open="true"] .tree-chevron { rotate: 90deg; }
+.tree-note::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--line); margin-inline: 2px 4px; flex: none; }
+.tree-note[data-kind="facts"]::before { background: var(--accent); }
+.tree-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tree-count { font-size: 11px; color: var(--quiet); font-variant-numeric: tabular-nums; }
+.tree-essential { font-size: 10px; color: var(--accent-text); border: 1px solid currentColor; border-radius: var(--radius-pill); padding: 0 6px; }
+
+.notes-content { min-width: 0; }
+.notes-welcome, .note-view, .note-editor { min-width: 0; padding: 26px 28px; border: 1px solid var(--edge); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.notes-welcome h2 { margin: 0 0 8px; font-size: 20px; }
+.notes-welcome p { color: var(--muted); font-size: 13px; line-height: 1.7; max-width: 60ch; }
+.notes-relink { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.notes-relink .account-submit { margin: 0; padding: 7px 14px; font-size: 12px; }
+
+.note-header { display: grid; gap: 6px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.note-path { margin: 0; color: var(--muted); font-size: 11.5px; letter-spacing: .03em; }
+.note-header h2 { margin: 0; font-size: 26px; line-height: 1.2; overflow-wrap: anywhere; text-wrap: balance; }
+.note-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.note-badge { color: var(--accent-text); border: 1px solid currentColor; border-radius: var(--radius-pill); padding: 1px 8px; font-size: 11px; }
+.note-actions { display: flex; gap: 16px; align-items: center; margin-top: 4px; }
+.note-actions .account-submit { margin: 0; padding: 7px 16px; font-size: 12px; }
+.note-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; padding: 0; }
+.tag-chip { display: inline; border: 0; border-radius: var(--radius-pill); padding: 1px 8px; background: var(--accent-soft); color: var(--chip-text); font-size: .9em; font-weight: 500; cursor: pointer; }
+.tag-chip:hover { text-decoration: underline; }
+.note-properties { display: grid; gap: 4px; margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: var(--raised); font-size: 12.5px; }
+.note-properties div { display: grid; grid-template-columns: minmax(90px, 30%) minmax(0,1fr); gap: 10px; }
+.note-properties dt { color: var(--quiet); }
+.note-properties dd { margin: 0; overflow-wrap: anywhere; }
+
+.note-markdown { font-size: 14.5px; line-height: 1.75; overflow-wrap: anywhere; }
+.note-markdown > :first-child { margin-top: 0; }
+.note-markdown h1, .note-markdown h2, .note-markdown h3 { line-height: 1.3; margin: 1.4em 0 .5em; }
+.note-markdown h1 { font-size: 22px; } .note-markdown h2 { font-size: 19px; } .note-markdown h3 { font-size: 16px; }
+.note-markdown code { font-family: var(--mono); font-size: .88em; background: var(--raised); border-radius: 5px; padding: 1px 5px; }
+.note-markdown pre { overflow-x: auto; background: var(--raised); border-radius: 12px; padding: 12px 14px; }
+.note-markdown pre code { background: none; padding: 0; }
+.note-markdown blockquote { margin: 1em 0; padding-left: 14px; border-left: 3px solid var(--line); color: var(--muted); }
+.note-markdown a { color: var(--accent-text); }
+.memory-entry .note-markdown { font-size: 14px; line-height: 1.6; }
+.memory-entry .note-markdown p { margin: 6px 0; }
+.wikilink { display: inline; border: 0; padding: 0; background: none; color: var(--accent-text); font: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-text) 40%, transparent); text-underline-offset: 3px; cursor: pointer; }
+.wikilink:hover { text-decoration-color: currentColor; }
+/* A link to a note that doesn't exist yet: muted and dashed, like Obsidian's unresolved links. */
+.wikilink[data-ghost="true"] { color: var(--muted); text-decoration-style: dashed; text-decoration-color: currentColor; }
+
+.note-mentions { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }
+.note-mentions h3 { margin: 0 0 10px; font-size: 14px; }
+.note-count { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.note-mentions ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.note-mentions li { padding: 10px 12px; border-radius: 12px; background: var(--raised); }
+.note-mentions p { margin: 4px 0 0; color: var(--quiet); font-size: 12.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.mention-title { border: 0; padding: 0; background: none; color: var(--accent-text); font-weight: 600; font-size: 13px; cursor: pointer; text-align: left; }
+.mention-title:hover { text-decoration: underline; }
+
+.note-editor { display: grid; gap: 8px; }
+.note-editor h2 { margin: 0 0 6px; font-size: 20px; }
+.note-editor label { font-size: 12px; font-weight: 600; }
+.note-editor-fields { display: grid; gap: 6px; }
+.note-editor input, .note-editor textarea { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--background); color: var(--ink); font-size: 14px; }
+.note-editor input:focus, .note-editor textarea:focus { outline: 0; border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.note-editor .memory-help { margin: 0 0 6px; }
+.note-editor textarea { min-height: 320px; resize: vertical; font-family: var(--mono); font-size: 13px; line-height: 1.7; }
+.note-text-wrap { position: relative; }
+.note-suggestions { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2; list-style: none; margin: 0; padding: 6px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-hover); }
+.note-suggestions li { padding: 7px 10px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+.note-suggestions li[aria-selected="true"] { background: var(--accent-soft); font-weight: 600; }
+.note-conflict { display: grid; gap: 10px; justify-items: start; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--accent-text); background: var(--accent-soft); font-size: 12.5px; }
+.note-conflict p { margin: 0; }
+.note-editor-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+.note-editor-actions button { margin: 0; }
+
+/* Map view: filters on the left (a bottom sheet on phones), the map, its legend and its text version. */
+.memory-map-layout { display: grid; grid-template-columns: 250px minmax(0,1fr); gap: 24px; align-items: start; }
+.graph-filters-open, .graph-filters-head, .graph-scrim { display: none; }
+.graph-filters-panel { position: sticky; top: 16px; max-height: calc(100dvh - 32px); overflow: auto; padding: 16px; border: 1px solid var(--edge); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.graph-filters { display: grid; gap: 16px; font-size: 13px; }
+.graph-filters fieldset { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.graph-filters legend { padding: 0; margin-bottom: 6px; color: var(--quiet); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.graph-check { display: flex; align-items: center; gap: 8px; min-height: 30px; cursor: pointer; }
+.graph-check input { margin: 0; accent-color: var(--accent-text); }
+.graph-check:has(input:disabled) { cursor: not-allowed; color: var(--quiet); }
+.graph-count { margin-left: auto; color: var(--quiet); font-size: 11px; font-variant-numeric: tabular-nums; }
+.graph-field { display: grid; gap: 4px; }
+.graph-field > span { font-size: 12px; font-weight: 600; }
+.graph-field select { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--background); color: var(--ink); font-size: 13px; }
+.graph-help { margin: 2px 0 6px; color: var(--quiet); font-size: 12px; line-height: 1.6; }
+.graph-filters .text-button { justify-self: start; }
+
+.graph-main { display: grid; gap: 12px; min-width: 0; }
+.memory-map { position: relative; height: clamp(480px, 68vh, 760px); overflow: hidden; border: 1px solid var(--edge); border-radius: 24px; background: var(--surface); box-shadow: var(--shadow); }
+.graph-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--quiet); font-size: 13px; pointer-events: none; }
+.graph-edges line { stroke: color-mix(in srgb, var(--muted) 55%, var(--surface)); stroke-width: 1.4; transition: opacity .15s, stroke .15s; }
+.graph-edges line[data-state="lit"] { stroke: var(--accent-text); stroke-width: 2.2; }
+.graph-edges line[data-state="dim"] { opacity: .2; }
+.graph-node { cursor: pointer; transition: opacity .15s; }
+.graph-node[data-state="dim"] { opacity: .25; }
+.graph-shape { stroke: var(--surface); stroke-width: 1.5; }
+.graph-shape[data-colour="0"] { fill: var(--map-0); }
+.graph-shape[data-colour="1"] { fill: var(--map-1); }
+.graph-shape[data-colour="2"] { fill: var(--map-2); }
+.graph-shape[data-colour="3"] { fill: var(--map-3); }
+.graph-shape[data-colour="4"] { fill: var(--map-4); }
+.graph-shape[data-colour="5"] { fill: var(--map-5); }
+/* A link to a note that doesn't exist yet: hollow and dashed, like its link in the text. */
+.graph-ghost-shape { fill: var(--surface); stroke: var(--quiet); stroke-width: 1.5; stroke-dasharray: 3 2.5; }
+.graph-node[data-state="lit"] .graph-shape:not(.graph-ghost-shape) { stroke: var(--ink); stroke-width: 2; }
+.graph-focus-ring { fill: none; stroke: var(--ink); stroke-width: 2; }
+.graph-label { fill: var(--ink); font-size: calc(12px / var(--zoom, 1)); font-weight: 500; text-anchor: middle; paint-order: stroke; stroke: var(--surface); stroke-width: calc(4px / var(--zoom, 1)); stroke-linejoin: round; pointer-events: none; }
+.graph-node[data-kind="ghost"] .graph-label { fill: var(--quiet); font-style: italic; }
+/* Zoomed far out, only the hovered note and its neighbours keep their names. */
+.memory-map[data-detail="low"] .graph-label { display: none; }
+.memory-map[data-detail="low"] .graph-node[data-state="lit"] .graph-label { display: inline; }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; color: var(--quiet); font-size: 12px; }
+.graph-legend li { display: flex; align-items: center; gap: 6px; }
+.graph-swatch { flex: none; overflow: visible; }
+.graph-summary { margin: 0; color: var(--quiet); font-size: 12.5px; line-height: 1.6; }
+.graph-text summary { padding: 6px 0; font-size: 13px; font-weight: 600; cursor: pointer; }
+.graph-text ul { display: grid; gap: 8px; margin: 6px 0 0; padding: 0; list-style: none; }
+.graph-text li { padding: 10px 12px; border-radius: 12px; background: var(--raised); font-size: 12.5px; }
+.graph-text p { margin: 3px 0 0; color: var(--quiet); line-height: 1.6; overflow-wrap: anywhere; }
+.graph-text-folder { color: var(--quiet); }
+
+/* Facts notes: the one-line facts, their corrections and history. */
+.memory-add { display: flex; gap: 10px; align-items: center; padding: 8px 8px 8px 14px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--background); margin-bottom: 18px; }
+.memory-add input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); padding: 8px 4px; font-size: 14px; }
+.memory-add input:focus { outline: 0; }
+.memory-add:focus-within { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.memory-add button { margin: 0; padding: 8px 16px; font-size: 12px; }
+.memory-list { list-style: none; margin: 0; padding: 0; }
 .memory-entry { padding: 14px 0; border-top: 1px solid var(--line); }
 .memory-entry:first-child { border-top: 0; padding-top: 6px; }
+.memory-entry[data-highlight="true"] { background: var(--accent-soft); border-radius: 12px; padding-inline: 12px; }
 .memory-entry-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
-.memory-entry small, .memory-inspection small { color: var(--muted); font-size: 10.5px; line-height: 1.7; }
-.memory-entry p { margin: 6px 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
-.memory-entry[data-superseded="true"] p { color: var(--muted); }
+.memory-entry small, .memory-inspection-block small { color: var(--muted); font-size: 10.5px; line-height: 1.7; }
+.memory-entry[data-superseded="true"] .note-markdown { color: var(--muted); }
 .memory-flag { display: block; color: var(--accent-text); }
 .memory-entry-actions { display: flex; gap: 14px; margin-top: 4px; }
 .memory-correction { margin-top: 8px; }
-.memory-correction textarea { min-height: 70px; max-height: 240px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; background: var(--background); }
+.memory-correction textarea { width: 100%; min-height: 70px; max-height: 240px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; background: var(--background); color: var(--ink); }
 .memory-correction textarea:focus { border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
 .memory-correction > div { display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px; }
 .memory-correction button { margin: 0; padding: 8px 14px; font-size: 12px; }
 .memory-history { margin-top: 14px; }
 .memory-history summary { cursor: pointer; font-size: 11px; color: var(--muted); padding: 6px 0; }
-.memory-summary { margin: 30px 0; }
-.memory-summary pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 11.5px; line-height: 1.7; color: var(--muted); padding: 18px 20px; border: 1px solid var(--edge); border-radius: 16px; background: var(--surface); }
-.memory-notice { color: var(--ink); font-size: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--accent-soft); margin-bottom: 18px; }
-.memory-inspection { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; margin: 30px 0; }
-.memory-inspection > div { min-width: 0; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 16px; padding: 22px; background: var(--surface); }
-.memory-search { display: flex; gap: 10px; align-items: center; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-pill); }
-.memory-result { border-top: 1px solid var(--line); margin-top: 15px; padding-top: 12px; }
+
+/* What the Operator reads. */
+.memory-summary h3, .memory-inspection-block h3, .memory-changes h3 { font-size: 15px; margin: 22px 0 6px; }
+.memory-summary pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 11.5px; line-height: 1.7; color: var(--quiet); padding: 16px 18px; border-radius: 14px; background: var(--raised); }
+.memory-result { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
 .memory-result p { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
-.memory-question { font-style: italic; }
-.memory-changes { border-top: 1px solid var(--line); padding-top: 22px; }
-@media(max-width:1050px) { .memory-shell { grid-template-columns: 196px minmax(0,1fr); } .memory-main { padding-inline: 22px; } .memory-sections, .memory-inspection { grid-template-columns: minmax(0,1fr); } }
-@media(max-width:650px) { .memory-shell { display: block; } .memory-main { padding: 0 16px 30px; } .memory-shell > .sidebar { display: none; } .memory-heading { margin-top: 15px; } .memory-heading h1 { font-size: 28px; } .memory-add { flex-wrap: wrap; border-radius: 18px; } .memory-add input { flex-basis: 100%; } .memory-section { padding: 16px; } .memory-entry-head { flex-direction: column; gap: 2px; } }
+.memory-question { font-style: italic; font-size: 13px; }
+.memory-changes { margin-top: 18px; border-top: 1px solid var(--line); }
+
+@media (prefers-reduced-motion: reduce) { .tree-chevron, .graph-node, .graph-edges line { transition: none; } }
+@media(max-width:1050px) { .memory-shell { grid-template-columns: 196px minmax(0,1fr); } .memory-main { padding-inline: 22px; } .notes-layout { grid-template-columns: 240px minmax(0,1fr); gap: 16px; } }
+/* Phones and narrow windows: the folders become a drawer opened from the Folders button. */
+@media(max-width:760px) {
+  .notes-layout { display: block; }
+  .notes-drawer-open { display: inline-flex; margin: 0 0 12px; padding: 8px 16px; }
+  .notes-drawer-close { display: grid; font-size: 22px; line-height: 1; }
+  .notes-nav { position: fixed; z-index: 30; inset: 0 auto 0 0; top: 0; width: min(320px, 86vw); height: auto; max-height: none; border-radius: 0 18px 18px 0; translate: -105% 0; transition: translate .2s var(--ease); padding-top: max(16px, env(safe-area-inset-top)); visibility: hidden; }
+  .notes-layout[data-drawer="true"] .notes-nav { translate: 0 0; visibility: visible; }
+  .notes-layout[data-drawer="true"] .notes-scrim { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / .32); }
+  .notes-welcome, .note-view, .note-editor { padding: 18px; }
+  /* The map's filters become a bottom sheet; the map itself only pans and zooms. */
+  .memory-map-layout { display: block; }
+  .graph-filters-open { display: inline-flex; margin: 0 0 12px; padding: 8px 16px; }
+  .graph-filters-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .graph-filters-head h2 { margin: 0; font-size: 16px; }
+  .graph-filters-close { font-size: 22px; line-height: 1; }
+  .graph-filters-panel { position: fixed; z-index: 30; inset: auto 0 0 0; top: auto; max-height: 78dvh; border-radius: 18px 18px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); translate: 0 105%; visibility: hidden; transition: translate .2s var(--ease); }
+  .memory-map-layout[data-filters="true"] .graph-filters-panel { translate: 0 0; visibility: visible; }
+  .memory-map-layout[data-filters="true"] .graph-scrim { display: block; position: fixed; inset: 0; z-index: 29; background: rgb(0 0 0 / .32); }
+  .memory-map { height: min(68dvh, 560px); min-height: 380px; border-radius: 18px; }
+}
+@media(max-width:760px) and (prefers-reduced-motion: reduce) { .notes-nav, .graph-filters-panel { transition: none; } }
+@media(max-width:650px) { .memory-shell { display: block; } .memory-main { padding: 0 16px 30px; } .memory-shell > .sidebar { display: none; } .memory-heading { margin-top: 15px; } .memory-heading h1 { font-size: 28px; } .memory-add { flex-wrap: wrap; border-radius: 18px; } .memory-add input { flex-basis: 100%; } .memory-entry-head { flex-direction: column; gap: 2px; } .note-header h2 { font-size: 22px; } }

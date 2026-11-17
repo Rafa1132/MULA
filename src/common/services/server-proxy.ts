@@ -30,6 +30,8 @@ export async function proxyBackend(request: Request, path: string) {
       let body = "";
       let maxBytes = 400_000;
       if (path.startsWith("/api/memory")) maxBytes = 64_000;
+      // A note holds up to 20,000 characters; as UTF-8 inside JSON that can reach ~4 bytes each.
+      if (path.startsWith("/api/memory/notes")) maxBytes = 200_000;
       if (path.startsWith("/api/team")) maxBytes = 100_000;
       try {
         while (true) {

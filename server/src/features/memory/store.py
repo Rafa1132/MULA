@@ -69,6 +69,88 @@ SCHEMA = '''
     CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit BEGIN
         SELECT RAISE(ABORT, 'the memory audit log is append-only');
     END;
+
+    -- Notes. The vault's Markdown files are the source of truth (vault.py); `notes` and
+    -- `note_versions` are their history and are append-only like `entries`: every change Mula
+    -- sees or makes is a new version, and a note can be archived once but never deleted.
+    CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY,
+        actor TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        archived_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS note_versions (
+        id INTEGER PRIMARY KEY,
+        note_id INTEGER NOT NULL REFERENCES notes(id),
+        version INTEGER NOT NULL,
+        folder TEXT NOT NULL,
+        title TEXT NOT NULL,
+        frontmatter TEXT NOT NULL,
+        body TEXT NOT NULL,
+        -- The file's exact text for versions read from or written to the vault; older versions have none.
+        text TEXT,
+        actor TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (note_id, version)
+    );
+    CREATE TRIGGER IF NOT EXISTS notes_no_delete BEFORE DELETE ON notes BEGIN
+        SELECT RAISE(ABORT, 'notes are append-only');
+    END;
+    CREATE TRIGGER IF NOT EXISTS notes_no_rewrite BEFORE UPDATE OF id, actor, created_at ON notes BEGIN
+        SELECT RAISE(ABORT, 'notes are append-only');
+    END;
+    CREATE TRIGGER IF NOT EXISTS notes_archive_once BEFORE UPDATE OF archived_at ON notes
+    WHEN old.archived_at IS NOT NULL OR new.archived_at IS NULL BEGIN
+        SELECT RAISE(ABORT, 'a note can be archived only once');
+    END;
+    CREATE TRIGGER IF NOT EXISTS note_versions_no_delete BEFORE DELETE ON note_versions BEGIN
+        SELECT RAISE(ABORT, 'note versions are append-only');
+    END;
+    CREATE TRIGGER IF NOT EXISTS note_versions_no_update BEFORE UPDATE ON note_versions BEGIN
+        SELECT RAISE(ABORT, 'note versions are append-only');
+    END;
+
+    -- The index: derived from each active note's latest version and rebuilt for that note on every
+    -- save, so it is the one deliberate exception to append-only. It never holds anything the
+    -- versions don't, and an archived note leaves it.
+    -- Titles may repeat across folders, as in Obsidian; a path may not.
+    CREATE TABLE IF NOT EXISTS note_index (
+        note_id INTEGER PRIMARY KEY REFERENCES notes(id),
+        version INTEGER NOT NULL,
+        folder TEXT NOT NULL,
+        title TEXT NOT NULL,
+        title_key TEXT NOT NULL,
+        path_key TEXT NOT NULL UNIQUE,
+        essential INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        warning TEXT
+    );
+    CREATE INDEX IF NOT EXISTS note_index_title ON note_index(title_key);
+    -- Which vault file each active note is, and what it looked like when last read, so a scan
+    -- re-reads only files whose size or modified time changed. Bookkeeping, rewritten freely.
+    CREATE TABLE IF NOT EXISTS vault_files (
+        note_id INTEGER PRIMARY KEY REFERENCES notes(id),
+        path TEXT NOT NULL UNIQUE,
+        size INTEGER NOT NULL,
+        mtime_ns INTEGER NOT NULL,
+        sha256 TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS note_aliases (
+        note_id INTEGER NOT NULL REFERENCES notes(id), alias TEXT NOT NULL, alias_key TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS note_links (
+        note_id INTEGER NOT NULL REFERENCES notes(id), target TEXT NOT NULL, target_key TEXT NOT NULL,
+        alias TEXT, context TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS note_tags (
+        note_id INTEGER NOT NULL REFERENCES notes(id), tag TEXT NOT NULL, tag_key TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS note_links_target ON note_links(target_key);
+    CREATE INDEX IF NOT EXISTS note_links_note ON note_links(note_id);
+    CREATE INDEX IF NOT EXISTS note_aliases_key ON note_aliases(alias_key);
+    CREATE INDEX IF NOT EXISTS note_tags_note ON note_tags(note_id);
+    -- Separate from entries_fts, so fact retrieval for the Operator ranks exactly as before.
+    CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, tokenize='unicode61 remove_diacritics 2');
 '''
 
 
@@ -92,6 +174,39 @@ def memory_folder(account_id):
     return folder
 
 
+def columns(connection, table):
+    return {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+
+
+def migrate(connection):
+    """Bring a store made before the vault became the source of truth up to the current schema.
+
+    `note_versions` gains the nullable `text` column (no rows change). `note_index` is derived, so
+    it is rebuilt in place without the old unique title and with the new `warning` column.
+    """
+    if "text" not in columns(connection, "note_versions"):
+        connection.execute("ALTER TABLE note_versions ADD COLUMN text TEXT")
+    if "warning" not in columns(connection, "note_index"):
+        # One explicit transaction: sqlite3 doesn't open one by itself for schema statements, and
+        # executescript would commit on its own.
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute("DROP INDEX IF EXISTS note_index_title")
+            connection.execute("ALTER TABLE note_index RENAME TO note_index_old")
+            connection.execute("""CREATE TABLE note_index (
+                note_id INTEGER PRIMARY KEY REFERENCES notes(id), version INTEGER NOT NULL, folder TEXT NOT NULL,
+                title TEXT NOT NULL, title_key TEXT NOT NULL, path_key TEXT NOT NULL UNIQUE, essential INTEGER NOT NULL,
+                updated_at TEXT NOT NULL, warning TEXT)""")
+            connection.execute("""INSERT INTO note_index(note_id, version, folder, title, title_key, path_key, essential, updated_at)
+                SELECT note_id, version, folder, title, title_key, path_key, essential, updated_at FROM note_index_old""")
+            connection.execute("DROP TABLE note_index_old")
+            connection.execute("CREATE INDEX note_index_title ON note_index(title_key)")
+            connection.execute("COMMIT")
+        except sqlite3.Error:
+            connection.execute("ROLLBACK")
+            raise
+
+
 @contextmanager
 def open_store(account_id):
     """The account's store, with the schema in place; one transaction per use."""
@@ -103,6 +218,7 @@ def open_store(account_id):
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.executescript(SCHEMA)
+        migrate(connection)
         os.chmod(path, 0o600)
     except (sqlite3.Error, OSError) as error:
         raise HTTPException(503, "The memory store could not be opened. Check the runtime folder's permissions.") from error

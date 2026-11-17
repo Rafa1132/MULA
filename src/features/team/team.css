@@ -9,12 +9,6 @@
 /* The map: a viewport that pans and zooms a fixed 1600 × 1000 world (services/map.ts WORLD).
    Cards, connectors and stamina bars share the world's one transform, so they scale together. */
 .agent-map { position: relative; height: clamp(520px, 70vh, 760px); border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 24px; overflow: hidden; background-color: var(--surface); }
-.map-viewport { position: absolute; inset: 0; overflow: clip; touch-action: none; cursor: grab; outline: 0; background-image: radial-gradient(circle, var(--line) 1px, transparent 1.5px); background-size: 22px 22px; }
-.map-viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-text); border-radius: 24px; }
-.map-viewport[data-panning="true"] { cursor: grabbing; }
-.map-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; visibility: hidden; }
-.map-world[data-ready="true"] { visibility: visible; }
-.map-world[data-smooth="true"] { transition: transform .2s var(--ease); }
 /* Size must match CARD in services/map.ts; connectors are routed from it. */
 .map-card { --card-w: 232px; --card-h: 256px; position: absolute; width: var(--card-w); height: var(--card-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 18px 16px; border: 1px solid var(--edge); border-radius: 24px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transition: translate .18s, box-shadow .18s, border-color .18s; }
 .map-card:hover { translate: 0 -2px; box-shadow: var(--shadow-hover); }
@@ -69,15 +63,6 @@
 .agent-stamina { display: grid; gap: 6px; margin: -8px 0 24px; }
 .agent-stamina .settings-help { margin: 0; }
 /* Corner controls, outside the panned world so they stay put. */
-.map-controls { position: absolute; right: 14px; bottom: 14px; display: grid; justify-items: end; gap: 8px; z-index: 3; }
-.map-control-row { display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--background); box-shadow: var(--shadow); }
-.map-control { display: grid; place-items: center; min-width: 36px; height: 36px; padding: 0 6px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
-.map-control:hover:not(:disabled) { background: var(--raised); }
-.map-control:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
-.map-control:disabled { color: var(--muted); cursor: not-allowed; opacity: .6; }
-.map-control svg { width: 18px; height: 18px; }
-.map-zoom-value { min-width: 52px; }
-.map-info { max-width: 260px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--background); box-shadow: var(--shadow); color: var(--ink); font-size: 12px; line-height: 1.6; }
 /* A cream sticker keeps the dark pixel outlines readable whatever the theme. */
 .pixel-tile { display: grid; place-items: center; flex-shrink: 0; width: 112px; height: 112px; border-radius: 22px; background: #f3eee8; box-shadow: inset 0 -6px 0 #e2d7c9; }
 .pixel-tile.small { width: 52px; height: 52px; border-radius: 14px; box-shadow: inset 0 -3px 0 #e2d7c9; }
@@ -143,9 +128,9 @@
 .forecast-explanation { white-space: pre-wrap; color: var(--ink); line-height: 1.75; font-size: 13px; padding: 18px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 12px; background: var(--surface); }
 @media (max-width: 1100px) { .team-content { padding-inline: 24px; } }
 /* Phones keep the canvas: pinch to zoom, one finger to pan, and drag cards like on larger screens. */
-@media (max-width: 699px) { .agent-map { height: min(72dvh, 620px); min-height: 420px; } .map-controls { right: 10px; bottom: 10px; } .agent-dialog { width: 100vw; border-left: 0; } }
+@media (max-width: 699px) { .agent-map { height: min(72dvh, 620px); min-height: 420px; } .agent-dialog { width: 100vw; border-left: 0; } }
 @media (max-width: 650px) { .team-shell { display: block; } .team-content { padding: 16px 16px 32px; } .agents-intro h1 { font-size: 30px; } .agent-dialog .agent-inspector { padding: 20px 18px 32px; } .inspector-heading { gap: 10px; } .inspector-heading .agent-badge { padding: 4px 8px; } .forecast-fields { gap: 12px; } .agent-tabs { gap: 18px; } }
-@media (prefers-reduced-motion: reduce) { .map-card, .map-card:hover, .map-card[data-dragging="true"] { transition: none; translate: none; } .map-world[data-smooth="true"], .stamina-cell { transition: none; } .stamina[data-unlimited="true"] .stamina-track, .stamina[data-unlimited="true"] .stamina-cell { animation: none; } .agent-dialog[open] { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .map-card, .map-card:hover, .map-card[data-dragging="true"] { transition: none; translate: none; } .stamina-cell { transition: none; } .stamina[data-unlimited="true"] .stamina-track, .stamina[data-unlimited="true"] .stamina-cell { animation: none; } .agent-dialog[open] { animation: none; } }
 .agent-brain { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; cursor: pointer; }
 .agent-brain:has(input:checked) { border-color: var(--ink); }
 .agent-brain:hover:not([data-unavailable="true"]) { box-shadow: var(--shadow-hover); }

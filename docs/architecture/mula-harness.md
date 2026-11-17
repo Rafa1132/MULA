@@ -70,7 +70,7 @@ One account currently represents one workspace and owns one Operator conversatio
 |---|---|---|
 | Application database (PostgreSQL) | Accounts, salted password hashes, hashed login tokens, conversation UUIDs, visible user/assistant messages, login failure records, agent settings and map positions, forecast runs, tool tickets and agent requests. | `MULA_DATABASE_URL` (local Homebrew PostgreSQL or the `docker-compose.yml` service). Schema in `server/migrations`, applied at backend startup. |
 | Runtime session storage | Model conversation state and transcripts managed by the Mula runtime. | One profile per account under `.runtime/hermes/profiles/mula-<account>/`, served by the root profile under `.runtime/hermes`. |
-| Account memory store | Facts the Operator and the owner saved, their history and the audit log. | `.runtime/workspaces/<account>/memory/store.sqlite3`, with the regenerated `MEMORY.md` beside it. |
+| Account memory store | Facts the Operator and the owner saved, the owner's notes and their versions, their history and the audit log. | `.runtime/workspaces/<account>/memory/store.sqlite3`, with the regenerated `MEMORY.md` beside it and the notes vault, `notes/` (Markdown files, the notes' source of truth), read on each visit. |
 
 These stores serve different purposes. The application database reloads what the user sees; the runtime store supplies the model's working conversation. The application does not replay its entire visible transcript into each runtime request.
 
@@ -495,7 +495,7 @@ These references document current code behavior and supported runtime machinery.
 
 ## Account memory retrieval
 
-The application-owned memory service lives in `server/src/features/memory/`: an append-only SQLite store per account (`store.py`), the save pipeline (`pipeline.py`, `filters.py`), the regenerated summary (`summary.py`) and retrieval (`service.py`). The Operator route puts the summary and the matched facts in the request's system instructions, and the Operator saves during the turn through the `remember` MCP tool (`features/agents/tools.py`), scoped by its ticket. This does not enable upstream personal memory. `src/features/memory/` implements the timeline, corrections, history, search and last-retrieval inspector. See [memory and SQLite](../memory-and-sqlite.md).
+The application-owned memory service lives in `server/src/features/memory/`: an append-only SQLite store per account (`store.py`), the save pipeline (`pipeline.py`, `filters.py`), the regenerated summary (`summary.py`) and retrieval (`service.py`). The Operator route puts the summary and the matched facts in the request's system instructions, and the Operator saves during the turn through the `remember` MCP tool (`features/agents/tools.py`), scoped by its ticket. This does not enable upstream personal memory. The same store holds the owner's Obsidian-style notes (versions, links, tags; `notes.py`, `note_store.py`, `vault.py`), which are not sent to the model. `src/features/memory/` implements the Folders view (tree, notes, linked mentions, the editor, the Facts folder with corrections, history and the last-retrieval inspector) and the Map view (a `d3-force` graph using the shared pan and zoom in `src/common/viewport/`). See [memory and SQLite](../memory-and-sqlite.md).
 
 ## Speech-to-text input
 

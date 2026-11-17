@@ -15,6 +15,13 @@ export const DEFAULT_POSITIONS: Layout = {
 export const WORLD: Size = { width: 1600, height: 1000 };
 // Matches .map-card in team.css. The card's raised ledge is a box-shadow drawn below the box.
 export const CARD: Size = { width: 232, height: 256 };
+// Below this zoom, cards show only the mascot, the name and the stamina bar.
+export const LOW_DETAIL_ZOOM = 0.5;
+
+// The map's pan and zoom are remembered per user in this browser only.
+export function viewStorageKey(username: string) {
+  return `mula.team.view.${username}`;
+}
 export const CARD_LEDGE = 6;
 export const DRAG_THRESHOLD_PX = 5;
 export const NUDGE = 0.02;

@@ -61,20 +61,17 @@ Today the map shows two agents, **Operator** and **Forecasting**, because the se
 | `components/AdvancedSettings.tsx` | Advanced layer: brain dropdown, reference data, read-only technical details |
 | `components/CardPicker.tsx` | "Add …" card and its picker of cards, with Escape and focus return |
 | `components/AgentMap.tsx` | Map world, cards, connectors with tooltips, pointer and keyboard arranging, layout saves |
-| `components/MapControls.tsx` | Zoom out, zoom %, zoom in, fit, and the stamina explanation |
 | `components/StaminaBar.tsx` | Segmented stamina bar with its label, for cards and the settings panel |
-| `hooks/useViewport.ts` | Pan and zoom: wheel, pinch, drag, keys, fit and the remembered view |
 | `components/AgentChat.tsx` | Direct chat with one agent |
 | `components/PixelAgent.tsx` | 16×16 pixel characters as SVG; unknown agents get a neutral robot |
-| `services/map.ts` | Pure map helpers: world and card sizes, default positions, clamping, drags, nudges, card status, agent links |
+| `services/map.ts` | Pure map helpers: world and card sizes, default positions, clamping, drags, nudges, card status, agent links, the low-detail zoom and the saved-view key |
 | `services/connectors.ts` | Connector routing: facing anchors, Bézier curves around cards, arrowheads, tooltip position |
-| `services/viewport.ts` | Zoom limits, zoom around a point, fit, pan clamping, map keys, the saved view |
 | `services/stamina.ts` | Stamina defaults, the share left, labels and spoken text |
 | `services/agentStore.ts` | Prototype agent store: agents from the server, connections in localStorage, remembered panel layer |
 | `services/tools.ts` | Icon and one-line description per tool id |
 | `services/team.ts` | `Agent` type (with optional `stamina`), `saveLayout()`/`resetLayout()`, and `teamRequest()` fetch helper with friendly 401/404 messages |
 | `team.css` | Page styles |
-| `tests/map.test.mjs`, `connectors.test.mjs`, `viewport.test.mjs`, `stamina.test.mjs`, `agentStore.test.mjs` | Unit tests for the services (run by `npm test`) |
+| `tests/map.test.mjs`, `connectors.test.mjs`, `stamina.test.mjs`, `agentStore.test.mjs` | Unit tests for the services (run by `npm test`) |
 | `tests/map.browser.spec.mjs` | Optional Playwright check of connectors, stamina, controls, keys, wheel, drags, low zoom, the saved view, resize, planned links, reduced motion and touch. Fakes the account and team API, so it needs only the frontend |
 | `tests/panel.browser.spec.mjs` | Optional Playwright check of the panel: tabs and keys, remembered layer, instructions, tools and pickers, connections and their lines, Advanced settings, contrast and the phone sheet. Fakes the API like the map check |
 | `tests/browser.spec.mjs` | Optional Playwright check of the map and its link, arranging, settings and delegation, the Forecasting chat, forecasts, CSV export and phone layout. Needs a stand-in runtime that answers chats |
@@ -89,3 +86,5 @@ The route is `src/app/agents/page.tsx`; `src/app/team/page.tsx` redirects to it.
 ## Note for the Catalog direction
 
 This page is the closest thing in the app to "installed capabilities". The list of agents is still hardcoded on both sides (the server's agent files in `server/agents/` and the proxy's allowlist). Pixel art and default map positions are keyed by agent id; a new agent works without them, using the fallback robot and a diagonal spread.
+
+Pan and zoom (the wheel, pinch, drag, keys, fit and the remembered view) and the corner controls are shared with the Memory map and live in `src/common/viewport/` (`useViewport.ts`, `viewport.ts`, `MapControls.tsx`, `viewport.css`, tested by `src/common/tests/viewport.test.mjs`). The team map passes its world size, `.map-card` as the element that owns its drags, and the stamina explanation as the controls' info button. `LOW_DETAIL_ZOOM` and `viewStorageKey` stay in `services/map.ts`.

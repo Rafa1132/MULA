@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
-import type { Point, Rect } from "../services/connectors";
-import { WORLD } from "../services/map";
-import type { Size } from "../services/map";
-import { View, ZOOM_STEP, clampView, clampZoom, fitView, keyAction, parseView, wheelZoomFactor, zoomAt } from "../services/viewport";
+import { Point, Rect, Size, View, ZOOM_STEP, clampView, clampZoom, fitView, keyAction, parseView, wheelZoomFactor, zoomAt } from "./viewport";
 
 const SAVE_DELAY_MS = 300;
 // Firefox can report wheel deltas in lines rather than pixels.
@@ -17,11 +14,20 @@ type Pinch = { distance: number; midpoint: Point; view: View };
 // Safari's trackpad pinch arrives as non-standard gesture events.
 type GestureEvent = Event & { scale: number; clientX: number; clientY: number };
 
+export type ViewportOptions = {
+  // The world's size in world pixels; panning keeps part of it on screen.
+  world: Size;
+  // Pointer-downs inside elements matching this selector are theirs (a card drag), not a pan.
+  ownDrags?: string;
+};
+
 /**
- * Pan and zoom for the agent map. Spread `handlers` on the viewport element and attach `ref` to it.
- * `content` is the box around every card, used by "Fit to screen" and the first visit.
+ * Pan and zoom for a map (the agent map, the Memory map). Spread `handlers` on the viewport element
+ * and attach `ref` to it. `content` is the box around everything drawn, used by "Fit to screen" and
+ * the first visit. The view is remembered in this browser under `storageKey`.
  */
-export function useViewport(storageKey: string, content: Rect | null) {
+export function useViewport(storageKey: string, content: Rect | null, options: ViewportOptions) {
+  const { world, ownDrags } = options;
   const ref = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View | null>(null);
   // True for button and key actions, which glide; gestures follow the pointer directly.
@@ -41,11 +47,11 @@ export function useViewport(storageKey: string, content: Rect | null) {
   });
 
   const apply = useCallback((next: View, animate: boolean) => {
-    const clamped = clampView(next, size.current, WORLD);
+    const clamped = clampView(next, size.current, world);
     latest.current = clamped;
     setSmooth(animate);
     setView(clamped);
-  }, []);
+  }, [world]);
 
   const fit = useCallback((animate: boolean) => {
     const box = bounds.current;
@@ -80,7 +86,7 @@ export function useViewport(storageKey: string, content: Rect | null) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(view));
       } catch (failure) {
-        console.warn("Could not remember the agent map view in this browser.", failure);
+        console.warn("Could not remember the map view in this browser.", failure);
       }
     }, SAVE_DELAY_MS);
     return () => clearTimeout(timer);
@@ -177,7 +183,7 @@ export function useViewport(storageKey: string, content: Rect | null) {
     }
     if (pointers.current.size !== 1 || event.button !== 0) return;
     // Cards handle their own drags, so dragging a card never pans the map.
-    if (event.target instanceof Element && event.target.closest(".map-card")) return;
+    if (ownDrags && event.target instanceof Element && event.target.closest(ownDrags)) return;
     pan.current = { pointerId: event.pointerId, last: local(event) };
     event.currentTarget.setPointerCapture(event.pointerId);
     setPanning(true);
@@ -244,7 +250,7 @@ function readView(storageKey: string) {
   try {
     return parseView(localStorage.getItem(storageKey));
   } catch (failure) {
-    console.warn("Could not read the saved agent map view; fitting every agent instead.", failure);
+    console.warn("Could not read the saved map view; fitting everything instead.", failure);
     return null;
   }
 }

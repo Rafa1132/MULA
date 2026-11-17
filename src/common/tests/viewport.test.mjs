@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MAX_ZOOM, MIN_ZOOM, boundsOf, clampView, clampZoom, fitView, keyAction, parseView, viewStorageKey, wheelZoomFactor, zoomAt } from "../services/viewport.ts";
+import { MAX_ZOOM, MIN_ZOOM, boundsOf, clampView, clampZoom, fitView, keyAction, parseView, wheelZoomFactor, zoomAt } from "../viewport/viewport.ts";
 
 test("zoom stays between 25% and 200%", () => {
   assert.equal(clampZoom(5), MAX_ZOOM);
@@ -58,7 +58,6 @@ test("bounds wrap every card", () => {
 });
 
 test("a saved view is read back only when well-formed", () => {
-  assert.equal(viewStorageKey("rafa"), "mula.team.view.rafa");
   assert.deepEqual(parseView('{"x":10,"y":-5,"zoom":0.8}'), { x: 10, y: -5, zoom: 0.8 });
   assert.deepEqual(parseView('{"x":0,"y":0,"zoom":9}'), { x: 0, y: 0, zoom: MAX_ZOOM });
   assert.equal(parseView(null), null);

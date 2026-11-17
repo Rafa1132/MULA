@@ -1,7 +1,8 @@
-// Pan and zoom maths for the agent map. A view maps world pixels to screen pixels:
-// screen = world × zoom + (x, y), measured from the map's top-left corner.
-import type { Point, Rect } from "./connectors";
-import type { Size } from "./map";
+// Pan and zoom maths shared by the agent map and the Memory map. A view maps world pixels to
+// screen pixels: screen = world × zoom + (x, y), measured from the map's top-left corner.
+export type Point = { x: number; y: number };
+export type Size = { width: number; height: number };
+export type Rect = { x: number; y: number; width: number; height: number };
 
 export type View = { x: number; y: number; zoom: number };
 export type KeyAction =
@@ -14,8 +15,6 @@ export type KeyAction =
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 2;
 export const ZOOM_STEP = 1.25;
-// Below this zoom, cards show only the mascot, the name and the stamina bar.
-export const LOW_DETAIL_ZOOM = 0.5;
 export const PAN_STEP_PX = 60;
 const FIT_PADDING_PX = 48;
 // However far the map is panned, this much of the world stays on screen, so it can't be lost.
@@ -93,11 +92,6 @@ export function boundsOf(rects: Rect[]): Rect | null {
   const right = Math.max(...rects.map((rect) => rect.x + rect.width));
   const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
   return { x: left, y: top, width: right - left, height: bottom - top };
-}
-
-// The view is remembered per user in this browser only.
-export function viewStorageKey(username: string) {
-  return `mula.team.view.${username}`;
 }
 
 /** A saved view, or null when it is missing or malformed. */
