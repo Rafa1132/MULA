@@ -20,5 +20,57 @@ services:
       retries: 30
     restart: unless-stopped
 
+  # The app itself: `docker compose --profile app up --build`. Without --profile app
+  # (what ./run.sh runs) only postgres starts, as before. Don't run both at once: port 3000.
+  api:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: mula-api
+    env_file:
+      - server/.env.hermes
+    environment:
+      # Same database as ./run.sh, reached by its service name inside compose.
+      MULA_DATABASE_HOST: postgres
+      # Ollama on the Mac. Later: the OpenRouter URL.
+      MULA_MODEL_BASE_URL: http://host.docker.internal:11434/v1
+      HERMES_HOME: /app/.runtime/hermes
+      HERMES_BASE_URL: http://127.0.0.1:8642
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - mula-hermes:/app/.runtime/hermes
+      - mula-workspaces:/app/.runtime/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 90s
+    restart: unless-stopped
+
+  web:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: mula-web
+    environment:
+      LARAS_BACKEND_URL: http://api:8000
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   mula-postgres:
+  # Hermes home for the container: seeded from the image on first start, then keeps profiles and state.
+  mula-hermes:
+  # Each account's memory store.
+  mula-workspaces:
