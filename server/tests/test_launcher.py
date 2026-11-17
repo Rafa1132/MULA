@@ -30,6 +30,26 @@ class LauncherTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "does not have account memory support"):
                 launcher.server_ready()
 
+    def test_server_starts_before_hermes(self):
+        # Hermes connects to the server's agent tools once at startup and gives up after three
+        # failures, so the server must already be up when Hermes starts.
+        started = []
+
+        def launch(name, *args, **kwargs):
+            started.append(name)
+            if name == "Client":
+                raise KeyboardInterrupt  # stop before the launcher's watch loop
+
+        with patch.object(launcher, "launch", side_effect=launch), \
+             patch.object(launcher, "ensure_database", side_effect=lambda url: started.append("Database")), \
+             patch.object(launcher, "dotenv_values", return_value={"HERMES_API_KEY": "test-key"}), \
+             patch.object(launcher.shutil, "which", return_value="/usr/bin/true"), \
+             patch.object(launcher.Path, "exists", return_value=True), \
+             patch("sys.argv", ["run.py", "--no-open"]):
+            with self.assertRaises(KeyboardInterrupt):
+                launcher.main()
+        self.assertEqual(started, ["Ollama", "Database", "Server", "Hermes", "Client"])
+
     def test_server_without_forecasting_is_not_reused(self):
         with patch.object(launcher, "responds", side_effect=[True, True, True, True, False]):
             with self.assertRaisesRegex(RuntimeError, "agent settings and forecasting support"):

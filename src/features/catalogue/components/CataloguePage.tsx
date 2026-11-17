@@ -20,11 +20,11 @@ function initialStatuses() {
   return statuses;
 }
 
-/** An entry as the page shows it: added apps come from the shared store and open My apps. */
+/** An entry as the page shows it: added apps come from the shared store. Without a launchUrl, Open goes to My apps. */
 function withCurrentStatus(entry: CatalogueEntry, agentStatuses: Record<string, CatalogueStatus>, addedApps: readonly string[]): CatalogueEntry {
   if (entry.type === "agent") return { ...entry, status: agentStatuses[entry.id] };
-  if (addedApps.includes(entry.id)) return { ...entry, status: "added", href: "/apps" };
-  return entry;
+  if (!addedApps.includes(entry.id)) return entry;
+  return { ...entry, status: "added", href: "/apps" };
 }
 
 export default function CataloguePage() {

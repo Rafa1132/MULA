@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/common/components";
-import { CatalogueImage } from "@/features/catalogue";
+import { CatalogueImage, LaunchLink, launchUrl } from "@/features/catalogue";
 import type { AppConnection } from "../../catalogue/data.ts";
 import { alsoRemovesLabel } from "../../catalogue/services/plugins.ts";
 import { lastSyncedLabel, usedByLabel } from "../services/myApps.ts";
@@ -40,6 +40,11 @@ export default function AppCard({ app, now, onOpen, onSettings, onRemove }: Prop
     wasConfirming.current = confirming;
   }, [confirming]);
 
+  // A real link to the app in a new tab when it has a launchUrl; otherwise a notice.
+  const launch = launchUrl(app);
+  let openAction = <button type="button" className="apps-button apps-button-primary" aria-label={`Open ${app.name}`} onClick={() => onOpen(app)}>Open</button>;
+  if (launch !== undefined) openAction = <LaunchLink className="apps-button apps-button-primary" href={launch} label="Open" hiddenContext={app.name} />;
+
   let actions;
   if (confirming) {
     actions = (
@@ -56,7 +61,7 @@ export default function AppCard({ app, now, onOpen, onSettings, onRemove }: Prop
     // The visible verbs repeat on every card, so each accessible name includes the app.
     actions = (
       <div className="apps-actions">
-        <button type="button" className="apps-button apps-button-primary" aria-label={`Open ${app.name}`} onClick={() => onOpen(app)}>Open</button>
+        {openAction}
         <button type="button" className="apps-button" aria-label={`Settings for ${app.name}`} onClick={() => onSettings(app)}>Settings</button>
         <button type="button" ref={removeButton} className="apps-button apps-button-quiet" aria-label={`Remove ${app.name}`} onClick={() => setConfirming(true)}>Remove</button>
       </div>

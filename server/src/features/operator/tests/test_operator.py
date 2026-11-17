@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from src.features.operator.agent import OPERATOR_PROMPT
 from src.common import profiles
+from src.features.auth import service as accounts
 from src.common.config import HERMES_MODEL
 from src.main import app
 from tests.support.account_fixture import AccountFixture
@@ -152,6 +153,27 @@ class OperatorBrainTests(AccountFixture, unittest.TestCase):
             'delegation': 'ask',
         })
         self.assertEqual(saved.status_code, 200, saved.text)
+
+    def test_owner_instructions_are_repeated_after_the_message(self):
+        saved = self.client.put('/api/team/operator', json={
+            'prompt': 'Reply in Indonesian.', 'data': '', 'tools': ['csv_read', 'memory_read', 'memory_write'], 'revision': 0,
+            'brain': 'qwen', 'delegation': 'ask',
+        })
+        self.assertEqual(saved.status_code, 200, saved.text)
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return stream_response(answer())
+
+        with gateway(handler):
+            self.client.post('/api/agents/operator/chat', json={'message': 'Hi'})
+        system, user = json.loads(requests[0].content)['messages']
+        # Still in the system prompt, and again right after the owner's words.
+        self.assertIn('Reply in Indonesian.', system['content'])
+        self.assertEqual(user['content'], "Hi\n\n(Owner's standing instructions for this reply: Reply in Indonesian.)")
+        # The visible chat keeps the owner's own words only.
+        self.assertEqual(accounts.history(self.account['id'])[-2]['text'], 'Hi')
 
     def test_default_brain_uses_gateway_default_without_model_lookup(self):
         requests = []

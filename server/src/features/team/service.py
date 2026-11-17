@@ -149,6 +149,20 @@ def context(config):
     return "\n\n" + "\n\n".join(parts)
 
 
+def instructions_reminder(config):
+    """The owner's instructions again, for the end of the message the model receives.
+
+    They are already in the system prompt (`context`), but by the time the model reads the
+    owner's message, the runtime's own text, the tool descriptions and the chat history sit
+    in between. Small local models then follow the history and the question's language
+    instead. Repeating the instructions right after the message keeps them in effect. The
+    runtime stores this with the message, so long instructions cost history space each turn.
+    """
+    if not config["prompt"]:
+        return ""
+    return "\n\n(Owner's standing instructions for this reply: " + config["prompt"] + ")"
+
+
 def require_tool(config, tool):
     if tool not in config["tools"]:
         raise HTTPException(403, "This tool is disabled. Enable it in My agents and save settings first.")

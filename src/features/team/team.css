@@ -6,21 +6,78 @@
 .agents-intro p { color: var(--muted); line-height: 1.7; margin: 0; }
 .map-hint { color: var(--muted); }
 .map-reset { white-space: nowrap; font-size: 12px; padding: 8px 14px; }
-/* The canvas cards are placed on. Positions are fractions, so the layout scales with it. */
-.agent-map { position: relative; height: clamp(520px, 70vh, 760px); border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 24px; overflow: hidden; background-color: var(--surface); background-image: radial-gradient(circle, var(--line) 1px, transparent 1.5px); background-size: 22px 22px; }
-.map-card { --card-w: 232px; --card-h: 224px; --ledge: 6px; position: absolute; width: var(--card-w); height: var(--card-h); left: clamp(calc(var(--card-w) / 2), calc(var(--x) * 100%), calc(100% - var(--card-w) / 2)); top: clamp(calc(var(--card-h) / 2 + var(--ledge)), calc(var(--y) * 100%), calc(100% - var(--card-h) / 2 - var(--ledge))); translate: -50% -50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 20px 18px; border: 1px solid var(--edge); border-radius: 24px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transition: translate .18s, box-shadow .18s, border-color .18s; }
-.map-card:hover { translate: -50% calc(-50% - 2px); box-shadow: var(--shadow-hover); }
+/* The map: a viewport that pans and zooms a fixed 1600 × 1000 world (services/map.ts WORLD).
+   Cards, connectors and stamina bars share the world's one transform, so they scale together. */
+.agent-map { position: relative; height: clamp(520px, 70vh, 760px); border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 24px; overflow: hidden; background-color: var(--surface); }
+.map-viewport { position: absolute; inset: 0; overflow: clip; touch-action: none; cursor: grab; outline: 0; background-image: radial-gradient(circle, var(--line) 1px, transparent 1.5px); background-size: 22px 22px; }
+.map-viewport:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-text); border-radius: 24px; }
+.map-viewport[data-panning="true"] { cursor: grabbing; }
+.map-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; visibility: hidden; }
+.map-world[data-ready="true"] { visibility: visible; }
+.map-world[data-smooth="true"] { transition: transform .2s var(--ease); }
+/* Size must match CARD in services/map.ts; connectors are routed from it. */
+.map-card { --card-w: 232px; --card-h: 256px; position: absolute; width: var(--card-w); height: var(--card-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 18px 16px; border: 1px solid var(--edge); border-radius: 24px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; transition: translate .18s, box-shadow .18s, border-color .18s; }
+.map-card:hover { translate: 0 -2px; box-shadow: var(--shadow-hover); }
+.map-card:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; }
 .map-card[data-selected="true"] { border-color: var(--accent); }
-.map-card[data-dragging="true"] { z-index: 2; cursor: grabbing; translate: -50% calc(-50% - 4px); border-color: var(--accent); box-shadow: var(--shadow-hover); transition: none; }
-.agent-map[data-movable="false"] .map-card { cursor: pointer; }
-.map-card strong { font-size: 20px; font-weight: 500; letter-spacing: -.02em; margin-top: 8px; }
-.map-card-status { font-size: 12px; color: var(--muted); }
-.map-links { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
-.map-link line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 6; }
-.map-link text { fill: var(--accent-text); font-size: 11px; paint-order: stroke; stroke: var(--surface); stroke-width: 6px; stroke-linejoin: round; }
-#map-arrow path { fill: var(--accent); }
-.agent-map[data-movable="false"] .map-links { display: none; }
+.map-card[data-dragging="true"] { z-index: 2; cursor: grabbing; translate: 0 -4px; border-color: var(--accent); box-shadow: var(--shadow-hover); transition: none; }
+.map-card strong { font-size: 20px; font-weight: 500; letter-spacing: -.02em; margin-top: 4px; }
+.map-card-status { font-size: 12px; color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .map-card .map-card-status[data-warning="true"] { color: var(--accent-text); }
+/* Far out, cards keep the mascot, a larger name and the bar; the status and stamina label go. */
+.agent-map[data-detail="low"] .map-card-status, .agent-map[data-detail="low"] .map-card .stamina-label { display: none; }
+.agent-map[data-detail="low"] .map-card strong { font-size: min(48px, calc(13px / var(--zoom))); }
+/* Connectors: smooth curves with one 2px stroke and round caps. Active links are solid; planned links
+   (switched off, or not supported by the runtime yet) are dashed, so the difference never relies on colour.
+   Lines carry no text: hovering or focusing one shows its meaning in a tooltip. */
+.map-links { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+/* The stroke stays 2px on screen at any zoom; the path itself scales with the cards. */
+.map-link-line, .map-link-arrow { fill: none; stroke: var(--accent-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.map-link[data-planned="true"] .map-link-line { stroke: var(--muted); stroke-dasharray: 6 7; }
+.map-link[data-planned="true"] .map-link-arrow { stroke: var(--muted); }
+.map-link { outline: 0; cursor: help; }
+.map-link-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.map-link:focus-visible .map-link-hit { stroke: color-mix(in srgb, var(--accent) 28%, transparent); stroke-width: 10; stroke-linecap: round; }
+.map-link-tip-anchor { position: absolute; width: 0; height: 0; transform: scale(calc(1 / var(--zoom))); transform-origin: 0 0; z-index: 4; }
+.map-link-tip { position: absolute; left: 0; bottom: 10px; translate: -50% 0; width: max-content; max-width: 320px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--ink); color: var(--background); font-size: 12px; line-height: 1.4; box-shadow: var(--shadow); }
+.panel-card-text .connection-status { color: var(--accent-text); font-weight: 500; }
+.panel-card-text .connection-status[data-planned="true"] { color: var(--muted); }
+/* Stamina: a pixel bar in the mascots' style (square cells, dark outline), with a label beside it when there is a limit. */
+.stamina { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.stamina-track { display: grid; grid-template-columns: repeat(10, 7px); gap: 2px; padding: 2px; border: 2px solid var(--ink); background: var(--background); }
+.stamina-cell { height: 8px; background: var(--line); transition: background-color .2s; }
+.stamina-cell[data-filled="true"] { background: var(--accent); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent-text) 70%, transparent); }
+.stamina[data-low="true"] .stamina-cell[data-filled="true"] { background: var(--accent-text); }
+.stamina-label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.stamina-label svg { width: 14px; height: 14px; }
+.stamina-low { display: inline-flex; align-items: center; gap: 3px; color: var(--accent-text); font-weight: 600; }
+/* Unlimited: no label, so the bar sits centred on its card. Every segment glows purple and a wave of
+   light flows through them from left to right (each segment's --cell staggers its start), while the
+   track's glow breathes. The bar itself says "unlimited"; the tooltip and screen readers say it in words. */
+.stamina[data-unlimited="true"] { --energy-deep: #5b2bc4; --energy: #8b5cf6; --energy-bright: #e4d9ff; --energy-glow: rgb(139 92 246 / .45); justify-content: center; }
+@media (prefers-color-scheme: dark) { .stamina[data-unlimited="true"] { --energy-deep: #6d3fe0; --energy: #a78bfa; --energy-bright: #f3edff; --energy-glow: rgb(167 139 250 / .55); } }
+.stamina[data-unlimited="true"] .stamina-track { border-color: var(--energy-deep); animation: stamina-glow 2.4s ease-in-out infinite; }
+.stamina[data-unlimited="true"] .stamina-cell { background: var(--energy); box-shadow: inset 0 -2px 0 var(--energy-deep); animation: stamina-energy 1.6s ease-in-out infinite; animation-delay: calc(var(--cell) * 0.1s); }
+@keyframes stamina-energy {
+  0%, 100% { background: var(--energy); box-shadow: inset 0 -2px 0 var(--energy-deep); }
+  50% { background: var(--energy-bright); box-shadow: inset 0 -2px 0 var(--energy), 0 0 6px var(--energy-bright); }
+}
+@keyframes stamina-glow {
+  0%, 100% { box-shadow: 0 0 4px var(--energy-glow); }
+  50% { box-shadow: 0 0 12px var(--energy-glow); }
+}
+.agent-stamina { display: grid; gap: 6px; margin: -8px 0 24px; }
+.agent-stamina .settings-help { margin: 0; }
+/* Corner controls, outside the panned world so they stay put. */
+.map-controls { position: absolute; right: 14px; bottom: 14px; display: grid; justify-items: end; gap: 8px; z-index: 3; }
+.map-control-row { display: flex; align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--background); box-shadow: var(--shadow); }
+.map-control { display: grid; place-items: center; min-width: 36px; height: 36px; padding: 0 6px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink); font-size: 12px; font-variant-numeric: tabular-nums; }
+.map-control:hover:not(:disabled) { background: var(--raised); }
+.map-control:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+.map-control:disabled { color: var(--muted); cursor: not-allowed; opacity: .6; }
+.map-control svg { width: 18px; height: 18px; }
+.map-zoom-value { min-width: 52px; }
+.map-info { max-width: 260px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--background); box-shadow: var(--shadow); color: var(--ink); font-size: 12px; line-height: 1.6; }
 /* A cream sticker keeps the dark pixel outlines readable whatever the theme. */
 .pixel-tile { display: grid; place-items: center; flex-shrink: 0; width: 112px; height: 112px; border-radius: 22px; background: #f3eee8; box-shadow: inset 0 -6px 0 #e2d7c9; }
 .pixel-tile.small { width: 52px; height: 52px; border-radius: 14px; box-shadow: inset 0 -3px 0 #e2d7c9; }
@@ -39,21 +96,18 @@
 .agent-description { color: var(--muted); line-height: 1.7; font-size: 13px; margin: 18px 0 24px; }
 .agent-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 26px; }
 .agent-tabs button, .agent-tabs a { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 0 0 12px; color: var(--muted); font-size: 13px; text-decoration: none; }
-.agent-tabs button:hover:not([aria-pressed="true"]), .agent-tabs a:hover { color: var(--ink); }
-.agent-tabs button[aria-pressed="true"] { border-bottom-color: var(--ink); color: var(--ink); }
-.settings-section { display: flex; gap: 12px; margin: 24px 0 14px; align-items: start; }
-.section-number { color: var(--accent-text); font-size: 10px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
-.settings-section label, .settings-section h3 { font-size: 14px; font-weight: 500; margin: 0; }
-.settings-section p, .settings-help { color: var(--muted); line-height: 1.7; font-size: 12px; margin: 7px 0 0; }
+.agent-tabs button:hover:not([aria-selected="true"]), .agent-tabs a:hover { color: var(--ink); }
+.agent-tabs button[aria-selected="true"] { border-bottom-color: var(--ink); color: var(--ink); }
+.agent-tabs button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 4px; border-radius: 4px; }
+.settings-help { color: var(--muted); line-height: 1.7; font-size: 12px; margin: 7px 0 0; }
 .settings-help a { color: var(--accent-text); }
 .agent-settings textarea, .forecast-fields input, .forecast-fields select { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; }
 .agent-settings textarea { field-sizing: fixed; min-height: 100px; max-height: 450px; resize: vertical; padding: 13px; line-height: 1.7; }
 .agent-settings textarea:focus, .forecast-fields :is(input, select):focus { outline: 0; border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
 .field-caption { font-size: 11px; color: var(--muted); margin-top: 8px; text-align: right; }
-.agent-tools, .agent-brains { display: grid; gap: 8px; }
-.agent-tool, .agent-brain { border: 1px solid var(--edge); border-radius: 12px; font-size: 13px; background: var(--surface); box-shadow: var(--shadow); padding: 13px 15px; }
-.agent-tool { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.agent-tool input, .agent-brain input { accent-color: var(--ink); width: 18px; height: 18px; margin: 0; cursor: pointer; }
+.agent-brains { display: grid; gap: 8px; }
+.agent-brain { border: 1px solid var(--edge); border-radius: 12px; font-size: 13px; background: var(--surface); box-shadow: var(--shadow); padding: 13px 15px; }
+.agent-brain input { accent-color: var(--ink); width: 18px; height: 18px; margin: 0; cursor: pointer; }
 .settings-footer { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .settings-footer > span { color: var(--muted); font-size: 12px; }
 .settings-footer .account-submit { margin: 0; }
@@ -88,11 +142,10 @@
 .forecast-report li { font-size: 12px; color: var(--muted); line-height: 1.8; margin-top: 8px; }
 .forecast-explanation { white-space: pre-wrap; color: var(--ink); line-height: 1.75; font-size: 13px; padding: 18px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 12px; background: var(--surface); }
 @media (max-width: 1100px) { .team-content { padding-inline: 24px; } }
-/* Phones get a stacked list; saved positions are kept for larger screens. */
-@media (max-width: 699px) { .agent-map { height: auto; display: grid; gap: 22px; padding: 18px 16px 26px; } .map-card { position: static; translate: none; width: 100%; height: auto; padding: 18px; } .map-card:hover { translate: none; } .map-hint, .map-reset { display: none; } .agent-dialog { width: 100vw; border-left: 0; } }
+/* Phones keep the canvas: pinch to zoom, one finger to pan, and drag cards like on larger screens. */
+@media (max-width: 699px) { .agent-map { height: min(72dvh, 620px); min-height: 420px; } .map-controls { right: 10px; bottom: 10px; } .agent-dialog { width: 100vw; border-left: 0; } }
 @media (max-width: 650px) { .team-shell { display: block; } .team-content { padding: 16px 16px 32px; } .agents-intro h1 { font-size: 30px; } .agent-dialog .agent-inspector { padding: 20px 18px 32px; } .inspector-heading { gap: 10px; } .inspector-heading .agent-badge { padding: 4px 8px; } .forecast-fields { gap: 12px; } .agent-tabs { gap: 18px; } }
-@media (prefers-reduced-motion: reduce) { .map-card, .map-card:hover, .map-card[data-dragging="true"] { transition: none; translate: -50% -50%; } .agent-dialog[open] { animation: none; } }
-@media (prefers-reduced-motion: reduce) and (max-width: 699px) { .map-card, .map-card:hover { translate: none; } }
+@media (prefers-reduced-motion: reduce) { .map-card, .map-card:hover, .map-card[data-dragging="true"] { transition: none; translate: none; } .map-world[data-smooth="true"], .stamina-cell { transition: none; } .stamina[data-unlimited="true"] .stamina-track, .stamina[data-unlimited="true"] .stamina-cell { animation: none; } .agent-dialog[open] { animation: none; } }
 .agent-brain { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; cursor: pointer; }
 .agent-brain:has(input:checked) { border-color: var(--ink); }
 .agent-brain:hover:not([data-unavailable="true"]) { box-shadow: var(--shadow-hover); }
@@ -119,3 +172,63 @@
 /* Agent names are longer than "Mula", so the name sits above each message. */
 .agent-chat .message { grid-template-columns: minmax(0, 1fr); gap: 6px; padding-block: 14px; }
 .agent-chat .message:last-child { border-bottom: 0; }
+/* Settings panel: two layers (Simple, Advanced) of sections made of small cards. */
+.agent-tab-bar { display: flex; align-items: end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.agent-tab-bar .agent-tabs { border-bottom: 0; margin-bottom: 0; flex-wrap: wrap; }
+.agent-tab-link { color: var(--muted); font-size: 13px; text-decoration: none; padding-bottom: 12px; white-space: nowrap; }
+.agent-tab-link:hover { color: var(--ink); }
+.panel-section { display: grid; gap: 10px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.panel-section:last-of-type { border-bottom: 0; }
+.panel-section > .settings-help { margin: -4px 0 4px; }
+.panel-section-title { font-size: 15px; font-weight: 600; margin: 0; }
+.panel-section textarea { width: 100%; }
+#agent-prompt { min-height: 180px; }
+.panel-card-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.panel-card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border: 1px solid var(--edge); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); color: var(--ink); font-size: 13px; text-align: left; }
+.panel-card:focus-visible, .panel-card:focus { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.panel-card:focus:not(:focus-visible) { outline: 0; }
+.panel-card-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--raised); color: var(--ink); }
+.panel-card-icon svg { width: 18px; height: 18px; }
+.panel-card-text { display: grid; gap: 2px; min-width: 0; }
+.panel-card-text span { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.panel-remove, .picker-add, .picker-close { width: 36px; height: 36px; padding: 0; font-size: 20px; line-height: 1; color: var(--muted); }
+.panel-remove:hover:not(:disabled), .picker-add:hover, .picker-close:hover { background: var(--raised); color: var(--ink); }
+.panel-remove:focus-visible, .picker-add:focus-visible, .picker-close:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+.picker-add svg { width: 18px; height: 18px; }
+/* The "+" card: same shape as a card, dashed so it reads as a place to add. */
+.panel-add-card { width: 100%; grid-template-columns: auto minmax(0, 1fr); border: 1.5px dashed var(--line); background: transparent; box-shadow: none; color: var(--ink); font-weight: 500; cursor: pointer; }
+.panel-add-card:hover:not(:disabled), .panel-add-card[aria-expanded="true"] { border-color: var(--muted); background: var(--surface); }
+.panel-add-card:disabled { color: var(--muted); cursor: not-allowed; }
+.card-picker { display: grid; gap: 8px; }
+.card-picker > .settings-help { margin: 0; }
+.picker { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--raised); }
+.picker[hidden] { display: none; }
+.picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.picker > .settings-help { margin: 0; }
+.pixel-tile.tiny { width: 36px; height: 36px; border-radius: 10px; box-shadow: inset 0 -3px 0 #e2d7c9; }
+.panel-delegation { border: 0; padding: 0; margin: 10px 0 0; display: grid; gap: 10px; }
+.panel-subtitle { font-size: 13px; font-weight: 600; padding: 0; margin-bottom: 10px; }
+.panel-select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.panel-select:focus { outline: 0; border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+.config-list { display: grid; gap: 0; margin: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.config-row { display: grid; grid-template-columns: minmax(120px, 34%) minmax(0, 1fr); gap: 12px; padding: 11px 14px; border-top: 1px solid var(--line); font-size: 12px; }
+.config-row:first-child { border-top: 0; }
+.config-row dt { color: var(--muted); }
+.config-row dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
+.config-row code { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; color: var(--ink); }
+.config-tag { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 2px 8px; white-space: nowrap; }
+/* Save stays in reach at the bottom of the panel, with the unsaved state in words and a dot. */
+.agent-settings .settings-footer { position: sticky; bottom: 0; z-index: 1; margin: 8px -30px 0; padding: 14px 30px 18px; background: var(--background); flex-wrap: wrap; }
+.settings-state { display: inline-flex; align-items: center; gap: 8px; }
+.settings-state[data-dirty="true"] { color: var(--accent-text); font-weight: 600; }
+.dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-text); }
+.settings-actions { display: flex; gap: 8px; margin-left: auto; }
+.settings-actions .account-submit { margin: 0; }
+@media (max-width: 650px) {
+  .agent-settings .settings-footer { margin-inline: -18px; padding-inline: 18px; }
+  .config-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .agent-tab-bar { flex-wrap: wrap; }
+}
+/* The shared muted grey measures 4.42:1 on the light background, so the panel darkens it to pass 4.5:1.
+   Dark mode's muted grey already passes. */
+@media not (prefers-color-scheme: dark) { .agent-dialog { --muted: #6e6962; } }

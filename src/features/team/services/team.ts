@@ -1,3 +1,5 @@
+import type { Stamina } from "./stamina";
+
 export type Brain = {
   name: string;
   description: string;
@@ -21,6 +23,9 @@ export type Agent = {
   delegates_to: string[];
   // Null when delegates_to is empty.
   delegation: Delegation | null;
+  // Tokens used and allowed this period; limit null means unlimited. The server doesn't send it yet,
+  // so a missing value is read as unlimited (see services/stamina.ts).
+  stamina?: Stamina;
 };
 
 // ask: the owner approves each request; auto: requests run right after the reply; off: never ask.

@@ -79,6 +79,12 @@ export type CatalogueEntry = {
   publisher: string;
   /** Where "Open" goes. Entries without a page get a short notice instead. */
   href?: string;
+  /**
+   * Apps only: where the app opens, in a new tab. A path inside Mula ("/apps/todo") or a
+   * full https URL for an external app. Every Open link for an added app is built from it
+   * (services/launch.ts); apps without one have nothing to open yet.
+   */
+  launchUrl?: string;
   /** True for invented entries that have no real counterpart yet. */
   placeholder: boolean;
   /** App entries only: connection details for My apps. */
@@ -280,7 +286,9 @@ export const CATALOGUE_ENTRIES: CatalogueEntry[] = [
     imageAlt: "Icon for the To-do app",
     screenshots: previews("todo", "To-do", ["today's task list", "adding a task", "ticking off a finished task", "tasks left before closing"]),
     publisher: "mula",
-    placeholder: true,
+    // A working prototype at /apps/todo (src/features/apps/todo/), not just a listing.
+    launchUrl: "/apps/todo",
+    placeholder: false,
     // A task list has nothing external to connect to, so it is simply connected.
     app: { connection: "connected", lastSynced: minutesAgo(5), usedBy: [] },
   },

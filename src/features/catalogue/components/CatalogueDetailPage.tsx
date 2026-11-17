@@ -6,9 +6,11 @@ import { Icon, Sidebar } from "@/common/components";
 import { addApp, useAddedApps } from "../../apps/services/addedApps.ts";
 import type { CatalogueEntry } from "../data.ts";
 import { findEntry, formatPrice } from "../services/details.ts";
+import { launchUrl } from "../services/launch.ts";
 import { parentOf } from "../services/plugins.ts";
 import { publisherFor } from "../services/publishers.ts";
 import Carousel from "./Carousel";
+import LaunchLink from "./LaunchLink";
 import PluginsSection from "./PluginsSection";
 import PublisherAvatar from "./PublisherAvatar";
 import "../catalogue.css";
@@ -23,6 +25,8 @@ function isAdded(entry: CatalogueEntry, addedApps: readonly string[]) {
 }
 
 function PrimaryAction({ entry, added, onAdd }: { entry: CatalogueEntry; added: boolean; onAdd: (entry: CatalogueEntry) => void }) {
+  const launch = launchUrl(entry);
+  if (added && entry.type === "app" && launch !== undefined) return <LaunchLink className="catalogue-action catalogue-action-primary detail-action" href={launch} label={`Open ${entry.name}`} />;
   if (added && entry.type === "app") return <a className="catalogue-action catalogue-action-primary detail-action" href="/apps">Open in My apps</a>;
   if (added && entry.href) return <a className="catalogue-action catalogue-action-primary detail-action" href={entry.href}>Open</a>;
   if (entry.status === "coming_soon") return <button type="button" className="catalogue-action detail-action" disabled aria-label={`Add ${entry.name} (coming soon)`}>Add</button>;

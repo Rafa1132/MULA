@@ -4,42 +4,32 @@ import { useEffect, useRef, useState } from "react";
 import { AccountForm } from "@/features/auth";
 import { Icon, Sidebar } from "@/common/components";
 import { ForecastPanel } from "@/features/forecasting";
-import { Agent, Brain, Delegation, resetLayout, teamRequest } from "../services/team";
+import { Agent, resetLayout, teamRequest } from "../services/team";
+import { Connections, addConnection, loadAgents, readPanelTab, removeConnection, replaceAgent, savePanelTab, useAgentStore } from "../services/agentStore";
 import type { Layout } from "../services/map";
+import AdvancedSettings from "./AdvancedSettings";
 import AgentChat from "./AgentChat";
+import AgentPanelTabs, { PanelTabItem, tabId, tabPanelId } from "./AgentPanelTabs";
+import { STAMINA_EXPLANATION, staminaOf, staminaView } from "../services/stamina";
 import AgentMap from "./AgentMap";
 import PixelAgent from "./PixelAgent";
+import SimpleSettings from "./SimpleSettings";
+import StaminaBar from "./StaminaBar";
 import "../team.css";
 
-const LOCATION_LABELS: Record<Brain["location"], string> = { local: "On this computer", cloud: "Anthropic cloud" };
-const STATUS_LABELS: Record<Brain["status"], string> = { ready: "", needs_setup: "Needs setup", unchecked: "Not checked" };
-const DELEGATION_OPTIONS: { id: Delegation; name: string; description: string }[] = [
-  { id: "ask", name: "Ask me first", description: "Each question for another agent waits in your chat until you approve it." },
-  { id: "auto", name: "Go ahead", description: "Questions run as soon as the reply ends. You still see each question and the answer." },
-  { id: "off", name: "Don’t ask other agents", description: "The agent answers on its own and tells you which agent could help." },
-];
+const BASE_TABS: PanelTabItem[] = [{ id: "simple", label: "Simple" }, { id: "advanced", label: "Advanced" }];
 
-function BrainOptions({ brains, value, busy, onChange }: { brains: Record<string, Brain>; value: string | null; busy: boolean; onChange: (id: string) => void }) {
-  return <div className="agent-brains" role="radiogroup" aria-label="Brain">{Object.entries(brains).map(([id, brain]) => {
-    // Keep the saved choice selectable so a brain that lost its setup still shows as chosen.
-    const unavailable = brain.status === "needs_setup" && id !== value;
-    return <label className="agent-brain" key={id} data-unavailable={unavailable}>
-      <input type="radio" name="agent-brain" value={id} checked={value === id} disabled={busy || unavailable} onChange={() => onChange(id)} />
-      <span className="agent-brain-text"><strong>{brain.name}</strong><span>{brain.description}</span></span>
-      <span className="agent-brain-tags"><span className="brain-tag" data-location={brain.location}>{LOCATION_LABELS[brain.location]}</span>{STATUS_LABELS[brain.status] && <span className="brain-status">{STATUS_LABELS[brain.status]}</span>}</span>
-    </label>;
-  })}</div>;
-}
+type SettingsProps = {
+  agent: Agent;
+  agents: Agent[];
+  connections: Connections;
+  username: string;
+  profile: string | null;
+  onSaved: (agent: Agent) => void;
+  onClose: () => void;
+};
 
-function DelegationOptions({ value, busy, onChange }: { value: Delegation | null; busy: boolean; onChange: (mode: Delegation) => void }) {
-  return <div className="agent-brains" role="radiogroup" aria-label="When this agent needs another agent">{DELEGATION_OPTIONS.map((option) =>
-    <label className="agent-brain" key={option.id}>
-      <input type="radio" name="agent-delegation" value={option.id} checked={value === option.id} disabled={busy} onChange={() => onChange(option.id)} />
-      <span className="agent-brain-text"><strong>{option.name}</strong><span>{option.description}</span></span>
-    </label>)}</div>;
-}
-
-function AgentSettings({ agent, names, onSaved, onClose }: { agent: Agent; names: Record<string, string>; onSaved: (agent: Agent) => void; onClose: () => void }) {
+function AgentSettings({ agent, agents, connections, username, profile, onSaved, onClose }: SettingsProps) {
   const [prompt, setPrompt] = useState(agent.prompt);
   const [data, setData] = useState(agent.data);
   const [tools, setTools] = useState(agent.tools);
@@ -48,12 +38,13 @@ function AgentSettings({ agent, names, onSaved, onClose }: { agent: Agent; names
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("settings");
+  const [tab, setTab] = useState<string>(() => readPanelTab(username));
   const dirty = prompt !== agent.prompt || data !== agent.data || JSON.stringify(tools) !== JSON.stringify(agent.tools) || brain !== agent.brain || delegation !== agent.delegation;
-  const brains = agent.available_brains;
-  const chosenBrain = brains[brain];
-  const setupNeeded = Object.values(brains).some((option) => option.status === "needs_setup");
-  const askedAgents = agent.delegates_to.map((id) => names[id] ?? id).join(" and ");
+  const stamina = staminaView(staminaOf(agent.stamina));
+  const ownConnections = connections[agent.id] ?? [];
+  const tabs = [...BASE_TABS];
+  if (agent.id !== "operator") tabs.push({ id: "chat", label: "Chat" });
+  if (agent.id === "forecasting") tabs.push({ id: "forecast", label: "Run a forecast" });
 
   useEffect(() => {
     if (!dirty) return;
@@ -61,6 +52,27 @@ function AgentSettings({ agent, names, onSaved, onClose }: { agent: Agent; names
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
+
+  function changed<T>(setter: (value: T) => void) {
+    return (value: T) => { setter(value); setNotice(""); };
+  }
+
+  function chooseTab(id: string) {
+    setTab(id);
+    // Only the two layers are remembered; Chat and forecasts exist for some agents only.
+    if (id === "simple" || id === "advanced") savePanelTab(username, id);
+  }
+
+  function cancel() {
+    setPrompt(agent.prompt); setData(agent.data); setTools(agent.tools); setBrain(agent.brain); setDelegation(agent.delegation);
+    setError(""); setNotice("Changes discarded.");
+  }
+
+  function connect(id: string) {
+    try {
+      addConnection(agent.id, id);
+    } catch (failure) { if (failure instanceof Error) setError(failure.message); }
+  }
 
   async function save() {
     setBusy(true); setError(""); setNotice("");
@@ -72,40 +84,46 @@ function AgentSettings({ agent, names, onSaved, onClose }: { agent: Agent; names
     finally { setBusy(false); }
   }
 
+  const layer = tab === "simple" || tab === "advanced";
   return <section className="agent-inspector" aria-label={`${agent.name} configuration`} data-dirty={dirty}>
     <header className="inspector-heading"><span className="pixel-tile small"><PixelAgent id={agent.id} name={agent.name} size={40} /></span><div><div className="eyebrow">YOUR AGENT</div><h2>{agent.name}</h2></div><span className="agent-badge">Available</span><button type="button" className="icon-button dialog-close" aria-label="Close settings" onClick={onClose}><span aria-hidden="true">×</span></button></header>
     <p className="agent-description">{agent.description}</p>
-    <div className="agent-tabs" aria-label="Agent views"><button aria-pressed={tab === "settings"} onClick={() => setTab("settings")}>Configuration{dirty && " •"}</button>{agent.id !== "operator" && <button aria-pressed={tab === "chat"} onClick={() => setTab("chat")}>Chat</button>}{agent.id === "forecasting" && <button aria-pressed={tab === "forecast"} onClick={() => setTab("forecast")}>Run a forecast</button>}{agent.id === "operator" && <a href="/">Open conversation ↗</a>}</div>
-    {tab === "settings" && <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="agent-settings">
-      <div className="settings-section"><div className="section-number">01</div><div><label htmlFor="agent-prompt">Instructions</label><p>Tell this agent how to work with you. These instructions extend its built-in role.</p></div></div>
-      <textarea id="agent-prompt" value={prompt} onChange={(event) => { setPrompt(event.target.value); setNotice(""); }} maxLength={4000} disabled={busy} placeholder="For example: Reply in Indonesian. Keep explanations practical and highlight assumptions." rows={5} />
-      <div className="field-caption">{prompt.length.toLocaleString()} / 4,000 characters</div>
-      <div className="settings-section"><div className="section-number">02</div><div><label htmlFor="agent-data">Reference data</label><p>Business details this agent should know. Included in each model request for this agent.</p></div></div>
-      <textarea id="agent-data" value={data} onChange={(event) => { setData(event.target.value); setNotice(""); }} maxLength={8000} disabled={busy} placeholder="For example: We sell coffee. Sales are recorded in IDR. A trading week is seven days." rows={4} />
-      <div className="field-caption">{data.length.toLocaleString()} / 8,000 characters · Saved only to your account</div>
-      <div className="settings-section"><div className="section-number">03</div><div><h3>Tools</h3><p>Choose the capabilities this agent can use. Changes are enforced by the server.</p></div></div>
-      <div className="agent-tools">{Object.entries(agent.available_tools).map(([id, label]) => <label className="agent-tool" key={id}><span>{label}</span><input type="checkbox" checked={tools.includes(id)} disabled={busy} onChange={(event) => { setNotice(""); if (event.target.checked) setTools([...tools, id]); else setTools(tools.filter((tool) => tool !== id)); }} /></label>)}</div>
-      {agent.id === "operator" && <p className="settings-help">Turning off a tool stops future uses; it does not erase earlier chat content. Manage saved facts in <a href="/memory">Memory</a>.</p>}
-      <div className="settings-section"><div className="section-number">04</div><div><h3>Brain</h3><p>Choose the language model this agent thinks with. Applies to your next message.</p></div></div>
-      <BrainOptions brains={brains} value={brain} busy={busy} onChange={(id) => { setBrain(id); setNotice(""); }} />
-      {chosenBrain && chosenBrain.location === "cloud" && <p className="settings-help">{chosenBrain.name} sends each message, with retrieved memory, your instructions, reference data and attached CSVs, to Anthropic. Usage is billed to the Anthropic API key set up on the Mula runtime.</p>}
-      {chosenBrain && chosenBrain.status === "needs_setup" && <p className="error" role="alert">{chosenBrain.name} is not set up on the Mula runtime, so chats will fail. Choose another brain or finish its setup.</p>}
-      {setupNeeded && <p className="settings-help">To add the Claude brains, run <code>server/.venv/bin/python server/scripts/enable_claude.py</code> with a Claude Console API key, then restart Mula.</p>}
-      {agent.delegates_to.length > 0 && <>
-        <div className="settings-section"><div className="section-number">05</div><div><h3>When {agent.name} needs another agent</h3><p>{agent.name} can ask {askedAgents} for help. Choose whether you approve each request.</p></div></div>
-        <DelegationOptions value={delegation} busy={busy} onChange={(mode) => { setDelegation(mode); setNotice(""); }} />
-      </>}
-      {agent.id === "forecasting" && <p className="settings-help">The numbers always come from the statistical methods above; the brain, instructions and reference data shape how {agent.name} talks and explains them. Run parameters are set in “Run a forecast”.</p>}
+    <div className="agent-stamina"><StaminaBar view={stamina} standalone /><p className="settings-help">{STAMINA_EXPLANATION}{stamina.unlimited && " No limit is set for this agent."}</p></div>
+    <div className="agent-tab-bar">
+      <AgentPanelTabs tabs={tabs} selected={tab} onSelect={chooseTab} label="Agent views" />
+      {agent.id === "operator" && <a className="agent-tab-link" href="/">Open conversation ↗</a>}
+    </div>
+    {layer && <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="agent-settings" role="tabpanel" id={tabPanelId(tab)} aria-labelledby={tabId(tab)}>
+      {tab === "simple" && <SimpleSettings agent={agent} agents={agents} connections={ownConnections} busy={busy}
+        prompt={prompt} onPrompt={changed(setPrompt)} tools={tools} onTools={changed(setTools)} delegation={delegation} onDelegation={changed(setDelegation)}
+        onConnect={connect} onDisconnect={(id) => removeConnection(agent.id, id)} />}
+      {tab === "advanced" && <AdvancedSettings agent={agent} profile={profile} tools={tools} busy={busy}
+        brain={brain} onBrain={changed(setBrain)} data={data} onData={changed(setData)} />}
+      {agent.id === "forecasting" && tab === "simple" && <p className="settings-help">The numbers always come from the statistical methods in Tools; the brain, instructions and reference data shape how {agent.name} talks and explains them.</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <p className="team-notice" role="status">{notice}</p>}
-      <footer className="settings-footer"><span>{dirty && "Unsaved changes"}{!dirty && "Settings up to date"}</span><button className="account-submit" disabled={busy || !dirty}>{busy && "Saving…"}{!busy && "Save settings"}</button></footer>
+      <footer className="settings-footer">
+        <span className="settings-state" data-dirty={dirty}>{dirty && <><span className="dirty-dot" aria-hidden="true" />Unsaved changes</>}{!dirty && "Settings up to date"}</span>
+        <div className="settings-actions">
+          <button type="button" className="map-reset" onClick={cancel} disabled={busy || !dirty}>Cancel</button>
+          <button className="account-submit" disabled={busy || !dirty}>{busy && "Saving…"}{!busy && "Save settings"}</button>
+        </div>
+      </footer>
     </form>}
-    {tab === "chat" && <>{dirty && <p className="team-notice">Unsaved configuration changes don’t apply to this chat until you save them.</p>}<AgentChat agent={agent} /></>}
-    {tab === "forecast" && <>{dirty && <p className="team-notice">Save your configuration changes before running a forecast.</p>}<ForecastPanel agent={agent} disabled={dirty} /></>}
+    {tab === "chat" && <div role="tabpanel" id={tabPanelId("chat")} aria-labelledby={tabId("chat")}>{dirty && <p className="team-notice">Unsaved configuration changes don’t apply to this chat until you save them.</p>}<AgentChat agent={agent} /></div>}
+    {tab === "forecast" && <div role="tabpanel" id={tabPanelId("forecast")} aria-labelledby={tabId("forecast")}>{dirty && <p className="team-notice">Save your configuration changes before running a forecast.</p>}<ForecastPanel agent={agent} disabled={dirty} /></div>}
   </section>;
 }
 
-function AgentDialog({ agent, names, onSaved, onClosed }: { agent: Agent; names: Record<string, string>; onSaved: (agent: Agent) => void; onClosed: () => void }) {
+// Mirrors server/src/common/profiles.py profile_name(): "mula-" plus the account UUID without dashes.
+function runtimeProfile(accountId: string | undefined) {
+  if (!accountId || !/^[0-9a-f-]{36}$/i.test(accountId)) return null;
+  return "mula-" + accountId.replace(/-/g, "").toLowerCase();
+}
+
+type DialogProps = Omit<SettingsProps, "onClose"> & { onClosed: () => void };
+
+function AgentDialog({ onClosed, ...settings }: DialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -121,16 +139,17 @@ function AgentDialog({ agent, names, onSaved, onClosed }: { agent: Agent; names:
   }
 
   // Every way of closing ends in the dialog's close event, including a browser-forced close.
-  return <dialog ref={dialog} className="agent-dialog" aria-label={`${agent.name} settings`} onClose={onClosed}
+  return <dialog ref={dialog} className="agent-dialog" aria-label={`${settings.agent.name} settings`} onClose={onClosed}
     onCancel={(event) => { event.preventDefault(); requestClose(); }}
     onClick={(event) => { if (event.target === dialog.current) requestClose(); }}>
-    <AgentSettings agent={agent} names={names} onSaved={onSaved} onClose={requestClose} />
+    <AgentSettings {...settings} onClose={requestClose} />
   </dialog>;
 }
 
 export default function TeamPage() {
-  const [account, setAccount] = useState<{ username: string } | null>(null);
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [account, setAccount] = useState<{ id?: string; username: string } | null>(null);
+  // The map and the panel share one agent store (instructions, tools, brain from the server; connections local).
+  const { agents, connections } = useAgentStore();
   const [layout, setLayout] = useState<Layout>({});
   // Bumped by Reset layout to remount the map with the defaults.
   const [mapVersion, setMapVersion] = useState(0);
@@ -149,7 +168,7 @@ export default function TeamPage() {
     if (!response.ok) throw new Error("Could not open your agents. Please retry.");
     const user = await response.json();
     const result = await teamRequest("/api/team", { signal });
-    setAgents(result.agents); setLayout(result.layout ?? {}); setAccount(user);
+    loadAgents(user.username, result.agents); setLayout(result.layout ?? {}); setAccount(user);
   }
 
   useEffect(() => {
@@ -188,11 +207,12 @@ export default function TeamPage() {
       <header className="topbar"><span className="mobile-brand"><span className="brand-word">WORKSPACE</span></span><div className="topbar-actions"><a className="text-button" href="/memory">Memory</a><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={signingOut}><Icon name="exit" /></button></div></header>
       <div className="team-content">
         {error && <p className="error" role="alert">{error}</p>}
-        <div className="agents-intro"><div><h1>My agents</h1><p>Meet the agents working for your business. <span className="map-hint">Drag a card to arrange your map, or focus it and use the arrow keys.</span></p></div><button type="button" className="map-reset" onClick={reset} disabled={resetting}>{resetting && "Resetting…"}{!resetting && "Reset layout"}</button></div>
+        <div className="agents-intro"><div><h1>My agents</h1><p>Meet the agents working for your business. <span className="map-hint">Drag a card to arrange your map, or focus it and use the arrow keys. Drag empty space to pan; pinch or Ctrl/⌘ + scroll to zoom.</span></p></div><button type="button" className="map-reset" onClick={reset} disabled={resetting}>{resetting && "Resetting…"}{!resetting && "Reset layout"}</button></div>
         {mapError && <p className="error" role="alert">{mapError}</p>}
-        <AgentMap key={mapVersion} agents={agents} saved={layout} selectedId={selectedId} onOpen={setSelectedId} onError={setMapError} />
+        <AgentMap key={mapVersion} agents={agents} connections={connections} saved={layout} selectedId={selectedId} username={account.username} onOpen={setSelectedId} onError={setMapError} />
       </div>
     </main>
-    {selected && <AgentDialog key={selected.id} agent={selected} names={Object.fromEntries(agents.map((agent) => [agent.id, agent.name]))} onClosed={() => setSelectedId(null)} onSaved={(saved) => setAgents((previous) => previous.map((agent) => { if (agent.id === saved.id) return saved; return agent; }))} />}
+    {selected && <AgentDialog key={selected.id} agent={selected} agents={agents} connections={connections} username={account.username} profile={runtimeProfile(account.id)}
+      onClosed={() => setSelectedId(null)} onSaved={replaceAgent} />}
   </div>;
 }

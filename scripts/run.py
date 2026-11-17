@@ -153,12 +153,16 @@ def main():
         with ExitStack() as stack:
             launch("Ollama", ["ollama", "serve"], ROOT,
                    lambda: responds("http://127.0.0.1:11434/api/tags"), stack, children)
-            launch("Hermes", ["bash", str(ROOT / "server/scripts/start_hermes.sh")], ROOT,
-                   lambda: responds(f"{hermes}/v1/capabilities", headers=headers), stack, children)
             ensure_database(settings.get("MULA_DATABASE_URL", ""))
+            # The server starts before Hermes: Hermes connects to the server's agent tools
+            # (/mcp) once at startup and stops trying after three failed attempts, which would
+            # leave every agent without its tools (remember, forecasts, ask_agent) until Hermes
+            # restarts. The server itself only contacts Hermes when a chat turn starts.
             launch("Server", [str(ROOT / "server/.venv/bin/python"), "-m", "uvicorn", "src.main:app",
                    "--host", "127.0.0.1", "--port", "8000", "--env-file", str(env_file)],
                    ROOT / "server", server_ready, stack, children)
+            launch("Hermes", ["bash", str(ROOT / "server/scripts/start_hermes.sh")], ROOT,
+                   lambda: responds(f"{hermes}/v1/capabilities", headers=headers), stack, children)
             launch("Client", ["node", str(ROOT / "node_modules/next/dist/bin/next"),
                    "dev", "--hostname", "127.0.0.1", "--port", "3000"], ROOT,
                    lambda: responds("http://127.0.0.1:3000/") and

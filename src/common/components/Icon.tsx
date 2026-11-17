@@ -1,4 +1,4 @@
-type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified";
+export type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified" | "edit" | "trash" | "external" | "infinity" | "zoomIn" | "zoomOut" | "fit" | "info" | "repeat" | "trend" | "tool";
 
 const paths: Record<IconName, string> = {
   microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
@@ -27,6 +27,20 @@ const paths: Record<IconName, string> = {
   attention: "M12 3 2 20h20ZM12 10v4M12 17h.01",
   // A rosette with a tick, for verified publishers.
   verified: "M12 2.5l2.3 1.9 3-.3.9 2.9 2.6 1.5-1 2.8 1 2.8-2.6 1.5-.9 2.9-3-.3L12 21.5l-2.3-1.9-3 .3-.9-2.9-2.6-1.5 1-2.8-1-2.8 2.6-1.5.9-2.9 3 .3ZM8.5 12l2.4 2.4 4.6-4.8",
+  // A box with an arrow leaving it: "opens in a new tab".
+  external: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+  edit: "M4 20h4L19 9l-4-4L4 16ZM13.5 6.5l4 4",
+  trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+  // Map view controls and the stamina bar.
+  infinity: "M12 12c-2-2.5-3.5-4-6-4a4 4 0 0 0 0 8c2.5 0 4-1.5 6-4c2 2.5 3.5 4 6 4a4 4 0 0 0 0-8c-2.5 0-4 1.5-6 4",
+  zoomIn: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M20 20l-4-4M8 11h6M11 8v6",
+  zoomOut: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M20 20l-4-4M8 11h6",
+  fit: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M12 11v5M12 8h.01",
+  // Tool cards in the agent settings panel.
+  repeat: "M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3",
+  trend: "M3 17l6-6 4 4 8-8M14 7h7v7",
+  tool: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4Z",
   unlinked: "M9 15l-1.5 1.5a3.5 3.5 0 0 1-5-5L5 9M15 9l1.5-1.5a3.5 3.5 0 0 1 5 5L19 15M8 4v3M4 8h3M16 20v-3M20 16h-3",
 };
 

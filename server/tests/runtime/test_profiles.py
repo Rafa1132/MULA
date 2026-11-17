@@ -57,8 +57,11 @@ class ProfileFilesTests(unittest.TestCase):
         folder = profiles.ensure_profile(self.account_id)
         self.assertEqual(folder, self.home / "profiles" / profiles.profile_name(self.account_id))
         self.assertEqual(folder.stat().st_mode & 0o777, 0o700)
-        for name in ("config.yaml", ".env", profiles.NO_SKILLS_MARKER):
+        for name in ("config.yaml", ".env", "SOUL.md", profiles.NO_SKILLS_MARKER):
             self.assertEqual((folder / name).stat().st_mode & 0o777, 0o600, name)
+        # Mula's identity replaces the runtime's own coding-agent identity.
+        self.assertEqual((folder / "SOUL.md").read_text(), profiles.IDENTITY.read_text())
+        self.assertNotIn("Hermes Agent", (folder / "SOUL.md").read_text())
         env = self.env(folder)
         self.assertEqual(env["API_SERVER_KEY"], profiles.profile_key(self.account_id))
         self.assertNotEqual(env["API_SERVER_KEY"], "root-key")
@@ -69,7 +72,10 @@ class ProfileFilesTests(unittest.TestCase):
         self.assertEqual(profiles.profiles_with_runtime_memory(), [])
         # Refreshing picks up a changed root secret and keeps everything else identical.
         (self.home / ".env").write_text("API_SERVER_KEY=root-key\nMULA_TOOLS_KEY=new-tools-key\n")
+        # A runtime-seeded identity is replaced on the next refresh too.
+        (folder / "SOUL.md").write_text("You are Hermes Agent, built by Nous Research.\n")
         profiles.ensure_profile(self.account_id)
+        self.assertEqual((folder / "SOUL.md").read_text(), profiles.IDENTITY.read_text())
         env = self.env(folder)
         self.assertEqual(env["MULA_TOOLS_KEY"], "new-tools-key")
         self.assertNotIn("ANTHROPIC_API_KEY", env)

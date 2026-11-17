@@ -64,7 +64,7 @@ After the one-time setup in [backend setup](server/README.md), start everything 
 bash /Users/rafa/Desktop/LARAS/run.sh
 ```
 
-From the project folder, `./run.sh` works too. It starts Ollama if needed, then Hermes, FastAPI and the frontend, waits for them to become reachable, and opens http://127.0.0.1:3000. Existing services are reused. Leave this Terminal open; Ctrl+C stops only services started by this launcher. Logs are written under `.runtime/logs`. Use `./run.sh --no-open` to skip opening the browser.
+From the project folder, `./run.sh` works too. It starts Ollama if needed, then FastAPI, Hermes (after FastAPI, because Hermes connects to the agent tools FastAPI serves) and the frontend, waits for them to become reachable, and opens http://127.0.0.1:3000. Existing services are reused. Leave this Terminal open; Ctrl+C stops only services started by this launcher. Logs are written under `.runtime/logs`. Use `./run.sh --no-open` to skip opening the browser.
 
 The launcher uses the existing installation; it reports missing setup instead of downloading dependencies during every launch. If an old backend is still running without account endpoints, stop that Terminal first so port 8000 becomes available. The compact tool-free Operator profile uses the current Qwen model at its 40,960-token window.
 

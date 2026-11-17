@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_POSITIONS, agentLinks, agentStatus, lineBetween, clampFraction, clampToCanvas, isDrag, nudge, pointerToFraction, positionFor } from "../services/map.ts";
+import { CARD, CARD_LEDGE, DEFAULT_POSITIONS, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampFraction, clampToCanvas, dragTo, isDrag, nudge, positionFor } from "../services/map.ts";
 
 test("saved positions win, then defaults, then a spread for new agents", () => {
   assert.deepEqual(positionFor("operator", { operator: { x: 0.9, y: 0.1 } }, 0), { x: 0.9, y: 0.1 });
@@ -29,9 +29,19 @@ test("the whole card stays on the canvas", () => {
   assert.deepEqual(clampToCanvas({ x: 0.9, y: 0.1 }, { width: 100, height: 100 }, card), { x: 0.5, y: 0.5 });
 });
 
-test("the grabbed point stays under the pointer", () => {
-  const canvas = { left: 100, top: 50, width: 800, height: 400 };
-  assert.deepEqual(pointerToFraction(canvas, 520, 270, { x: 20, y: 20 }), { x: 0.5, y: 0.5 });
+test("positions are fractions of the world; cards stay inside it", () => {
+  assert.deepEqual(centreOf({ x: 0.5, y: 0.5 }), { x: WORLD.width / 2, y: WORLD.height / 2 });
+  const corner = centreOf({ x: 0, y: 1 });
+  // Fractions round-trip through floating point, so compare whole pixels.
+  assert.equal(Math.round(corner.x), CARD.width / 2);
+  assert.equal(Math.round(corner.y), WORLD.height - CARD.height / 2 - CARD_LEDGE);
+  assert.deepEqual(cardRect({ x: 500, y: 400 }), { x: 500 - CARD.width / 2, y: 400 - CARD.height / 2, width: CARD.width, height: CARD.height + CARD_LEDGE });
+});
+
+test("a drag moves the card by the pointer movement divided by the zoom", () => {
+  // 100 screen pixels at 50% zoom are 200 world pixels.
+  assert.deepEqual(dragTo({ x: 800, y: 500 }, 100, -50, 0.5), { x: 1000 / WORLD.width, y: 400 / WORLD.height });
+  assert.deepEqual(dragTo({ x: 800, y: 500 }, 100, 0, 1), { x: 900 / WORLD.width, y: 0.5 });
 });
 
 test("small pointer movements are clicks, larger ones are drags", () => {
@@ -58,19 +68,17 @@ test("card status reflects the brain", () => {
   assert.deepEqual(agentStatus({ ...operator, brain: "removed" }), { text: "Ready · 1 tool", warning: false });
 });
 
-test("links follow the delegation setting", () => {
-  const operator = { id: "operator", delegates_to: ["forecasting", "inventory"], delegation: "ask" };
+test("links follow the store's connections; only runtime-supported ones are active", () => {
+  const operator = { id: "operator", delegates_to: ["forecasting"], delegation: "ask" };
   const forecasting = { id: "forecasting", delegates_to: [], delegation: null };
-  assert.deepEqual(agentLinks([operator, forecasting]), [{ from: "operator", to: "forecasting", mode: "ask", label: "asks after your OK" }]);
-  assert.equal(agentLinks([{ ...operator, delegation: "auto" }, forecasting])[0].label, "asks directly");
-  assert.deepEqual(agentLinks([{ ...operator, delegation: "off" }, forecasting]), []);
-});
-
-test("lines stop just outside both cards", () => {
-  const card = { width: 200, height: 100 };
-  assert.deepEqual(lineBetween({ x: 0, y: 0 }, { x: 500, y: 0 }, card, 10), { x1: 110, y1: 0, x2: 390, y2: 0 });
-  assert.deepEqual(lineBetween({ x: 0, y: 0 }, { x: 0, y: 300 }, card, 10), { x1: 0, y1: 60, x2: 0, y2: 240 });
-  // Cards that touch or overlap get no line rather than one pointing backwards.
-  assert.equal(lineBetween({ x: 0, y: 0 }, { x: 210, y: 0 }, card, 10), null);
-  assert.equal(lineBetween({ x: 5, y: 5 }, { x: 5, y: 5 }, card), null);
+  const inventory = { id: "inventory", delegates_to: [], delegation: null };
+  const team = [operator, forecasting, inventory];
+  assert.deepEqual(agentLinks(team, { operator: ["forecasting"] }), [{ from: "operator", to: "forecasting", state: "ask", label: "Asks after your OK", planned: false }]);
+  assert.equal(agentLinks([{ ...operator, delegation: "auto" }, forecasting], { operator: ["forecasting"] })[0].label, "Asks directly, without waiting for your OK");
+  // Switched off, the connection stays on the map as a dashed one.
+  assert.deepEqual(agentLinks([{ ...operator, delegation: "off" }, forecasting], { operator: ["forecasting"] }), [{ from: "operator", to: "forecasting", state: "off", label: "Off: set to Don’t ask other agents", planned: true }]);
+  // Connections added in the panel that the runtime can't use yet are planned.
+  assert.deepEqual(agentLinks(team, { operator: ["inventory"], forecasting: ["inventory"] }).map((link) => [link.from, link.to, link.state]), [["operator", "inventory", "planned"], ["forecasting", "inventory", "planned"]]);
+  // Removed connections draw nothing; unknown and self targets are ignored.
+  assert.deepEqual(agentLinks(team, { operator: [], forecasting: ["forecasting", "ghost"] }), []);
 });

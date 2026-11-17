@@ -39,7 +39,7 @@ try {
   await page.getByText("Ready · Qwen (local)").first().waitFor();
   assert.equal(await page.getByText("Ready · Qwen (local)").count(), 2);
   // The Operator asks Forecasting, after the owner's OK by default.
-  await page.locator(".map-link text", { hasText: "asks after your OK" }).waitFor();
+  await page.locator('.map-link[aria-label="Operator to Forecasting: Asks after your OK"]').waitFor();
   assert.equal(await page.locator(".map-link").count(), 1);
   await page.screenshot({ path: screenshots + "/mula-agents-map-desktop.png", fullPage: true });
 
@@ -82,13 +82,16 @@ try {
   const panel = page.getByRole("dialog", { name: "Operator settings" });
   await panel.waitFor();
   await panel.getByLabel("Instructions", { exact: true }).fill("Reply briefly in English.");
-  await panel.getByLabel("Reference data", { exact: true }).fill("We operate a coffee shop. Sales values are in IDR.");
   const delegation = panel.getByRole("radiogroup", { name: "When this agent needs another agent" });
   assert.equal(await delegation.getByLabel(/Ask me first/).isChecked(), true);
   await delegation.getByLabel(/Go ahead/).check();
+  // Reference data lives in the Advanced layer; unsaved edits carry across layers.
+  await panel.getByRole("tab", { name: "Advanced" }).click();
+  await panel.getByLabel("Reference data", { exact: true }).fill("We operate a coffee shop. Sales values are in IDR.");
+  await panel.getByRole("tab", { name: "Simple" }).click();
   await panel.getByRole("button", { name: "Save settings", exact: true }).click();
   await panel.getByText("Saved for your account. Applies to the next request.").waitFor();
-  await panel.getByRole("heading", { name: "When Operator needs another agent" }).scrollIntoViewIfNeeded();
+  await panel.getByText("When Operator needs another agent").scrollIntoViewIfNeeded();
   await page.screenshot({ path: screenshots + "/mula-agents-panel-desktop.png" });
   // Esc with unsaved changes asks first; dismissing keeps the panel open.
   await panel.getByLabel("Instructions", { exact: true }).fill("Unsaved draft");
@@ -105,24 +108,26 @@ try {
   assert.equal(await reopened.getByLabel(/Go ahead/).isChecked(), true);
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
-  await page.locator(".map-link text", { hasText: "asks directly" }).waitFor();
+  await page.locator('.map-link[aria-label="Operator to Forecasting: Asks directly, without waiting for your OK"]').waitFor();
 
   // Forecasting has its own brain and a direct chat, separate from the Operator's conversation.
   await forecasting.click();
   const forecastPanel = page.getByRole("dialog", { name: "Forecasting settings" });
-  assert.equal(await forecastPanel.getByRole("radiogroup", { name: "Brain" }).getByLabel(/Qwen \(local\)/).isChecked(), true);
+  await forecastPanel.getByRole("tab", { name: "Advanced" }).click();
+  assert.equal(await forecastPanel.getByLabel("Brain", { exact: true }).inputValue(), "qwen");
+  await forecastPanel.getByRole("tab", { name: "Simple" }).click();
   assert.equal(await forecastPanel.getByRole("radiogroup", { name: "When this agent needs another agent" }).count(), 0);
-  await forecastPanel.getByRole("button", { name: "Chat", exact: true }).click();
+  await forecastPanel.getByRole("tab", { name: "Chat", exact: true }).click();
   await forecastPanel.getByText("Ask Forecasting anything about your sales.").waitFor();
   await forecastPanel.getByLabel("Message Forecasting").fill("What will I sell next week?");
   await forecastPanel.getByRole("button", { name: "Send", exact: true }).click();
   await forecastPanel.getByRole("log", { name: "Chat with Forecasting" }).getByText(/about 410 per day/).waitFor();
   await page.screenshot({ path: screenshots + "/mula-agents-chat-desktop.png" });
-  await forecastPanel.getByRole("button", { name: "Configuration", exact: true }).click();
+  await forecastPanel.getByRole("tab", { name: "Simple", exact: true }).click();
   await forecastPanel.getByLabel("Instructions", { exact: true }).fill("Explain in three short sentences, in English.");
   await forecastPanel.getByRole("button", { name: "Save settings", exact: true }).click();
   await forecastPanel.getByText("Saved for your account. Applies to the next request.").waitFor();
-  await forecastPanel.getByRole("button", { name: "Run a forecast", exact: true }).click();
+  await forecastPanel.getByRole("tab", { name: "Run a forecast", exact: true }).click();
   const upload = forecastPanel.getByLabel("Upload historical data");
   await upload.waitFor();
   await page.waitForFunction(() => !document.querySelector('dialog input[type="file"]').disabled);
@@ -144,30 +149,30 @@ try {
   await page.reload();
   await forecasting.click();
   const reloadedPanel = page.getByRole("dialog", { name: "Forecasting settings" });
-  await reloadedPanel.getByRole("button", { name: "Chat", exact: true }).click();
+  await reloadedPanel.getByRole("tab", { name: "Chat", exact: true }).click();
   await reloadedPanel.getByText("What will I sell next week?").waitFor();
-  await reloadedPanel.getByRole("button", { name: "Run a forecast", exact: true }).click();
+  await reloadedPanel.getByRole("tab", { name: "Run a forecast", exact: true }).click();
   await page.getByRole("heading", { name: "sales · Trend (drift)" }).waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
 
-  // Phones: cards stack, nothing scrolls sideways, and the panel fills the screen.
+  // Phones keep the pan-and-zoom map (map.browser.spec.mjs covers touch); Fit shows every card,
+  // nothing scrolls sideways, and the panel fills the screen.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForFunction(() => document.querySelector(".agent-map")?.dataset.movable === "false");
-  assert.equal(await page.locator(".map-card").first().evaluate((node) => getComputedStyle(node).position), "static");
-  assert.equal(await page.locator(".map-links").isVisible(), false);
-  // The map clips overflow, so check each card is fully on screen once the translate transition settles.
+  await page.getByRole("button", { name: "Fit to screen" }).click();
+  assert.equal(await page.locator(".map-link").count(), 1);
+  // The map clips overflow, so check each card is fully on screen once the zoom glide settles.
   await page.waitForFunction(() => [...document.querySelectorAll(".map-card")].every((card) => { const box = card.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth; }));
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.screenshot({ path: screenshots + "/mula-agents-mobile.png", fullPage: true });
   await forecasting.click();
   const mobilePanel = page.getByRole("dialog", { name: "Forecasting settings" });
   assert.equal(Math.round((await mobilePanel.boundingBox()).width), 390);
-  await mobilePanel.getByLabel("Last value", { exact: true }).uncheck();
-  await mobilePanel.getByRole("button", { name: "Run a forecast", exact: true }).click();
+  await mobilePanel.getByRole("button", { name: "Remove Last value tool" }).click();
+  await mobilePanel.getByRole("tab", { name: "Run a forecast", exact: true }).click();
   await mobilePanel.getByText("Save your configuration changes before running a forecast.").waitFor();
   assert.equal(await mobilePanel.getByRole("button", { name: "Run forecast", exact: true }).isDisabled(), true);
   await page.screenshot({ path: screenshots + "/mula-agents-panel-mobile.png" });
   assert.deepEqual(errors, []);
-  console.log("Agent map: redirect, links, drag and keyboard arrangement with persistence, reset, settings and delegation, Forecasting chat, forecasts, export and phone layout passed.");
+  console.log("Agent map: redirect, links, drag and keyboard arrangement with persistence, reset, settings and delegation, Forecasting chat, forecasts, export and phone map passed.");
 } finally { await browser.close(); }

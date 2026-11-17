@@ -25,6 +25,10 @@ from .paths import PROJECT_ROOT
 
 BACKEND = PROJECT_ROOT / "server"
 TEMPLATE = BACKEND / "hermes" / "profile.config.yaml"
+# The identity line the runtime puts first in every system prompt. Without it the runtime seeds
+# its own coding-agent identity, which on the small local model outweighs the agent's Mula role
+# and the owner's instructions that follow. The runtime keeps an existing SOUL.md as it is.
+IDENTITY = BACKEND / "hermes" / "SOUL.md"
 RUNTIME_HOME = PROJECT_ROOT / ".runtime" / "hermes"
 if HERMES_HOME:
     RUNTIME_HOME = Path(HERMES_HOME)
@@ -142,6 +146,7 @@ def ensure_profile(account_id: str) -> Path:
     # leave a half-written profile (a folder with a config but no key) behind.
     config = profile_config()
     env = profile_env(account_id)
+    identity = IDENTITY.read_text(encoding="utf-8")
     try:
         folder.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         folder.mkdir(exist_ok=True, mode=0o700)
@@ -151,6 +156,9 @@ def ensure_profile(account_id: str) -> Path:
         env_path = folder / ".env"
         if not env_path.is_file() or env_path.read_text(encoding="utf-8") != env:
             write_private(env_path, env)
+        identity_path = folder / "SOUL.md"
+        if not identity_path.is_file() or identity_path.read_text(encoding="utf-8") != identity:
+            write_private(identity_path, identity)
         marker = folder / NO_SKILLS_MARKER
         if not marker.exists():
             write_private(marker, "This Mula account profile does not use bundled skills.\n")

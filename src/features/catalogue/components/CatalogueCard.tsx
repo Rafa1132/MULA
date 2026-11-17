@@ -2,8 +2,10 @@
 
 import { Icon } from "@/common/components";
 import type { CatalogueEntry, CatalogueStatus } from "../data.ts";
+import { launchUrl } from "../services/launch.ts";
 import { publisherFor } from "../services/publishers.ts";
 import CatalogueImage from "./CatalogueImage";
+import LaunchLink from "./LaunchLink";
 import PublisherAvatar from "./PublisherAvatar";
 
 const STATUS_LABELS: Record<CatalogueStatus, string> = { available: "Available", added: "Added", coming_soon: "Coming soon" };
@@ -27,6 +29,11 @@ function CardAction({ entry, onAdd, onOpenWithoutPage }: Props) {
   }
   if (entry.status === "available") {
     return <button type="button" className="catalogue-action catalogue-action-primary" aria-label={`Add ${entry.name}`} onClick={() => onAdd(entry)}>Add</button>;
+  }
+  // An added app with a launchUrl opens itself in a new tab.
+  const launch = launchUrl(entry);
+  if (entry.type === "app" && launch !== undefined) {
+    return <LaunchLink className="catalogue-action" href={launch} label="Open" hiddenContext={entry.name} />;
   }
   if (entry.href) {
     return <a className="catalogue-action" href={entry.href} aria-label={`Open ${entry.name}`}>Open</a>;

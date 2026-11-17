@@ -1,6 +1,8 @@
+import type { Rect } from "./connectors";
 import type { Agent, Delegation } from "./team";
 
-// A card's centre as a fraction (0–1) of the map canvas, so a saved layout survives resizes.
+// A card's centre as a fraction (0–1) of the map's world, so a saved layout doesn't depend on the screen.
+// The world is a fixed 1600 × 1000 pixel plane that the viewport pans and zooms over.
 export type Position = { x: number; y: number };
 export type Layout = Record<string, Position>;
 export type Size = { width: number; height: number };
@@ -10,6 +12,10 @@ export const DEFAULT_POSITIONS: Layout = {
   operator: { x: 0.3, y: 0.42 },
   forecasting: { x: 0.7, y: 0.62 },
 };
+export const WORLD: Size = { width: 1600, height: 1000 };
+// Matches .map-card in team.css. The card's raised ledge is a box-shadow drawn below the box.
+export const CARD: Size = { width: 232, height: 256 };
+export const CARD_LEDGE = 6;
 export const DRAG_THRESHOLD_PX = 5;
 export const NUDGE = 0.02;
 export const LARGE_NUDGE = 0.08;
@@ -44,12 +50,25 @@ export function clampToCanvas(position: Position, canvas: Size, card: Size): Pos
   };
 }
 
-/** Where the card's centre lands, keeping the point where it was grabbed under the pointer. */
-export function pointerToFraction(canvas: { left: number; top: number; width: number; height: number }, clientX: number, clientY: number, grabOffset: Position): Position {
-  return {
-    x: (clientX - grabOffset.x - canvas.left) / canvas.width,
-    y: (clientY - grabOffset.y - canvas.top) / canvas.height,
-  };
+/** A position clamped so the whole card, ledge included, stays in the world. */
+export function clampPosition(position: Position): Position {
+  return clampToCanvas(position, WORLD, { width: CARD.width, height: CARD.height + CARD_LEDGE * 2 });
+}
+
+/** A card's centre in world pixels. */
+export function centreOf(position: Position): Position {
+  const clamped = clampPosition(position);
+  return { x: clamped.x * WORLD.width, y: clamped.y * WORLD.height };
+}
+
+/** The card's box in world pixels, ledge included, for connectors and fitting. */
+export function cardRect(centre: Position): Rect {
+  return { x: centre.x - CARD.width / 2, y: centre.y - CARD.height / 2, width: CARD.width, height: CARD.height + CARD_LEDGE };
+}
+
+/** Where a dragged card's centre lands: screen movement is divided by the zoom to get world movement. */
+export function dragTo(origin: Position, dx: number, dy: number, zoom: number): Position {
+  return clampPosition({ x: (origin.x + dx / zoom) / WORLD.width, y: (origin.y + dy / zoom) / WORLD.height });
 }
 
 export function isDrag(dx: number, dy: number) {
@@ -72,37 +91,34 @@ export function agentStatus(agent: Agent): { text: string; warning: boolean } {
   return { text: `Ready · ${count(agent.tools.length, "tool")}`, warning: false };
 }
 
-export type Link = { from: string; to: string; mode: Delegation; label: string };
-export type Line = { x1: number; y1: number; x2: number; y2: number };
+// active: the runtime can make this hand-off ("Ask me first" or "Go ahead").
+// planned: drawn dashed. Either delegation is "Don't ask other agents" ("off"), or the connection was
+// added in the panel and the runtime doesn't support it yet (only the server's delegates_to does).
+export type LinkState = Delegation | "planned";
+export type Link = { from: string; to: string; state: LinkState; label: string; planned: boolean };
 
-const LINK_LABELS: Record<Delegation, string> = { ask: "asks after your OK", auto: "asks directly", off: "" };
+// What each kind of link means. Lines carry no text; this appears in the line's tooltip, as its
+// accessible name, and on the connection card in the settings panel.
+const LINK_LABELS: Record<LinkState, string> = {
+  ask: "Asks after your OK",
+  auto: "Asks directly, without waiting for your OK",
+  off: "Off: set to Don’t ask other agents",
+  planned: "Planned: Mula doesn’t hand work along this yet",
+};
 
-/** Who can ask whom, as the owner's delegation setting allows; "off" draws no link. */
-export function agentLinks(agents: Agent[]): Link[] {
-  const shown = new Set(agents.map((agent) => agent.id));
+/** One link per connection (from the agent store), drawn solid only when the runtime can use it. */
+export function agentLinks(agents: Agent[], connections: Record<string, string[]>): Link[] {
+  const byId = new Map(agents.map((agent) => [agent.id, agent]));
   const links: Link[] = [];
   for (const agent of agents) {
-    if (!agent.delegation || agent.delegation === "off") continue;
-    for (const target of agent.delegates_to) {
-      if (shown.has(target)) links.push({ from: agent.id, to: target, mode: agent.delegation, label: LINK_LABELS[agent.delegation] });
+    for (const target of connections[agent.id] ?? []) {
+      if (!byId.has(target) || target === agent.id) continue;
+      let state: LinkState = "planned";
+      if (agent.delegation && agent.delegates_to.includes(target)) state = agent.delegation;
+      links.push({ from: agent.id, to: target, state, label: LINK_LABELS[state], planned: state === "off" || state === "planned" });
     }
   }
   return links;
-}
-
-/** A line between two card centres (pixels), stopping `gap` outside each card; null when the cards are too close. */
-export function lineBetween(from: Position, to: Position, card: Size, gap = 14): Line | null {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const length = Math.hypot(dx, dy);
-  if (length === 0) return null;
-  const ux = dx / length;
-  const uy = dy / length;
-  // Distance from a card's centre to its border along the line (division by 0 gives Infinity).
-  const edge = Math.min(card.width / 2 / Math.abs(ux), card.height / 2 / Math.abs(uy));
-  const inset = edge + gap;
-  if (length <= inset * 2) return null;
-  return { x1: from.x + ux * inset, y1: from.y + uy * inset, x2: to.x - ux * inset, y2: to.y - uy * inset };
 }
 
 function count(amount: number, noun: string) {

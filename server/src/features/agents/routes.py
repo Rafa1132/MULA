@@ -69,6 +69,7 @@ async def chat_with_agent(agent_id: str, request: AgentChatRequest, account: dic
     reply_id = accounts.add_message(account["id"], "assistant", "", "Reply interrupted.", agent_id)
     token = service.issue_ticket(account["id"], agent_id, request.csv_file, message_id=reply_id)
     system_prompt = service.system_prompt(agent_id, config, token)
+    message += team.instructions_reminder(config)
     model = brains.alias_for(config["brain"])
     return StreamingResponse(agent_events(account["id"], agent_id, system_prompt, message, direct_session(account, agent_id), model, reply_id, user_note),
                              media_type="application/x-ndjson", headers=STREAM_HEADERS)

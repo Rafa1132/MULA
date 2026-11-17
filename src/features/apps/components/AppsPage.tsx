@@ -58,7 +58,8 @@ export default function AppsPage() {
   const matches = filterApps(apps, query);
   const attention = attentionCount(apps);
 
-  // Open and Settings have no pages in this prototype, so they explain that instead.
+  // Apps with a launchUrl open through a link on their card. The others, like Settings,
+  // explain that they have no page yet in this prototype.
   function open(app: MyApp) {
     setNotice(`${app.name} has no page yet in this prototype.`);
   }

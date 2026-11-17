@@ -11,6 +11,14 @@ model:
 agent:
   max_turns: 8
   mula_compact_operator: true
+  # Leave out the runtime's generic coding-agent guidance (tool-use enforcement, execution
+  # discipline, task completion, parallel tool calls). It is written for coding agents, more than
+  # doubles every prompt, and on the small local model it drowns out Mula's role and the owner's
+  # instructions. Mula's own agent prompts say when to use each tool.
+  tool_use_enforcement: false
+  execution_guidance: false
+  task_completion_guidance: false
+  parallel_tool_call_guidance: false
 
 # Agents get only the business tools the Mula backend serves at /mcp
 # (server/src/features/agents/tools.py). Terminal, file, web, memory and

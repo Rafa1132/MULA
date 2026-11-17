@@ -1,0 +1,4 @@
+/* "Open" links that start a new tab: the label, then a small box-and-arrow icon. */
+/* a.launch-link outranks button styles such as .apps-button, whichever file loads last. */
+a.launch-link { display: inline-flex; align-items: center; justify-content: center; gap: 5px; text-decoration: none; }
+a.launch-link svg { width: 14px; height: 14px; flex-shrink: 0; }

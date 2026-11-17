@@ -93,6 +93,7 @@ async def chat_with_operator(request: ChatRequest, account: dict = Depends(accou
         attachment = request.csv_file
     ticket = agents.issue_ticket(account["id"], "operator", attachment, message_id=reply_id)
     memory_context += agents.tool_context("operator", ticket, config)
+    model_message += team.instructions_reminder(config)
     if request.stream:
         return StreamingResponse(
             operator_events(account["id"], model_message, session_id, reply_id, csv_note, memory_context, sources, memory_note, model, ticket),

@@ -1,0 +1,159 @@
+/* To-do prototype, laid out as a separate app with its own look: a printed notebook.
+   Warm paper with a dot grid, an italic serif masthead with a hand-drawn underline, an
+   index card for adding, tasks on a ruled page with a red margin line and numbers,
+   sticker filters, hand-drawn checkboxes and an "Overdue" rubber stamp.
+
+   Every colour is a --td-* token below, with its own dark set. Text tokens measure at
+   least 4.5:1 on both the paper and the card (see the README). Overdue is a word plus an
+   icon, never colour alone. Reused apps.css classes read --apps-quiet and --apps-warn,
+   so those point at the To-do tokens here. */
+.todo-shell {
+  --td-paper: #f3ede1;
+  --td-card: #fffcf5;
+  --td-ink: #1d1a15;
+  --td-quiet: #5c5446;
+  --td-rule: #ddd2bf;
+  --td-accent: #e0482b;      /* vermilion: the margin line, underline, ticks and shadows */
+  --td-accent-text: #a8311a; /* vermilion dark enough to read as text */
+  --td-marker: #f5cf4f;      /* highlighter yellow behind ink text */
+  --td-on-ink: #fffcf5;
+  --td-serif: var(--font-todo-serif), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --apps-quiet: var(--td-quiet);
+  --apps-warn: var(--td-accent-text);
+  min-height: 100dvh;
+  color: var(--td-ink);
+  background-color: var(--td-paper);
+  background-image: radial-gradient(color-mix(in srgb, var(--td-ink) 13%, transparent) 1px, transparent 1.3px);
+  background-size: 22px 22px;
+}
+@media (prefers-color-scheme: dark) {
+  .todo-shell {
+    --td-paper: #16140f;
+    --td-card: #201d17;
+    --td-ink: #f3ecdf;
+    --td-quiet: #b9ae9b;
+    --td-rule: #3a342a;
+    --td-accent: #ff7656;
+    --td-accent-text: #ff9a80;
+    --td-marker: #e8c243;
+    --td-on-ink: #16140f;
+  }
+}
+
+/* Masthead */
+.todo-appbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; max-width: 860px; margin: 0 auto; padding: 40px 32px 6px; }
+.todo-masthead { min-width: 0; }
+.todo-dateline { margin: 0 0 4px; color: var(--td-quiet); font-family: var(--mono); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; }
+.todo-appname { position: relative; display: inline-block; margin: 0; padding-bottom: 14px; color: var(--td-ink); font-family: var(--td-serif); font-size: clamp(64px, 11vw, 120px); font-style: italic; font-weight: 400; line-height: .9; letter-spacing: -.02em; }
+/* A hand-drawn stroke under the name, drawn by a mask so it follows the theme colour. */
+.todo-appname::after {
+  content: ""; position: absolute; left: 2%; right: -4%; bottom: 0; height: 16px;
+  background: var(--td-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 16' preserveAspectRatio='none'%3E%3Cpath d='M3 11C48 4 92 3 140 6s96 5 157-2' fill='none' stroke='black' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 16' preserveAspectRatio='none'%3E%3Cpath d='M3 11C48 4 92 3 140 6s96 5 157-2' fill='none' stroke='black' stroke-width='4.5' stroke-linecap='round'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+.todo-home { flex-shrink: 0; margin-bottom: 18px; padding: 7px 14px; border: 1.5px solid var(--td-ink); border-radius: var(--radius-pill); background: var(--td-card); box-shadow: 3px 3px 0 var(--td-ink); color: var(--td-ink); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.todo-home:focus-visible { outline: 2px solid var(--td-accent-text); outline-offset: 3px; }
+
+.todo-main { max-width: 860px; margin: 0 auto; padding: 0 32px 72px; }
+.todo-summary { margin: 18px 0 34px; color: var(--td-quiet); font-size: 13px; }
+
+/* Section headings: serif italic, with a small numbered tab. */
+.todo-add, .todo-tasks { margin: 0 0 40px; }
+.todo-add h2, .todo-tasks h2 { margin: 0 0 16px; color: var(--td-ink); font-family: var(--td-serif); font-size: 30px; font-style: italic; font-weight: 400; line-height: 1.1; }
+.todo-tasks h2:focus { outline: 0; }
+
+/* The add form is an index card held on with a strip of tape. */
+.todo-form { position: relative; display: grid; grid-template-columns: minmax(0, 2fr) minmax(160px, 1fr); gap: 18px 22px; padding: 26px 24px 22px; border: 1.5px solid var(--td-ink); border-radius: 4px; background: var(--td-card); box-shadow: 7px 7px 0 var(--td-accent); }
+.todo-add .todo-form::before { content: ""; position: absolute; top: -13px; left: 50%; width: 110px; height: 24px; transform: translateX(-50%) rotate(-2.5deg); background: color-mix(in srgb, var(--td-marker) 70%, transparent); box-shadow: 0 1px 0 color-mix(in srgb, var(--td-ink) 15%, transparent); }
+.todo-field { display: grid; gap: 4px; min-width: 0; }
+.todo-field-note { grid-column: 1 / -1; }
+.todo-field label { color: var(--td-ink); font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+.todo-optional { color: var(--td-quiet); font-weight: 400; letter-spacing: .04em; text-transform: none; }
+/* Fields are lines to write on rather than boxes. */
+.todo-field input { width: 100%; min-height: 42px; padding: 6px 2px; border: 0; border-bottom: 1.5px solid var(--td-ink); border-radius: 0; background: transparent; color: var(--td-ink); font: inherit; font-size: 16px; }
+.todo-field-title input { font-family: var(--td-serif); font-size: 22px; }
+.todo-field input:focus-visible { outline: 2px solid var(--td-accent-text); outline-offset: 3px; border-bottom-color: transparent; }
+.todo-field input[aria-invalid="true"] { border-bottom: 2.5px solid var(--td-accent-text); }
+.todo-form-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; }
+.todo-shell .apps-button { min-height: 42px; padding: 8px 20px; border: 1.5px solid var(--td-ink); border-radius: var(--radius-pill); background: var(--td-card); color: var(--td-ink); font-weight: 600; }
+.todo-shell .apps-button-primary { background: var(--td-ink); color: var(--td-on-ink); box-shadow: 3px 3px 0 var(--td-accent); }
+.todo-shell .apps-button:focus-visible { outline: 2px solid var(--td-accent-text); outline-offset: 3px; }
+.todo-error { grid-column: 1 / -1; margin: 0; color: var(--td-accent-text); font-size: 13px; font-weight: 600; }
+
+/* Filters are stickers; the chosen one is highlighted and sits slightly askew. */
+.todo-filters { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 20px; }
+.todo-filter { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 6px 16px; border: 1.5px solid var(--td-ink); border-radius: var(--radius-pill); background: var(--td-card); color: var(--td-ink); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+.todo-filter[aria-pressed="true"] { background: var(--td-marker); color: #1d1a15; box-shadow: 3px 3px 0 var(--td-ink); transform: rotate(-1.5deg); font-weight: 600; }
+.todo-filter:focus-visible { outline: 2px solid var(--td-accent-text); outline-offset: 3px; }
+.todo-count { font-family: var(--td-serif); font-size: 19px; font-style: italic; line-height: 1; }
+
+/* The list is a ruled notebook page: a red margin line, numbered rows, dashed rules. */
+.todo-list { position: relative; list-style: none; margin: 0; padding: 6px 0; counter-reset: task; border: 1.5px solid var(--td-ink); border-radius: 4px; background: var(--td-card); box-shadow: 7px 7px 0 var(--td-ink); }
+.todo-list::before { content: ""; position: absolute; top: 0; bottom: 0; left: 58px; border-left: 1.5px solid var(--td-accent); opacity: .75; pointer-events: none; }
+.todo-item { counter-increment: task; display: grid; grid-template-columns: 44px auto minmax(0, 1fr) auto; align-items: start; gap: 14px; padding: 16px 12px 16px 6px; }
+.todo-item + .todo-item { border-top: 1.5px dashed var(--td-rule); }
+.todo-item::before { content: counter(task, decimal-leading-zero); padding-top: 1px; color: var(--td-accent-text); font-family: var(--td-serif); font-size: 20px; font-style: italic; text-align: right; line-height: 1.1; }
+.todo-item-editing { display: block; padding: 14px 14px 14px 72px; }
+.todo-item-editing::before { content: none; }
+.todo-item-editing .todo-form { padding: 0; border: 0; box-shadow: none; background: transparent; }
+
+/* A hand-drawn circle for the checkbox; ticked, it fills with vermilion and a check. */
+.todo-check { appearance: none; -webkit-appearance: none; position: relative; display: grid; place-items: center; width: 24px; height: 24px; margin: 2px 0 0; border: 1.75px solid var(--td-ink); border-radius: 48% 52% 46% 54% / 55% 45% 55% 45%; background: var(--td-card); cursor: pointer; }
+.todo-check::after { content: ""; width: 6px; height: 11px; margin-top: -2px; border: solid var(--td-on-ink); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) scale(0); }
+.todo-check:checked { border-color: var(--td-accent); background: var(--td-accent); }
+.todo-check:checked::after { transform: rotate(45deg) scale(1); border-color: #1d1a15; }
+.todo-check:focus-visible { outline: 2px solid var(--td-accent-text); outline-offset: 3px; }
+
+.todo-item-body { min-width: 0; }
+.todo-title { display: block; color: var(--td-ink); font-family: var(--td-serif); font-size: 22px; line-height: 1.15; overflow-wrap: anywhere; cursor: pointer; }
+/* Done: crossed out with a vermilion stroke, plus the hidden word "Done" for screen readers. */
+.todo-item-done .todo-title { color: var(--td-quiet); text-decoration: line-through; text-decoration-color: var(--td-accent); text-decoration-thickness: 2px; }
+.todo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; }
+.todo-meta:empty { display: none; }
+.todo-due { color: var(--td-quiet); font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; }
+/* A rubber stamp: the word and an icon in a tilted frame. */
+.todo-overdue { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border: 1.75px solid var(--td-accent-text); border-radius: 3px; color: var(--td-accent-text); font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; transform: rotate(-3deg); }
+.todo-overdue svg { width: 13px; height: 13px; }
+.todo-note { margin: 6px 0 0; color: var(--td-quiet); font-size: 13.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.todo-item-actions { display: flex; gap: 2px; }
+.todo-icon-button { width: 40px; height: 40px; color: var(--td-quiet); }
+.todo-icon-button:hover:not(:disabled) { color: var(--td-ink); background: color-mix(in srgb, var(--td-marker) 45%, transparent); }
+.todo-icon-button:focus-visible { outline: 2px solid var(--td-accent-text); outline-offset: 1px; }
+.todo-icon-button svg { width: 18px; height: 18px; }
+.todo-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Empty states read like a margin note. */
+.todo-empty { margin: 0; padding: 30px 26px; border: 1.5px dashed var(--td-ink); border-radius: 4px; background: color-mix(in srgb, var(--td-card) 70%, transparent); color: var(--td-ink); font-family: var(--td-serif); font-size: 24px; font-style: italic; line-height: 1.25; }
+
+/* Not added yet. */
+.todo-shell .todo-gate { max-width: 560px; margin-top: 34px; padding: 30px 28px; border: 1.5px solid var(--td-ink); border-radius: 4px; background: var(--td-card); box-shadow: 7px 7px 0 var(--td-accent); }
+.todo-shell .todo-gate h2 { font-family: var(--td-serif); font-size: 32px; font-style: italic; font-weight: 400; }
+.todo-shell .todo-gate p { color: var(--td-quiet); font-size: 14px; }
+
+/* "Task deleted · Undo": a strip of ink. */
+.todo-shell .todo-undo { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; max-width: none; margin: 0 0 24px; padding: 10px 12px 10px 18px; border-radius: 4px; background: var(--td-ink); color: var(--td-on-ink); font-size: 13px; }
+.todo-shell .todo-undo .apps-button { min-height: 34px; padding: 4px 14px; border-color: var(--td-marker); background: var(--td-marker); color: #1d1a15; box-shadow: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .todo-filter, .todo-shell .apps-button, .todo-home { transition: transform .15s var(--ease), box-shadow .15s var(--ease); }
+  .todo-filter:hover:not([aria-pressed="true"]), .todo-shell .apps-button:hover, .todo-home:hover { transform: translate(-1px, -1px); }
+  .todo-check::after { transition: transform .18s var(--ease); }
+}
+
+@media (max-width: 650px) {
+  .todo-appbar { padding: 22px 16px 4px; }
+  .todo-home { margin-bottom: 12px; }
+  .todo-main { padding: 0 16px 40px; }
+  .todo-form { grid-template-columns: minmax(0, 1fr); padding: 24px 16px 18px; box-shadow: 5px 5px 0 var(--td-accent); }
+  .todo-list { box-shadow: 5px 5px 0 var(--td-ink); }
+  .todo-list::before { left: 40px; }
+  .todo-item { grid-template-columns: 28px auto minmax(0, 1fr); gap: 10px; padding: 14px 6px 14px 4px; }
+  .todo-item::before { font-size: 16px; }
+  /* Actions drop under the text on a phone, keeping 44 px tap targets. */
+  .todo-item-actions { grid-column: 3; margin-left: -10px; }
+  .todo-item-editing { padding: 12px 10px 12px 52px; }
+  .todo-title { font-size: 20px; }
+  .todo-icon-button { width: 44px; height: 44px; }
+  .todo-filter { min-height: 44px; }
+}
