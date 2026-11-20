@@ -1,0 +1,41 @@
+/* The assistant's cards and forms (proposals, the onboarding summary and personality) and /settings.
+   The chat itself is features/chat/chat.css. Colours are theme tokens only, so light and dark both
+   keep body text at full ink (contrast well above 4.5:1). */
+.proposal-card { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); white-space: normal; }
+.proposal-eyebrow { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.proposal-name { margin: 0; font-size: 16px; font-weight: 600; }
+.proposal-description, .proposal-outcome { margin: 0; line-height: 1.5; }
+.proposal-outcome a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.assistant-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-summary dl { margin: 0 0 10px; display: grid; gap: 8px; }
+.assistant-summary dt { font-size: 12px; font-weight: 600; }
+.assistant-summary dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+
+.about-form, .personality-form { display: flex; flex-direction: column; gap: 12px; }
+.about-field { display: flex; flex-direction: column; gap: 4px; }
+.about-field label { font-size: 13px; font-weight: 600; }
+.about-field input { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--background); color: var(--ink); font: inherit; }
+.about-hint { margin: 0; font-size: 12px; line-height: 1.5; }
+.personality-form fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0; min-width: 0; }
+.personality-form legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
+.personality-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.personality-option { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-pill); cursor: pointer; }
+.personality-option:has(input:checked) { border-color: var(--ink); }
+.personality-option:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.settings-page { min-height: 100dvh; background: var(--background); color: var(--ink); }
+.settings-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 4vw, 40px); }
+.settings-header .text-button { color: var(--ink); font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+.settings-main { max-width: 720px; margin: 0 auto; padding: 8px clamp(16px, 4vw, 40px) 64px; display: flex; flex-direction: column; gap: 20px; }
+.settings-main h1 { font-size: clamp(26px, 3vw, 34px); }
+.settings-lead { margin: 0; line-height: 1.6; }
+.settings-section { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid var(--edge); border-radius: 20px; background: var(--surface); }
+.settings-section h2 { font-size: 19px; }
+.settings-section > p { margin: 0; line-height: 1.6; }
+.settings-saved { margin: 0; }
+.settings-check { display: flex; align-items: flex-start; gap: 8px; line-height: 1.5; font-size: 14px; }
+.settings-check input { margin-top: 4px; }
+
+@media (max-width: 520px) {
+  .settings-section { padding: 16px; }
+}

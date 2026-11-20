@@ -1,0 +1,83 @@
+/* The shared chat screen (workspace and projects). It is black in both themes: redefining the
+   tokens here turns everything inside (the logo, bubbles, the composer, menus, cards) into its dark
+   version. Text is #f2eee8 and #a8a29a on black, 17:1 and 8:1. */
+.chat-stage {
+  --background: #000; --surface: #121212; --raised: #1c1c1c; --ink: #f2eee8; --muted: #a8a29a;
+  --line: #3a3a3a; --edge: #2a2a2a;
+  /* The orchestrator's screen: its accent is the brand mint, reserved for it (docs/design/agent-art/). */
+  --accent: #7ae8b4; --accent-ink: #0b0b0c; --accent-text: #7ae8b4; --accent-soft: #12271d;
+  --shadow: none; --shadow-hover: 0 18px 40px -16px rgb(0 0 0 / .6);
+  color-scheme: dark; position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
+  background: #000; color: var(--ink);
+}
+.chat-stage :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.chat-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px clamp(16px, 4vw, 40px); flex-shrink: 0; }
+.chat-top-start, .chat-top-end { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.chat-mute { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: transparent; color: var(--ink); font-size: 13px; }
+.chat-mute[aria-pressed="true"] { background: var(--ink); color: #000; border-color: var(--ink); }
+.chat-mute .icon { width: 16px; height: 16px; }
+
+.chat-center { flex: 1; min-height: 0; width: 100%; max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 16px 16px; }
+.chat-identity { display: flex; flex-direction: column; align-items: center; gap: 10px; flex-shrink: 0; }
+.chat-name { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.chat-orb { display: grid; place-items: center; }
+.chat-orb[data-tappable="true"] { cursor: pointer; }
+.chat-presence { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 12px; color: var(--muted); }
+.chat-expand { align-self: flex-end; border: 0; background: transparent; padding: 4px 0; color: var(--muted); font-size: 12px; }
+.chat-expand:hover { color: var(--ink); }
+/* Expanded: the orb shrinks to a badge beside the name, and the conversation takes the room. */
+.chat-stage[data-expanded="true"] .chat-identity { flex-direction: row; gap: 12px; }
+.chat-stage[data-expanded="true"] .chat-name { order: 1; }
+.chat-stage[data-expanded="true"] .chat-presence { order: 2; }
+.chat-panel { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; gap: 10px; }
+/* A chat inside the panel (onboarding, the assistant's chat) fills it the same way. */
+.chat-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+
+/* The conversation. */
+.chat-log { list-style: none; margin: 0; padding: 2px; flex: 1; min-height: 96px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; display: flex; flex-direction: column; gap: 10px; }
+.chat-line { max-width: 88%; padding: 10px 14px; border-radius: 16px; line-height: 1.6; overflow-wrap: anywhere; font-size: 14.5px; animation: message-in .32s var(--ease); }
+.chat-line.from-assistant { align-self: flex-start; background: var(--raised); color: var(--ink); border-bottom-left-radius: 6px; }
+.chat-line.from-user { align-self: flex-end; background: var(--background); color: var(--ink); border: 1px solid var(--line); border-bottom-right-radius: 6px; }
+.chat-line.from-user .chat-text { white-space: pre-wrap; }
+.chat-line[data-skipped="true"] .chat-text { font-style: italic; }
+/* Who is talking: the agent's name, in full ink like the text (not a lighter grey). */
+.chat-speaker { display: block; margin-bottom: 2px; font-size: 12px; font-weight: 600; }
+.chat-text p { margin: 0 0 10px; }
+.chat-text > :last-child { margin-bottom: 0; }
+.chat-text h1, .chat-text h2, .chat-text h3 { font-size: 15px; line-height: 1.6; letter-spacing: 0; margin: 14px 0 6px; font-weight: 600; }
+.chat-text ul, .chat-text ol { padding-left: 22px; margin: 8px 0; }
+.chat-text a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.chat-text pre { background: var(--surface); padding: 12px 14px; overflow-x: auto; border-radius: 12px; font-size: 12.5px; font-family: var(--mono); }
+.chat-text code { background: var(--surface); border-radius: 4px; padding: 2px 5px; font-size: 12.5px; font-family: var(--mono); }
+.chat-text pre code { padding: 0; background: transparent; }
+.chat-text hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.chat-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+.chat-line .play-reply { color: var(--muted); }
+.chat-line .play-reply:hover:not(:disabled) { color: var(--ink); }
+.chat-empty { align-self: stretch; text-align: center; color: var(--muted); padding: 12px 8px; }
+.chat-empty p { margin: 0 0 14px; font-size: 13px; }
+.chat-notice { margin: 0; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); line-height: 1.5; }
+/* Cards under a reply (agent requests, project proposals) read on the bubble's grey. */
+.chat-line .agent-request { background: var(--surface); border-color: var(--line); }
+.chat-line .agent-request-title { color: var(--ink); }
+
+/* The composer: the pill from globals.css, on the dark tokens. */
+.chat-composer { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.chat-composer .error { margin: 0; background: var(--raised); }
+.chat-composer .stop-button { background: var(--ink); color: #000; }
+.chat-composer .dictation-button.recording { background: var(--ink); color: #000; }
+.chat-composer .live-button[aria-pressed="true"] { color: #000; background: var(--ink); }
+.chat-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.chat-actions .text-button { color: var(--ink); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Project pages show the switcher and links in the stage's top bar on phones (the sidebar is hidden). */
+.chat-phone-only { display: none; align-items: center; gap: 2px; min-width: 0; }
+.chat-phone-only .mobile-team-link { white-space: nowrap; }
+
+@media (max-width: 650px) {
+  .chat-phone-only { display: flex; }
+  .chat-line { max-width: 100%; }
+  .chat-top { padding: 12px 16px; gap: 8px; }
+  .chat-top-start, .chat-top-end { gap: 4px; }
+  .chat-mute span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+}

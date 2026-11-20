@@ -1,0 +1,26 @@
+/* The orb itself needs no styles beyond its size, which the component sets. These are for /orb. */
+.agent-orb { display: block; flex: none; }
+
+.orb-demo { max-width: 960px; margin: 0 auto; padding: 40px 16px 64px; color: var(--ink); display: grid; gap: 36px; }
+.orb-demo h1 { margin: 0 0 6px; font-size: 28px; }
+.orb-demo h2 { margin: 0 0 16px; font-size: 17px; }
+.orb-demo header p, .orb-demo-hint { margin: 0; color: var(--muted); font-size: 14px; }
+.orb-demo-stage { display: grid; justify-items: center; gap: 12px; padding: 24px 0; }
+.orb-demo-status { margin: 0; font-size: 14px; }
+.orb-demo-controls { display: grid; gap: 16px; justify-items: start; }
+.orb-demo-states { display: flex; flex-wrap: wrap; gap: 8px; }
+.orb-demo button { min-height: 40px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+.orb-demo button[aria-pressed="true"] { background: var(--ink); color: var(--background); border-color: var(--ink); }
+.orb-demo button:focus-visible, .orb-demo input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+.orb-demo-field { display: grid; gap: 6px; font-size: 14px; width: min(320px, 100%); }
+.orb-demo-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.orb-demo-error { margin: 0; color: #b42318; font-size: 14px; }
+.orb-demo-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px; }
+.orb-demo figure { margin: 0; display: grid; justify-items: center; gap: 8px; max-width: 100%; }
+.orb-demo figcaption { color: var(--muted); font-size: 13px; }
+/* The 400 px orb shrinks to fit a phone instead of scrolling sideways. */
+.orb-demo figure .agent-orb { max-width: 100%; height: auto !important; aspect-ratio: 1; }
+
+@media (prefers-color-scheme: dark) {
+  .orb-demo-error { color: #fda29b; }
+}
