@@ -25,11 +25,11 @@ The reply returns through the runtime adapter, FastAPI and Next.js proxy to the 
 
 | Component | What it does today |
 |---|---|
-| Mula interface | Sign-up, sign-in, sign-out, one ongoing Operator chat, restored history, streamed text, Stop, TTS playback and a voice-reactive core. |
-| Next.js server proxy | Forwards account cookies to the backend, checks mutation origins and relays responses. The runtime credential stays on the server. |
-| LARAS API | Validates requests, authenticates accounts, checks conversation ownership and saves visible messages. |
+| Mula interface | Landing page, sign-up, sign-in, sign-out, the workspace's project list, one ongoing Operator chat per project, restored history, streamed text, Stop, TTS playback and a voice-reactive core. |
+| Next.js server proxy | Forwards account cookies and a well-formed `X-Mula-Project` header to the backend, checks mutation origins and relays responses. The runtime credential stays on the server. |
+| LARAS API | Validates requests, authenticates accounts, checks project membership and conversation ownership and saves visible messages. |
 | Operator role | Supplies business assistance instructions and limits. It is the only implemented agent role. |
-| Runtime adapter | Sends the latest user message and Operator instructions to the runtime with the account's conversation ID; translates SSE into the app's newline-delimited events. |
+| Runtime adapter | Sends the latest user message and Operator instructions to the runtime with the project's conversation ID; translates SSE into the app's newline-delimited events. |
 | Mula agent runtime | Runs the agent machinery, loads model history, assembles context, invokes the model, persists runtime sessions and handles context compression. |
 | Ollama | Serves the installed Qwen model locally. |
 | Qwen | Generates answers from the instructions and supplied context. It does not authenticate accounts or own the application database. |
@@ -38,7 +38,7 @@ The reply returns through the runtime adapter, FastAPI and Next.js proxy to the 
 
 1. The browser submits the message with its login cookie.
 2. The proxy forwards it to FastAPI.
-3. FastAPI resolves the account from the login session. It selects the account's permanent conversation UUID. A supplied UUID belonging elsewhere is rejected.
+3. FastAPI resolves the account from the login session and the project from `X-Mula-Project`, checking membership. It selects the project's permanent conversation UUID. A supplied UUID belonging elsewhere is rejected.
 4. FastAPI saves the user message and creates a placeholder for the assistant response.
 5. The Operator entry point supplies its role instructions to the runtime adapter.
 6. The adapter sends the new message to the Mula runtime with a namespaced conversation header and a server-held runtime credential.
@@ -68,13 +68,14 @@ One account currently represents one workspace and owns one Operator conversatio
 
 | Storage | Contents | Current location |
 |---|---|---|
-| Application database (PostgreSQL) | Accounts, salted password hashes, hashed login tokens, conversation UUIDs, visible user/assistant messages, login failure records, agent settings and map positions, forecast runs, tool tickets and agent requests. | `MULA_DATABASE_URL` (local Homebrew PostgreSQL or the `docker-compose.yml` service). Schema in `server/migrations`, applied at backend startup. |
-| Runtime session storage | Model conversation state and transcripts managed by the Mula runtime. | One profile per account under `.runtime/hermes/profiles/mula-<account>/`, served by the root profile under `.runtime/hermes`. |
-| Account memory store | Facts the Operator and the owner saved, the owner's notes and their versions, their history and the audit log. | `.runtime/workspaces/<account>/memory/store.sqlite3`, with the regenerated `MEMORY.md` beside it and the notes vault, `notes/` (Markdown files, the notes' source of truth), read on each visit. |
+| Application database (PostgreSQL) | Accounts, salted password hashes, hashed login tokens, workspaces, projects and their members, each project's conversation UUID, visible user/assistant messages, login failure records, agent settings and map positions, forecast runs, tool tickets and agent requests. | `MULA_DATABASE_URL` (local Homebrew PostgreSQL or the `docker-compose.yml` service). Schema in `server/migrations`, applied at backend startup. |
+| Runtime session storage | Model conversation state and transcripts managed by the Mula runtime. | One profile per project under `.runtime/hermes/profiles/mula-<project>/`, served by the root profile under `.runtime/hermes`. |
+| Owner profile | The owner's onboarding answers (`USER.md`) and, in the database, the orchestrator's personality and chat. Never shared with teammates or project agents. | `.runtime/users/<account>/USER.md`; the orchestrator's runtime profile is `mula-<uuid5 of the account>`. |
+| Project memory store | Facts the Operator and the owner saved, the owner's notes and their versions, their history and the audit log. | `.runtime/workspaces/<project>/memory/store.sqlite3`, with the regenerated `MEMORY.md` beside it and the notes vault, `notes/` (Markdown files, the notes' source of truth), read on each visit. |
 
 These stores serve different purposes. The application database reloads what the user sees; the runtime store supplies the model's working conversation. The application does not replay its entire visible transcript into each runtime request.
 
-Conversation ownership is enforced by FastAPI. The runtime is one local service, but it serves a named profile per account (`gateway.multiplex_profiles`): each account's turns go to `/p/mula-<account>/v1/chat/completions` with that profile's own API key, derived server-side from `MULA_PROFILE_KEY_SEED` (`server/src/common/profiles.py`). A profile only accepts its own key, and it runs with its own config, sessions and secrets file. The runtime's built-in memory is off in every profile. The gateway picks up a new profile folder on a 30-second rescan, so the backend asks it over its control socket (`server/src/common/runtime_control.py`) to serve a new profile at signup and checks, before each turn, that the gateway serves the profile.
+Conversation ownership is enforced by FastAPI. The runtime is one local service, but it serves a named profile per project (`gateway.multiplex_profiles`): each project's turns go to `/p/mula-<project>/v1/chat/completions` with that profile's own API key, derived server-side from `MULA_PROFILE_KEY_SEED` (`server/src/common/profiles.py`). A profile only accepts its own key, and it runs with its own config, sessions and secrets file. The runtime's built-in memory is off in every profile. The gateway picks up a new profile folder on a 30-second rescan, so the backend asks it over its control socket (`server/src/common/runtime_control.py`) to serve a new profile at signup and checks, before each turn, that the gateway serves the profile.
 
 Login uses username/password credentials, salted scrypt password hashes and an opaque HttpOnly, SameSite=Strict cookie. Sessions expire after seven days. The first version does not have employee roles, invitations or password recovery.
 
@@ -94,9 +95,9 @@ Short replies, same-conversation recall and separation between new runtime conve
 
 ## Tools and specialist agents
 
-The API platform has one MCP server, `mula`, served by the backend at `/mcp`, with three tools: `ask_agent` (Operator), and `calculate_forecast` and `latest_forecast` (Forecasting). The CLI toolset is empty. Each turn's system prompt carries a ticket that scopes tool calls to one account, agent and turn; the backend refuses tools the calling agent may not use. The Operator asks Forecasting according to the owner's delegation setting, ask first by default, and Forecasting answers after the Operator's turn ends rather than inside the tool call (see `server/src/features/agents/README.md`). It cannot read live inventory, place purchases, publish a site or ask an Inventory/Procurement agent.
+The API platform has one MCP server, `mula`, served by the backend at `/mcp`, with three tools: `ask_agent` (Operator), and `calculate_forecast` and `latest_forecast` (Forecasting). The CLI toolset is empty. Each turn's system prompt carries a ticket that scopes tool calls to one account, agent and turn; the backend refuses tools the calling agent may not use. An agent asks a connected agent according to the owner's link mode for that pair (`agent_links`, ask first by default for Operator → Forecasting), and the asked agent answers after the caller's turn ends rather than inside the tool call. Requests follow A2A message, task and artifact shapes in-process only (see `server/src/features/agents/README.md` and `server/src/features/a2a/README.md`). Each agent can also use the safe runtime toolsets its owner switched on (web, vision, image generation, todo, session search), written into its own profile. Editors can talk to one agent over the Agent Client Protocol through `server/scripts/mula_acp.py` (see `server/src/features/acp/README.md`). It cannot read live inventory, place purchases, publish a site or ask an Inventory/Procurement agent.
 
-The smaller-context exception covers this configuration only while every tool is one of Mula's own (`mcp__mula__*`, at most five). Terminal, file, web or other servers' tools fall back to the upstream 64K minimum.
+The smaller-context exception covers this configuration only while every tool is one of Mula's own (`mcp__mula__*`) or a tool from the safe runtime toolsets (`SAFE_TOOL_NAMES` in `apply_hermes_profile.py`, matching `SAFE_TOOLSETS` in `server/src/common/agent_catalog.py`), at most twelve in all. Terminal, file, browser, code or other servers' tools fall back to the upstream 64K minimum.
 
 ## Startup
 
@@ -108,7 +109,9 @@ The launcher reuses reachable services, starts missing ones, waits for readiness
 
 ## Source map
 
-- `src/features/workspace/components/Workspace.tsx`: account loading, permanent chat and streamed UI.
+- `src/features/project/components/ProjectChat.tsx`: account loading, the project's permanent chat and streamed UI.
+- `src/features/workspace/components/WorkspacePage.tsx`: the project list at `/workspace`.
+- `src/common/services/project.ts`: the project from the URL, `projectPath()` and `projectFetch()`.
 - `src/features/auth/components/AccountForm.tsx`: sign-up and sign-in.
 - `src/common/services/server-proxy.ts`: server proxy and cookie forwarding.
 - `src/features/voice/services/speech.ts` and `src/features/operator/components/OperatorCore.tsx`: cancellable playback and audio visualization.
@@ -118,7 +121,7 @@ The launcher reuses reachable services, starts missing ones, waits for readiness
 - `server/src/features/operator/routes.py`: chat authorization, orchestration and visible transcript persistence.
 - `server/src/features/auth/service.py`: accounts, login sessions and message records.
 - `server/src/common/database.py` and `server/migrations/`: the PostgreSQL pool, transactions and schema.
-- `server/agents/*.md` and `server/src/common/agent_catalog.py`: each agent's name, capabilities, Mula tools, delegation and persona, loaded at startup.
+- `server/agents/*.md` and `server/src/common/agent_catalog.py`: each agent's name, capabilities, Mula tools, allowed runtime toolsets, who it may ask (with default modes) and persona, loaded at startup.
 - `server/src/features/operator/agent.py`: the Operator's entry point, using the persona from `server/agents/operator.md`.
 - `server/src/features/operator/runtime.py`: runtime transport adapter.
 - `server/hermes/config.yaml`: dedicated runtime profile template.
@@ -159,11 +162,11 @@ Mula gateway :8642
 Ollama :11434 → Qwen
 ```
 
-The application cookie and runtime bearer key serve different principals. The cookie identifies one account. The runtime key authenticates the application to the shared runtime profile. Qwen sees prompt content, not a capability to access the application database or the memory stores.
+The application cookie and runtime bearer key serve different principals. The cookie identifies one account; the `X-Mula-Project` header only names a project, and grants nothing by itself. The runtime key authenticates the application to the shared runtime profile. Qwen sees prompt content, not a capability to access the application database or the memory stores.
 
 The application currently has no end-user tool identity propagated to a business-tool executor. A conversation ID is a routing identifier, not a business permission grant.
 
-## 2. Account-to-conversation resolution
+## 2. Account-to-project-to-conversation resolution
 
 An account row holds `id`, `username`, `salt`, `password_hash`, and a unique `conversation_id`. Login creates a random session token. Only its SHA-256 digest and expiration are stored in the application's `sessions` table; the token is delivered in `mula_session`, an HttpOnly cookie.
 
@@ -178,7 +181,20 @@ WHERE sessions.token_hash = :digest_of_cookie
   AND sessions.expires > :current_time;
 ```
 
-FastAPI reads the conversation UUID from that account row. If a caller supplies `session_id`, it must equal the stored UUID, otherwise the request receives 403. An absent/expired login receives 401. The model never selects the account through generated arguments.
+Project routes then resolve the project with `current_project()` (`server/src/features/workspaces/access.py`). The browser names the project in the `X-Mula-Project` header, taken from the page URL (`/projects/<id>/…`); the Next.js proxy forwards it only when it is a well-formed UUID. The header is untrusted input: the server accepts it only when the signed-in account is a member.
+
+```sql
+-- Simplified equivalent of current_project().
+SELECT projects.*, project_members.role
+FROM projects
+JOIN project_members ON project_members.project_id = projects.id
+WHERE projects.id = :header_value
+  AND project_members.account_id = :account_id;
+```
+
+No header is 400; no row is 404, the same answer for a project that doesn't exist and one owned by someone else. Every business table (`messages`, `agent_settings`, `agent_map_positions`, `forecast_runs`, `agent_tickets`, `agent_requests`) is keyed by `project_id`, and the memory store and runtime profile are named after it.
+
+FastAPI reads the conversation UUID from that project row. If a caller supplies `session_id`, it must equal the stored UUID, otherwise the request receives 403. An absent/expired login receives 401. The model never selects the account or the project through generated arguments.
 
 ## 3. Visible-history restoration versus model-history restoration
 
@@ -301,7 +317,7 @@ Compression is a sanctioned rewrite of active model context. The application can
 
 ```yaml
 platform_toolsets:
-  api_server: [mula]
+  api_server: [mula]        # plus the agent's switched-on safe toolsets, e.g. [mula, session_search, todo]
   cli: [no_mcp]
 mcp_servers:
   mula:
@@ -476,7 +492,7 @@ Application references:
 - `server/src/features/operator/agent.py`: `operator_reply()` and `operator_stream()`, using the persona from `server/agents/operator.md`.
 - `server/src/features/operator/runtime.py`: `request_headers()`, `stream_chat()`, `sse_events()`, `chat()`.
 - `src/common/services/server-proxy.ts`: `proxyBackend()`.
-- `src/features/workspace/components/Workspace.tsx`: `loadAccount()`, `sendMessage()` and `readChatStream()` usage.
+- `src/features/project/components/ProjectChat.tsx`: `loadAccount()`, `sendMessage()` and `readChatStream()` usage.
 
 Pinned runtime references, relative to `.runtime/hermes-source`:
 
@@ -493,9 +509,9 @@ Pinned runtime references, relative to `.runtime/hermes-source`:
 
 These references document current code behavior and supported runtime machinery. The inventory examples above are explanatory protocol examples, not claims of deployed business functionality.
 
-## Account memory retrieval
+## Project memory retrieval
 
-The application-owned memory service lives in `server/src/features/memory/`: an append-only SQLite store per account (`store.py`), the save pipeline (`pipeline.py`, `filters.py`), the regenerated summary (`summary.py`) and retrieval (`service.py`). The Operator route puts the summary and the matched facts in the request's system instructions, and the Operator saves during the turn through the `remember` MCP tool (`features/agents/tools.py`), scoped by its ticket. This does not enable upstream personal memory. The same store holds the owner's Obsidian-style notes (versions, links, tags; `notes.py`, `note_store.py`, `vault.py`), which are not sent to the model. `src/features/memory/` implements the Folders view (tree, notes, linked mentions, the editor, the Facts folder with corrections, history and the last-retrieval inspector) and the Map view (a `d3-force` graph using the shared pan and zoom in `src/common/viewport/`). See [memory and SQLite](../memory-and-sqlite.md).
+The application-owned memory service lives in `server/src/features/memory/`: an append-only SQLite store per project (`store.py`), the save pipeline (`pipeline.py`, `filters.py`), the regenerated summary (`summary.py`) and retrieval (`service.py`). The Operator route puts the summary and the matched facts in the request's system instructions, and the Operator saves during the turn through the `remember` MCP tool (`features/agents/tools.py`), scoped by its ticket. This does not enable upstream personal memory. The same store holds the owner's Obsidian-style notes (versions, links, tags; `notes.py`, `note_store.py`, `vault.py`), which are not sent to the model. `src/features/memory/` implements the Folders view (tree, notes, linked mentions, the editor, the Facts folder with corrections, history and the last-retrieval inspector) and the Map view (a `d3-force` graph using the shared pan and zoom in `src/common/viewport/`). See [memory and SQLite](../memory-and-sqlite.md).
 
 ## Speech-to-text input
 

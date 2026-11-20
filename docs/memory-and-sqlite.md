@@ -50,9 +50,9 @@ Superseded facts never reach a prompt. The **Memory used for the last request** 
 
 Correcting or retiring a fact changes what future turns get. Earlier replies and the runtime's own conversation history can still contain the old wording; the ids make that traceable.
 
-## One runtime profile per account
+## One runtime profile per project
 
-The Mula runtime serves one named profile per account under `.runtime/hermes/profiles/mula-<account>/`, each with its own API key, its own runtime sessions and its own secrets file. A request for one account can only reach that account's profile. The runtime's built-in memory (`MEMORY.md`/`USER.md` in the runtime home) stays off in every profile, and the backend refuses to start if a profile turns it on. Profiles are created on signup, and the backend asks the running gateway to serve a new profile right away rather than at its next 30-second rescan, so the first message after signup works. For accounts that existed before, run:
+The Mula runtime serves one named profile per project under `.runtime/hermes/profiles/mula-<project>/`, each with its own API key, its own runtime sessions and its own secrets file. A request for one account can only reach that account's profile. The runtime's built-in memory (`MEMORY.md`/`USER.md` in the runtime home) stays off in every profile, and the backend refuses to start if a profile turns it on. Profiles are created on signup, and the backend asks the running gateway to serve a new profile right away rather than at its next 30-second rescan, so the first message after signup works. For accounts that existed before, run:
 
 ```sh
 server/.venv/bin/python server/scripts/provision_profiles.py          # report

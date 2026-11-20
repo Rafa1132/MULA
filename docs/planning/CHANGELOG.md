@@ -2,6 +2,126 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 20 November 2026 — Inventory and Add agent (Muhammad Rafandi, with Claude)
+
+Request: a workspace Inventory (tools, skills, connectors, models) and an Add agent flow on My agents that picks only from it, with correlation rules, validation and tests. Scope chosen: front end plus a service seam, no server changes.
+
+Changed:
+- **Inventory** (`src/features/inventory`, `/projects/<id>/inventory`, in the sidebar): built from `/api/team` (tools, runtime toolsets, brains as models) behind `listInventory()`, with labelled samples for skills and connectors, which Mula doesn't have yet. Search, type and status filters, empty states, and `?item=` deep links from the form.
+- **My agents:** an Add agent button, a Map/List switch (the list is a grid of cards from the same data), and the Add agent form in the side panel: name (required, unique), description, role with suggestions, tools and skills from the inventory (unusable ones disabled with Set up), the default model preselected, per-tool owner approval (on by default for tools that send messages, move money or change data), hand-offs and instructions with a count. Inline errors, focus on the first error, a toast on create, and a warning on unsaved changes. Added agents are kept in this browser per project (`services/workspaceAgents.ts`) and Mula doesn't run them yet; `features/team/README.md` explains how to connect them to the server.
+- **Correlation rules:** agents only reference items in their own workspace; a removed or broken item gives the agent a *Check inventory* badge and never deletes it; deleting an agent never touches the inventory.
+- Inter Tight (`common/styles/fonts.ts`) for the new UI; buttons are ink, never mint.
+- Fixed in passing: the agent side panel was `100vw` wide, so with a classic scrollbar it ran 15 px off the left edge; it is now `100%`.
+- Tests: `inventory.test.mjs`, `correlation.test.mjs`, `agentForm.test.mjs`, `workspaceAgents.test.mjs`, `agentCards.test.mjs`. Checked in the browser on the local dev server (test account) at desktop and at 360 px.
+
+## 20 November 2026 — Project chat fits the window (Muhammad Rafandi, with Claude)
+
+Request: the project chat's viewport height was wrong.
+
+Cause: the project chat's `.app-shell` was `100dvh` tall with a 620 px floor (540 px on phones), so any shorter window (a laptop with devtools or the dock open, a short phone) made the whole page scroll and pushed the composer below the fold. Its single grid row was `auto`, so a sidebar taller than the window could stretch the page too.
+
+Changed:
+- `.app-shell` is exactly one window tall (`100dvh`, with `100vh` as the fallback), has no pixel floor, and has a `minmax(0, 1fr)` row; the project sidebar scrolls on its own if it is taller than the window.
+- `orbSizeFor` also leaves room for the rest of the screen (380 px), so the orb shrinks on windows under ~540 px, down to the 64 px badge size. Taller windows are unchanged.
+- Checked in the browser with a test page at 1440×900, 1280×600, 1280×540, 1280×480, 375×812 and 375×500: no page scroll and the composer stays on screen (before: 1280×600, 1280×480 and 375×500 scrolled). A phone held sideways (375 px tall) still scrolls; Expand chat makes it fit.
+
+## 20 November 2026 — My agents map: no overlaps, whole-card drag, no satellites (Muhammad Rafandi, with Claude)
+
+Request: fix three problems on the agent map: cards overlapping, clicking the mascot moving the image instead of the card, and the orbiting satellite around each agent.
+
+Causes: nothing compared a card's position with the others (and the fallback diagonal for agents without a default placed cards 240 px apart, less than a card's 232 px plus a gap). The bubble bots are `<img>` elements, which browsers drag natively; that drag showed a ghost of the image and cancelled the card's own pointer drag. The satellite was one spinning group in each bot SVG.
+
+Changed:
+- **No overlaps:** a 24 px minimum gap. On drop, a card moves to the nearest free spot (ring search, kept inside the world); the starting layout and newly added agents are settled the same way, keeping saved positions where they're clear. Keyboard moves settle when their save fires. Connectors follow. Opening the page doesn't save a settled layout.
+- **Whole-card drag:** the bot image is `draggable="false"` and ignores pointer events inside the card, and the card blocks `dragstart`. The existing 5 px click threshold, zoom-aware dragging, touch and pinch handling are unchanged.
+- **No satellites:** removed from the four bubble bots (finance, sales, inventory, support) in `public/agents/` and the design handoff, with their unused spin keyframes and the tokens' `satellite` keys. Float, blink, eye glance and reduced motion are unchanged. The art spec now says agents have no satellite. The orchestrator SVG's rings were left as they are (the app shows the voice orb instead).
+
+Checked: `npm test` 172 pass (new overlap tests in `map.test.mjs`, new `mascots.test.mjs`); `npm run typecheck` passes. There is no lint script, so lint wasn't run. The Sales bot was checked in the browser: four animations, nothing outside the box. `map.browser.spec.mjs` gained a mascot-drag and drop-on-a-card step but wasn't run (Playwright isn't installed here).
+
+## 20 November 2026 — The voice orb for the orchestrator (Muhammad Rafandi, with Claude)
+
+Request: "https://github.com/imuvrays1/voice-orb copy this orb design into our orchestrator".
+
+Changed:
+- **The orchestrator wears the voice orb** by UV (MIT): a WebGL2 shader ball with a painted colour field, a small fluid the voice stirs, rings and a rim highlight. It replaces `AgentOrb` in both chats (`ChatStage`) and on the Operator's card on My agents (`AgentAvatar`), through `OrchestratorOrb`, which keeps the same props. It is mint, the orchestrator ramp from the agent art tokens. Idle, listening, thinking and speaking map to the orb's ready, listening, connecting and talking; speaking follows the playback analyser.
+- The copied files live in `src/features/orb/voice/` and `components/VoiceOrb.tsx`. Each keeps its copyright notice, with `voice/LICENSE` beside them, and notes what was changed: no conditional expressions, plain fields instead of parameter properties, plain CSS, and the artwork type, the demo page's copy and the extra audio helpers left out. No image assets or dependencies were added; the repository's demo mp3 was not copied.
+- `AgentOrb` is kept and still shown on `/orb`, under the new orb.
+
+Checked: `npm test` 166 pass (new `orb/tests/voiceOrb.test.mjs`); `npm run typecheck` passes. On `/orb` in a dev preview the orb renders with WebGL2 (no fallback, no shader errors) and its pixels change over time while speaking. Not checked: the chats and My agents in a browser (they need a signed-in backend), and the frame rate with the browser pane in the foreground.
+
+## 20 November 2026 — A2A connections, ACP client access and runtime tools in My agents (Muhammad Rafandi, with Claude)
+
+Request: "create and establish A2A connections with the ACP as well … part of the configuration when I entered the My Agents page", and "enable all Hermes tools and enable essentially my agents to be able to use that tools". Chosen: the safe tool set only (no host access), ACP as the Agent Client Protocol (editors connect to a Mula agent), and A2A between Mula agents only.
+
+Changed:
+- **A2A between Mula agents** (`server/src/features/a2a`). Requests are stored as A2A 0.3.0 messages with task states and artifacts. Each agent has a generated card (`GET /api/team/{agent}/card`), and `GET /api/team/tasks` lists requests as Tasks. In-process only; nothing listens on the network.
+- **Configurable links.** `agent_links` per project replaces the Operator-only `delegation` setting, with *Ask me first*, *Go ahead*, *Off* or not connected per pair. Agent files declare who they may ask as a mapping with default modes (`delegates_to`), which is also the ceiling. Forecasting may now ask the Operator (not connected by default), and its direct chat in My agents shows request cards with approve and decline. Requests stay one level deep.
+- **ACP client access** (`server/src/features/acp`, `server/scripts/mula_acp.py`). Per-agent client keys (shown once, stored hashed, revocable, at most 10) let Zed, VS Code or JetBrains talk to an agent over stdio. Client turns use the agent's settings and memory in their own session, are saved with a note, and can't ask other agents. My agents → Advanced → Client access makes the keys and gives a copy-ready Zed entry.
+- **Runtime tools.** Each agent can switch on safe runtime toolsets: web search/extract, vision, image generation, todo and session search. Everything starts off. Each non-Operator agent now has its own runtime profile (`mula-<project>-<agent>`; the Operator keeps `mula-<project>`), so the switches are enforced by the profile. Web and image generation show *Needs setup* (no provider key reaches agent profiles) and can't be switched on; vision is marked *May use paid credits*. The local-context runtime patch now admits these tools' names, at most 12 tools in all.
+- Migration `0005_a2a_acp_tools`: `agent_links` (copied from saved `delegation`), `agent_requests.context_id/message/artifacts`, `agent_settings.runtime_toolsets`, `client_keys`.
+- The My agents map draws lines from saved links (Off is dashed). Unsaved connection changes no longer redraw the map, and the localStorage connections prototype is gone.
+
+Checked: backend 257 tests pass (new `a2a/tests/test_a2a.py` and `acp/tests/test_acp.py`, plus link, toolset, profile, migration and patch tests); `npm test` 161 pass (new `clientAccess.test.mjs`; the old localStorage tests were replaced); `npm run typecheck` passes. A dry run of the runtime patch against the pinned source shows it applies. The browser specs were updated for links but not run, because Playwright isn't installed here. Not checked live: the running backend predates these changes, so nothing was tried against a real runtime or model.
+
+## 20 November 2026 — One chat everywhere, and the new agent art (Muhammad Rafandi, with Claude)
+
+Request: the agent art handoff "will be the art direction from now on, change the orchestrator avatar to be the new orb", and "the chat in the workspace and inside a project should look and behave the same. also the orb inside the project workspace isnt updated". Chosen: the workspace look for both chats; the orb for the Operator and the Finance bot for Forecasting.
+
+Changed:
+- **One chat screen** (`src/features/chat`) for the workspace assistant and every project's Operator. It is black, with the agent's name above the new orb, a status line, Mute, Expand chat, speech bubbles with Markdown, Play reply, and one composer (mic, live conversation, voice options, Send/Stop). Mute is one shared setting (`mula.voice-muted`).
+  - **Workspace gains:** Markdown, spoken replies, the mic, live conversation, suggestions and Stop.
+  - **Project chat gains:** the new orb (in place of the orange `OperatorCore`, which is kept but unused), and the workspace's look.
+  - The project-only parts (streaming, CSV, agent requests) and the workspace-only parts (the entrance, the spoken welcome, onboarding, proposals) stay in their features.
+- **Agent art:** the handoff is in `docs/design/agent-art/`. On My agents the Operator is the animated orb and Forecasting the Finance bubble bot (`public/agents/`, shown as images). Agents with the ids finance, sales, inventory or support get their bot; others show their initial. The pixel art is retired. The chat screen's accent is the brand mint.
+- Not applied yet: the brief's brand colours and fonts and its My Team layout.
+
+Checked: `npm test` 162 pass (including the new `chat.test.mjs` and `avatar.test.mjs`); `npm run typecheck` passes; there is no lint script. Browser checks with the API faked pass: workspace entry, workspace projects, voice (project composer), team map and panel, landing and orb. Not run: the onboarding, project-request and live-conversation checks, which need a running backend with the new code (the live one also predates projects and needs updating). No backend code changed.
+
+## 20 November 2026 — The workspace entry around the orb (Muhammad Rafandi, with Claude)
+
+Request: "Rework the workspace entry experience around the Operator orb", with naming the assistant and letting it create projects; approved with "lets do the new orb, but keep the old one stashed somewhere, keep say for now".
+
+Changed:
+- **One vertical page.** `/workspace` opens on a full-height black screen: the assistant's name, the new orb, its chat underneath and **Your projects ↓**; the projects follow below in one column. The orb fades and grows in over about 2 s, then the chat appears (0.5 s on a reload in the same session, at once under reduced motion). `OperatorCore` (the old orb) is unchanged and still used on project pages.
+- **Spoken welcome for new accounts.** **Tap to begin** (or the orb) plays a fixed welcome made once with `say` and cached (`GET /api/speech/welcome`, `server/scripts/generate_welcome_audio.py`); the orb reacts to it and the same words are the first chat line. **Start without sound**, a remembered **Mute**, and a text fallback when voice is off (`MULA_SPEECH_PROVIDER=off`). It plays once per account; existing accounts count as having heard it.
+- **Naming the assistant.** The first onboarding question is "What would you like to call me?" (optional; "Operator" otherwise). The name goes into its `SOUL.md`, above the orb and on its chat lines; Settings → Your assistant changes it.
+- **The assistant can propose projects.** A new Mula tool, `create_project`, served only to the assistant with an account-scoped ticket and gated by `require_tool`. It records a proposal; the project is created only when the owner presses **Create project** on the card under the reply, and its card then appears in the workspace. Settings can switch this off. Projects gain an optional description, and a workspace holds up to 20 projects, checked under a row lock on both paths.
+- Migration `0004_entry_experience`. Both runtime templates list `create_project` in `tools.include`.
+
+Checked: backend 221 tests pass (including the new `orchestrator/tests/test_entry.py`); `npm test` 158 pass; `npm run typecheck` passes; there is no lint script. Browser checks that fake the API pass: the new entry check (`workspace/tests/entry.browser.spec.mjs`), workspace, landing and orb. The onboarding check against a running backend was updated but not run, because the backend running at the time was started before these changes.
+
+## 20 November 2026 — Agent orb and the new logo (Muhammad Rafandi, with Claude)
+
+Request: "this the new logo. change it", then a reusable animated agent orb with four states, audio reactivity, a demo page and a note for the My Team map.
+
+Changed:
+- **New logo.** The wordmark is two transparent masks (`public/mula-wordmark.png`, `public/mula-star.png`) that `MulaLogo` paints with the theme's ink and the brand green (`#79e9b3`), so it reads on both themes. The app icon is now the favicon (`src/app/icon.png`) and the touch icon (`src/app/apple-icon.png`). The old orange `public/mula-logo.png` is removed. The accent colour is still the old orange.
+- **Agent orb** (`src/features/orb/`): one canvas and one `requestAnimationFrame` loop. It has `idle`, `listening`, `thinking` and `speaking` states eased over about 300 ms, a level from a prop, a `MediaStream` or an `AnalyserNode` smoothed by an exponential moving average, and a sine stand-in when no audio is given. It pauses when hidden or off screen and shows a still orb under reduced motion. The demo is at `/orb`. It is not on the Team map yet; the feature README says how to add it.
+
+Checked: `npm test` (including 10 new orb tests), `npm run typecheck`, and the orb browser check (`src/features/orb/tests/browser.spec.mjs`, 61 fps with eight orbs). The landing page logo was checked by eye in both themes. There is no lint script.
+
+## 19 November 2026 — Onboarding and the workspace assistant (Muhammad Rafandi, with Claude)
+
+Request: stage 3 of the new-user flow, with the approved changes: "Use scripted onboarding with fixed questions … the orchestrator reads those summaries only for projects the user can access. Leave search for later."
+
+Changed:
+- **Scripted onboarding** in the workspace assistant's chat: name, business, what to help with, how to answer, one at a time, each skippable, with **Skip for now** for all. Answers go to the account's `USER.md` (`.runtime/users/<account>/USER.md`, owner-only) as they are given; credentials, ID and card numbers, emails and phone numbers are refused. A summary with Edit, then an optional personality (tone, formality, English or Bahasa Indonesia, emoji). Runs once; `/settings` edits the profile and personality and restarts it.
+- **Orchestrator** in a runtime profile of its own (uuid5 of the account), with `SOUL.md` rendered from the personality on every turn. Its prompt carries `USER.md` and the memory summary of each project the account can open, with a project's owner facts only for its owner. Migration `0003_orchestrator`.
+- **Differs from the plan:** the project summaries are put into the orchestrator's prompt on the server, after the membership check, instead of being tools the model calls.
+
+Evidence: database backed up before 0003. Backend 205 tests pass (9 new); `npm test` 137 pass; typecheck passes; no lint script. The onboarding browser check passes end to end against the running backend. One real orchestrator turn on local Qwen answered in Bahasa Indonesia with the name and business from `USER.md` (about 20 s).
+
+## 19 November 2026 — Landing page, simple sign-in, workspace and projects (Muhammad Rafandi, with Claude)
+
+Request: build Mula's new-user flow (landing page, login/register, a workspace above projects, chat onboarding), in stages. This entry covers stages 1 and 2; onboarding and the global assistant follow.
+
+Changed:
+- **Landing and accounts.** `/` is a public landing page (facts not yet known are marked [PLACEHOLDER]); `/login` and `/register` go to `/workspace`. `MULA_RELAXED_AUTH=true` (set only by the dev launcher) accepts any non-empty username and password, still hashed; the backend refuses to start with it while secure cookies are on, so production keeps the strict rules.
+- **Projects.** Migration `0002_workspaces_projects` adds workspaces, projects and their members, and renames `account_id` to `project_id` in the six business tables. Every existing account became a workspace with one project whose id is the account id, so its chat, memory folder and runtime profile carried over unmoved. `current_project` checks the `X-Mula-Project` header against membership (400 without it, 404 for a project the account can't open).
+- **Pages.** `/workspace` lists projects (Untitled until named; rename; new project; Coming soon placeholders for teammates and GitHub). Project pages moved under `/projects/<id>/`, with the project's name and a switcher at the top-left; old addresses open the first project. My apps and To-do browser storage is per project.
+
+Evidence: the application database was backed up with `pg_dump` before the migration ran; afterwards it held 1 account, 1 workspace and 1 project with the account's id, with all 142 messages and the other rows attached. Backend suite 196 tests pass; `npm test` 135 pass; typecheck passes; no lint script is configured. Browser checks pass for landing, workspace, memory, catalogue (two), apps, To-do, voice and the team map and panel. The team and project-chat checks need a stand-in runtime; against the real stack they pass up to the first scripted model reply.
+
 ## 14 November 2026 — Agents are defined by files in server/agents/ (Muhammad Rafandi, with Claude)
 
 Request: "there should be an agent folder", so agent configuration lives in readable files rather than in code or the database.

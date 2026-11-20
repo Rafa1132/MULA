@@ -40,7 +40,7 @@ Prompt/reference changes guide how Forecasting talks and explains only. They do 
 
 ## Storage and API
 
-Both tables live in the PostgreSQL application database (`MULA_DATABASE_URL`, see `server/README.md`, "Database"). `agent_settings` is keyed by account/agent; `forecast_runs` contains account-owned reports and their latest explanation. Latest 20 reports per account are retained. A report includes selected historical dates/values, future estimates, parameters and scores. Original uploaded files and unused CSV columns are not retained. These reports are not automatically added to RAG memory.
+Both tables live in the PostgreSQL application database (`MULA_DATABASE_URL`, see `server/README.md`, "Database"). `agent_settings` is keyed by project/agent; `forecast_runs` contains account-owned reports and their latest explanation. Latest 20 reports per account are retained. A report includes selected historical dates/values, future estimates, parameters and scores. Original uploaded files and unused CSV columns are not retained. These reports are not automatically added to RAG memory.
 
 Authenticated endpoints:
 
