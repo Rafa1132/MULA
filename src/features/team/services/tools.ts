@@ -21,3 +21,17 @@ const FALLBACK: ToolInfo = { icon: "tool", description: "A capability this agent
 export function toolInfo(id: string): ToolInfo {
   return TOOLS[id] ?? FALLBACK;
 }
+
+// How each of the runtime's own toolsets looks in the settings panel. The ids, tool names and
+// readiness come from the server (available_toolsets, toolset_tools, toolset_status).
+const TOOLSETS: Record<string, { name: string; icon: IconName }> = {
+  web: { name: "Web search", icon: "website" },
+  vision: { name: "Image understanding", icon: "info" },
+  image_gen: { name: "Image generation", icon: "app" },
+  todo: { name: "Task list", icon: "report" },
+  session_search: { name: "Past conversation search", icon: "memory" },
+};
+
+export function toolsetInfo(id: string) {
+  return TOOLSETS[id] ?? { name: id, icon: "tool" as IconName };
+}

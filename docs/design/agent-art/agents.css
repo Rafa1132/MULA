@@ -1,0 +1,28 @@
+
+.fx{transform-box:fill-box;transform-origin:center}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(122,232,180,0)}50%{box-shadow:0 0 44px 2px rgba(122,232,180,.30)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinr{to{transform:rotate(-360deg)}}
+@keyframes twinkle{0%,100%{transform:scale(1) rotate(0deg)}50%{transform:scale(1.2) rotate(14deg)}}
+@keyframes bar{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.55)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3.5px)}}
+@keyframes hop{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+@keyframes flip{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.22)}}
+@keyframes ping{0%{transform:scale(1);opacity:.55}100%{transform:scale(2.8);opacity:0}}
+@keyframes orbpulse{0%,100%{transform:scale(1);opacity:.7}50%{transform:scale(1.12);opacity:1}}
+@keyframes d1{0%{opacity:0;transform:translateY(0)}3%{opacity:1}12%{transform:translateY(45px);opacity:1}14%,100%{opacity:0;transform:translateY(45px)}}
+@keyframes d2{0%,12%{opacity:0;transform:translateX(0)}14%{opacity:1}40%{transform:translateX(var(--dx));opacity:1}42%,100%{opacity:0;transform:translateX(var(--dx))}}
+@keyframes d3{0%,40%{opacity:0;transform:translateY(0)}42%{opacity:1}52%{transform:translateY(45px);opacity:1}54%,100%{opacity:0;transform:translateY(45px)}}
+@keyframes ring{0%{transform:scale(.95);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+@keyframes shake{0%,70%,100%{transform:rotate(0)}76%{transform:rotate(-3deg)}82%{transform:rotate(3deg)}88%{transform:rotate(-2deg)}94%{transform:rotate(2deg)}}
+@keyframes fill{0%{width:0}90%,100%{width:100%}}
+@keyframes check{0%,15%{stroke-dashoffset:60}45%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:60}}
+@keyframes pop{0%,10%{transform:scale(.92)}25%{transform:scale(1.08)}40%,100%{transform:scale(1)}}
+@keyframes badge{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.1)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+
+@keyframes blink{0%,90%,100%{transform:scaleY(1)}94%{transform:scaleY(.1)}}
+@keyframes squish{0%,100%{transform:translateY(0) scale(1,1)}50%{transform:translateY(-5px) scale(.97,1.04)}}
+@keyframes look{0%,100%{transform:translateX(0)}30%{transform:translateX(3px)}65%{transform:translateX(-3px)}}
+@keyframes shadow{0%,100%{transform:scaleX(1);opacity:.5}50%{transform:scaleX(.86);opacity:.28}}

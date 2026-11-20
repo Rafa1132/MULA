@@ -21,10 +21,14 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const signup = await page.request.post(baseURL + "/api/auth/signup", { data: { username: `agentscheck_${Date.now()}`, password: "test-only-password-123" } });
   assert.equal(signup.status(), 201);
+  // A new account has no project yet; agents live in one.
+  const created = await page.request.post(baseURL + "/api/projects", { data: { name: "Agents check" } });
+  assert.equal(created.status(), 201);
+  const project = await created.json();
 
-  // The old address still works.
+  // The old address still works, and opens the account's first project.
   await page.goto(baseURL + "/team");
-  await page.waitForURL(/\/agents$/);
+  await page.waitForURL(new RegExp(`/projects/${project.id}/agents$`));
   await page.getByRole("heading", { name: "My agents", exact: true }).waitFor();
   const operator = page.getByRole("button", { name: "Configure Operator", exact: true });
   const forecasting = page.getByRole("button", { name: "Configure Forecasting", exact: true });
@@ -53,6 +57,9 @@ try {
   await page.mouse.up();
   await dropped;
   assert.equal(await page.getByRole("dialog").count(), 0);
+  // Measure without the hover lift (`translate: 0 -2px`), as `before` was, once it has eased back.
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(400);
   const moved = await centre(operator);
   assert.ok(Math.abs(moved.x - before.x - 240) < 3 && Math.abs(moved.y - before.y - 120) < 3, JSON.stringify({ before, moved }));
   await page.reload();
@@ -82,16 +89,16 @@ try {
   const panel = page.getByRole("dialog", { name: "Operator settings" });
   await panel.waitFor();
   await panel.getByLabel("Instructions", { exact: true }).fill("Reply briefly in English.");
-  const delegation = panel.getByRole("radiogroup", { name: "When this agent needs another agent" });
-  assert.equal(await delegation.getByLabel(/Ask me first/).isChecked(), true);
-  await delegation.getByLabel(/Go ahead/).check();
+  const mode = panel.getByLabel("When Operator needs Forecasting");
+  assert.equal(await mode.inputValue(), "ask");
+  await mode.selectOption("auto");
   // Reference data lives in the Advanced layer; unsaved edits carry across layers.
   await panel.getByRole("tab", { name: "Advanced" }).click();
   await panel.getByLabel("Reference data", { exact: true }).fill("We operate a coffee shop. Sales values are in IDR.");
   await panel.getByRole("tab", { name: "Simple" }).click();
   await panel.getByRole("button", { name: "Save settings", exact: true }).click();
   await panel.getByText("Saved for your account. Applies to the next request.").waitFor();
-  await panel.getByText("When Operator needs another agent").scrollIntoViewIfNeeded();
+  await panel.getByLabel("When Operator needs Forecasting").scrollIntoViewIfNeeded();
   await page.screenshot({ path: screenshots + "/mula-agents-panel-desktop.png" });
   // Esc with unsaved changes asks first; dismissing keeps the panel open.
   await panel.getByLabel("Instructions", { exact: true }).fill("Unsaved draft");
@@ -105,7 +112,7 @@ try {
   await operator.click();
   const reopened = page.getByRole("dialog", { name: "Operator settings" });
   assert.equal(await reopened.getByLabel("Instructions", { exact: true }).inputValue(), "Reply briefly in English.");
-  assert.equal(await reopened.getByLabel(/Go ahead/).isChecked(), true);
+  assert.equal(await reopened.getByLabel("When Operator needs Forecasting").inputValue(), "auto");
   await page.keyboard.press("Escape");
   await page.getByRole("dialog").waitFor({ state: "detached" });
   await page.locator('.map-link[aria-label="Operator to Forecasting: Asks directly, without waiting for your OK"]').waitFor();
@@ -116,7 +123,8 @@ try {
   await forecastPanel.getByRole("tab", { name: "Advanced" }).click();
   assert.equal(await forecastPanel.getByLabel("Brain", { exact: true }).inputValue(), "qwen");
   await forecastPanel.getByRole("tab", { name: "Simple" }).click();
-  assert.equal(await forecastPanel.getByRole("radiogroup", { name: "When this agent needs another agent" }).count(), 0);
+  // Forecasting's file lists the Operator as a possible connection, but it starts unconnected.
+  await forecastPanel.getByText("No connections yet.").waitFor();
   await forecastPanel.getByRole("tab", { name: "Chat", exact: true }).click();
   await forecastPanel.getByText("Ask Forecasting anything about your sales.").waitFor();
   await forecastPanel.getByLabel("Message Forecasting").fill("What will I sell next week?");
@@ -174,5 +182,5 @@ try {
   assert.equal(await mobilePanel.getByRole("button", { name: "Run forecast", exact: true }).isDisabled(), true);
   await page.screenshot({ path: screenshots + "/mula-agents-panel-mobile.png" });
   assert.deepEqual(errors, []);
-  console.log("Agent map: redirect, links, drag and keyboard arrangement with persistence, reset, settings and delegation, Forecasting chat, forecasts, export and phone map passed.");
+  console.log("Agent map: redirect, links, drag and keyboard arrangement with persistence, reset, settings and connections, Forecasting chat, forecasts, export and phone map passed.");
 } finally { await browser.close(); }

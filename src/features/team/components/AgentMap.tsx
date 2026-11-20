@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
 import { Agent, saveLayout } from "../services/team";
 import type { Connections } from "../services/agentStore";
-import { LOW_DETAIL_ZOOM, Layout, Position, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampPosition, dragTo, isDrag, nudge, positionFor, viewStorageKey } from "../services/map";
+import { LOW_DETAIL_ZOOM, Layout, Position, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampPosition, dragTo, freeSpot, initialLayout, isDrag, nudge, positionFor, viewStorageKey } from "../services/map";
 import { Rect, routeConnector } from "../services/connectors";
 import { boundsOf } from "@/common/viewport/viewport";
 import { STAMINA_EXPLANATION, staminaOf, staminaView } from "../services/stamina";
 import { useViewport } from "@/common/viewport/useViewport";
 import MapControls from "@/common/viewport/MapControls";
-import PixelAgent from "./PixelAgent";
+import AgentAvatar from "./AgentAvatar";
 import StaminaBar from "./StaminaBar";
 
 const KEY_SAVE_DELAY_MS = 600;
@@ -37,7 +37,8 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
   const suppressClick = useRef(false);
   const keySave = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saving = useRef<Promise<void>>(Promise.resolve());
-  const [positions, setPositions] = useState<Layout>(() => Object.fromEntries(agents.map((agent, index) => [agent.id, clampPosition(positionFor(agent.id, saved, index))])));
+  // Settled so no two cards overlap; shown at once, saved only when the owner next moves a card.
+  const [positions, setPositions] = useState<Layout>(() => initialLayout(agents.map((agent) => agent.id), saved));
   const latest = useRef(positions);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   // The link whose tooltip is showing, from hover or keyboard focus.
@@ -53,6 +54,20 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
     if (keySave.current) clearTimeout(keySave.current);
     if (tipTimer.current) clearTimeout(tipTimer.current);
   }, []);
+
+  // An agent added while the map is open gets the nearest free spot to its usual position; the
+  // other cards stay where they are.
+  useEffect(() => {
+    const missing = agents.filter((agent) => !latest.current[agent.id]);
+    if (missing.length === 0) return;
+    let next = latest.current;
+    for (const agent of missing) {
+      const index = agents.indexOf(agent);
+      next = { ...next, [agent.id]: freeSpot(agent.id, positionFor(agent.id, saved, index), next) };
+    }
+    latest.current = next;
+    setPositions(next);
+  }, [agents, saved]);
 
   // Each link with its curve; null routes (cards too close) draw nothing.
   const names = new Map(agents.map((agent) => [agent.id, agent.name]));
@@ -93,6 +108,13 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
   function place(id: string, position: Position) {
     latest.current = { ...latest.current, [id]: clampPosition(position) };
     setPositions(latest.current);
+  }
+
+  // Move a card off any card it was dropped on, to the nearest spot with room around it.
+  function settle(id: string) {
+    const position = latest.current[id];
+    if (!position) return;
+    place(id, freeSpot(id, position, latest.current));
   }
 
   function persist() {
@@ -147,6 +169,7 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
     if (!current || !current.moved) return;
     // The browser still sends a click after the drop; it must not open the panel.
     suppressClick.current = true;
+    settle(current.id);
     persist();
   }
 
@@ -166,8 +189,10 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
     event.stopPropagation();
     place(id, next);
     if (keySave.current) clearTimeout(keySave.current);
+    // Settled once the keys stop, like a drop, so a card can pass over another on the way.
     keySave.current = setTimeout(() => {
       keySave.current = null;
+      settle(id);
       persist();
     }, KEY_SAVE_DELAY_MS);
   }
@@ -202,8 +227,9 @@ export default function AgentMap({ agents, connections, saved, selectedId, usern
             data-dragging={draggingId === agent.id} data-selected={selectedId === agent.id}
             aria-label={`Configure ${agent.name}`} aria-describedby={`map-status-${agent.id} map-stamina-${agent.id}`} aria-haspopup="dialog"
             onPointerDown={(event) => startDrag(event, agent.id)} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}
+            onDragStart={(event) => event.preventDefault()}
             onClick={() => openCard(agent.id)} onKeyDown={(event) => nudgeCard(event, agent.id)} onFocus={() => viewport.reveal(rect)}>
-            <span className="pixel-tile"><PixelAgent id={agent.id} name={agent.name} /></span>
+            <span className="agent-tile"><AgentAvatar id={agent.id} name={agent.name} /></span>
             <strong>{agent.name}</strong>
             <StaminaBar id={`map-stamina-${agent.id}`} view={stamina} />
             <span id={`map-status-${agent.id}`} className="map-card-status" data-warning={status.warning}>{status.text}</span>

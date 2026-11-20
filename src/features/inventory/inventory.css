@@ -1,0 +1,57 @@
+/* The Inventory page. It uses the app's theme tokens (globals.css), so it follows light and dark, and
+   the brand's UI face, Inter Tight (common/styles/fonts.ts). Buttons are ink, never mint: mint is
+   reserved for the orchestrator (docs/design/agent-art/). */
+.inventory-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100dvh; background: var(--background); color: var(--ink); font-family: var(--font-ui, var(--font)); }
+.inventory-shell > .sidebar { position: sticky; top: 0; height: 100dvh; }
+.inventory-main { min-width: 0; }
+.inventory-content { max-width: 1200px; margin: 0 auto; padding: 28px 36px 48px; }
+.inventory-intro h1 { font-size: clamp(28px, 3vw, 40px); margin: 8px 0 10px; letter-spacing: -.02em; }
+.inventory-intro p { margin: 0 0 22px; color: var(--muted); line-height: 1.6; }
+
+.inventory-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 16px; margin-bottom: 24px; }
+.inventory-field { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.inventory-field input, .inventory-field select { min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; }
+.inventory-field input:focus-visible, .inventory-field select:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.inventory-search { flex: 1 1 240px; }
+.inventory-count { margin: 0 0 10px auto; font-size: 12px; color: var(--muted); }
+
+.inventory-group { margin-bottom: 28px; }
+.inventory-group h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+.inventory-group-count { font-size: 12px; font-weight: 500; color: var(--muted); }
+.inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.inventory-card { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); scroll-margin: 24px; }
+.inventory-card:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.inventory-card[data-highlighted="true"] { border-color: var(--ink); }
+.inventory-card-head { display: flex; align-items: start; justify-content: space-between; gap: 10px; }
+.inventory-card h3 { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.inventory-card-description { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.inventory-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; font-size: 11px; color: var(--muted); }
+.inventory-card-meta span { padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius-pill); }
+.inventory-sample { font-style: italic; }
+.inventory-config h4 { margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.inventory-config ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; }
+.inventory-setup { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
+
+/* Status: a dot and a word. Working items get a solid ink dot; needs setup a hollow one; errors the
+   theme's warning colour. The word always says it, so colour is never the only signal. */
+.inventory-status { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; font-size: 12px; white-space: nowrap; color: var(--ink); }
+.inventory-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.inventory-status[data-status="needs_setup"] { color: var(--muted); }
+.inventory-status[data-status="needs_setup"] .inventory-dot { background: transparent; border: 1.5px solid var(--muted); }
+.inventory-status[data-status="error"] { color: var(--accent-text); }
+.inventory-status[data-status="error"] .inventory-dot { background: var(--accent-text); }
+
+.inventory-empty { display: grid; justify-items: center; gap: 8px; padding: 48px 20px; text-align: center; border: 1px dashed var(--line); border-radius: 20px; }
+.inventory-empty h2 { margin: 0; font-size: 18px; }
+.inventory-empty p { margin: 0 0 8px; color: var(--muted); }
+.inventory-empty .account-submit { text-decoration: none; }
+
+@media (max-width: 1100px) { .inventory-content { padding-inline: 24px; } }
+@media (max-width: 650px) {
+  .inventory-shell { display: block; }
+  .inventory-content { padding: 16px 16px 32px; }
+  .inventory-filters { gap: 10px; }
+  .inventory-field:not(.inventory-search) { flex: 1 1 130px; }
+  .inventory-count { margin-left: 0; width: 100%; }
+  .inventory-grid { grid-template-columns: minmax(0, 1fr); }
+}

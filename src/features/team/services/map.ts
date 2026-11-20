@@ -1,5 +1,5 @@
 import type { Rect } from "./connectors";
-import type { Agent, Delegation } from "./team";
+import type { Agent, LinkMode } from "./team";
 
 // A card's centre as a fraction (0–1) of the map's world, so a saved layout doesn't depend on the screen.
 // The world is a fixed 1600 × 1000 pixel plane that the viewport pans and zooms over.
@@ -82,6 +82,92 @@ export function isDrag(dx: number, dy: number) {
   return Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX;
 }
 
+// The smallest space between two cards, in world pixels (so the same at every zoom).
+export const CARD_GAP = 24;
+// How far apart, in world pixels, the free-spot search tries positions.
+const SEARCH_STEP = 8;
+
+/** True when two card boxes come closer than `gap`. Exactly `gap` apart is not an overlap. */
+export function overlaps(a: Rect, b: Rect, gap = CARD_GAP) {
+  const apartX = a.x + a.width + gap <= b.x || b.x + b.width + gap <= a.x;
+  const apartY = a.y + a.height + gap <= b.y || b.y + b.height + gap <= a.y;
+  return !apartX && !apartY;
+}
+
+/** True when the card `id` at `position` keeps CARD_GAP from every other card in `layout`. */
+function isClear(id: string, position: Position, layout: Layout) {
+  const box = cardRect(centreOf(position));
+  for (const [other, placed] of Object.entries(layout)) {
+    if (other === id) continue;
+    if (overlaps(box, cardRect(centreOf(placed)))) return false;
+  }
+  return true;
+}
+
+/**
+ * The nearest position to `position` where card `id` keeps CARD_GAP from every other card in
+ * `layout` (its own entry is ignored), with the whole card inside the world. It searches outward in
+ * rings SEARCH_STEP apart and takes the closest clear spot on the first ring that has one, so the
+ * result is the same every time. If the world has no room left, the card stays where it was put.
+ */
+export function freeSpot(id: string, position: Position, layout: Layout): Position {
+  const start = clampPosition(position);
+  if (isClear(id, start, layout)) return start;
+  const centre = centreOf(start);
+  const reach = Math.max(WORLD.width, WORLD.height);
+  for (let radius = SEARCH_STEP; radius <= reach; radius += SEARCH_STEP) {
+    // About one sample every SEARCH_STEP pixels around the ring.
+    const samples = Math.max(8, Math.ceil((2 * Math.PI * radius) / SEARCH_STEP));
+    let best: Position | null = null;
+    let bestDistance = Infinity;
+    for (let index = 0; index < samples; index++) {
+      const angle = (2 * Math.PI * index) / samples;
+      const candidate = clampPosition({
+        x: (centre.x + Math.cos(angle) * radius) / WORLD.width,
+        y: (centre.y + Math.sin(angle) * radius) / WORLD.height,
+      });
+      if (!isClear(id, candidate, layout)) continue;
+      // Clamping at the world's edge can pull a candidate closer, so compare real distances.
+      const moved = centreOf(candidate);
+      const distance = Math.hypot(moved.x - centre.x, moved.y - centre.y);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    if (best) return best;
+  }
+  return start;
+}
+
+/**
+ * Places cards one at a time in the order given: each keeps its position unless it overlaps a card
+ * already placed, in which case it moves to the nearest free spot. Earlier ids win their spot.
+ */
+export function settleLayout(ids: string[], layout: Layout): Layout {
+  const placed: Layout = {};
+  for (const id of ids) {
+    const position = layout[id];
+    if (!position) continue;
+    placed[id] = freeSpot(id, position, placed);
+  }
+  return placed;
+}
+
+/**
+ * The map's starting layout: saved, default or fallback positions, settled so no cards overlap.
+ * Agents with a saved position are placed first, so an arrangement the owner made is kept wherever
+ * it is already clear, and agents without one make room around it.
+ */
+export function initialLayout(ids: string[], saved: Layout): Layout {
+  const layout: Layout = {};
+  ids.forEach((id, index) => {
+    layout[id] = positionFor(id, saved, index);
+  });
+  const ordered = [...ids.filter((id) => saved[id]), ...ids.filter((id) => !saved[id])];
+  return settleLayout(ordered, layout);
+}
+
 /** The position after an arrow key, or null for any other key. */
 export function nudge(position: Position, key: string, large: boolean): Position | null {
   const direction = ARROW_STEPS[key];
@@ -98,31 +184,30 @@ export function agentStatus(agent: Agent): { text: string; warning: boolean } {
   return { text: `Ready · ${count(agent.tools.length, "tool")}`, warning: false };
 }
 
-// active: the runtime can make this hand-off ("Ask me first" or "Go ahead").
-// planned: drawn dashed. Either delegation is "Don't ask other agents" ("off"), or the connection was
-// added in the panel and the runtime doesn't support it yet (only the server's delegates_to does).
-export type LinkState = Delegation | "planned";
+// A link is one A2A connection (server/src/features/a2a) the owner saved in the panel: "ask" and
+// "auto" are active and drawn solid; "off" is connected but switched off, drawn dashed. Links set to
+// "none" are not connections and draw nothing.
+export type LinkState = Exclude<LinkMode, "none">;
 export type Link = { from: string; to: string; state: LinkState; label: string; planned: boolean };
 
 // What each kind of link means. Lines carry no text; this appears in the line's tooltip, as its
 // accessible name, and on the connection card in the settings panel.
-const LINK_LABELS: Record<LinkState, string> = {
+export const LINK_LABELS: Record<LinkState, string> = {
   ask: "Asks after your OK",
   auto: "Asks directly, without waiting for your OK",
-  off: "Off: set to Don’t ask other agents",
-  planned: "Planned: Mula doesn’t hand work along this yet",
+  off: "Off: connected, but won’t ask",
 };
 
-/** One link per connection (from the agent store), drawn solid only when the runtime can use it. */
+/** One link per connection, with the mode saved on the asking agent. */
 export function agentLinks(agents: Agent[], connections: Record<string, string[]>): Link[] {
   const byId = new Map(agents.map((agent) => [agent.id, agent]));
   const links: Link[] = [];
   for (const agent of agents) {
     for (const target of connections[agent.id] ?? []) {
       if (!byId.has(target) || target === agent.id) continue;
-      let state: LinkState = "planned";
-      if (agent.delegation && agent.delegates_to.includes(target)) state = agent.delegation;
-      links.push({ from: agent.id, to: target, state, label: LINK_LABELS[state], planned: state === "off" || state === "planned" });
+      const mode = agent.links?.[target];
+      if (mode !== "ask" && mode !== "auto" && mode !== "off") continue;
+      links.push({ from: agent.id, to: target, state: mode, label: LINK_LABELS[mode], planned: mode === "off" });
     }
   }
   return links;

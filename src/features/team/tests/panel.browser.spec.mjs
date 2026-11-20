@@ -3,6 +3,8 @@
 // MULA_TEST_URL, default http://localhost:3001.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -16,7 +18,7 @@ const BRAINS = {
 };
 
 function agent(id, name, description, extra) {
-  return { id, name, description, prompt: "", data: "", revision: 0, brain: "qwen", available_brains: BRAINS, delegates_to: [], delegation: null, ...extra };
+  return { id, name, description, prompt: "", data: "", revision: 0, brain: "qwen", available_brains: BRAINS, delegates_to: [], links: {}, available_toolsets: [], runtime_toolsets: [], toolset_tools: {}, toolset_status: {}, ...extra };
 }
 
 async function openTeam(contextOptions) {
@@ -26,7 +28,7 @@ async function openTeam(contextOptions) {
   page.on("pageerror", (error) => errors.push(error.message));
   const operatorTools = { csv_read: "Read attached CSVs", memory_read: "Retrieve account memory", memory_write: "Save explicit /remember requests" };
   const agents = [
-    agent("operator", "Operator", "Your everyday partner for questions and planning.", { tools: Object.keys(operatorTools), available_tools: operatorTools, delegates_to: ["forecasting"], delegation: "ask" }),
+    agent("operator", "Operator", "Your everyday partner for questions and planning.", { tools: Object.keys(operatorTools), available_tools: operatorTools, delegates_to: ["forecasting", "inventory"], links: { forecasting: "ask", inventory: "none" } }),
     agent("forecasting", "Forecasting", "Turns a sales history into a forecast.", { tools: ["naive", "drift"], available_tools: { naive: "Last value", drift: "Trend (drift)", explain: "Explain results in words" } }),
     agent("inventory", "Inventory", "Keeps an eye on stock levels.", { tools: [], available_tools: {} }),
   ];
@@ -39,10 +41,12 @@ async function openTeam(contextOptions) {
     const body = route.request().postDataJSON();
     puts.push({ id, body });
     const target = agents.find((item) => item.id === id);
-    Object.assign(target, { prompt: body.prompt, data: body.data, tools: body.tools, brain: body.brain, delegation: body.delegation, revision: target.revision + 1 });
+    Object.assign(target, { prompt: body.prompt, data: body.data, tools: body.tools, brain: body.brain, links: body.links, runtime_toolsets: body.runtime_toolsets, revision: target.revision + 1 });
     return route.fulfill({ json: target });
   });
-  await page.goto(baseURL + "/agents");
+  // Client access lists keys from the server; none here.
+  await page.route(/\/api\/team\/[a-z]+\/client-keys$/, (route) => route.fulfill({ json: { keys: [] } }));
+  await page.goto(baseURL + PROJECT_PATH + "/agents");
   await page.locator('.map-world[data-ready="true"]').waitFor();
   return { context, page, errors, puts };
 }
@@ -137,22 +141,25 @@ try {
   assert.equal(saved.id, "operator");
   assert.deepEqual(saved.body.tools, ["csv_read", "memory_read"]);
   assert.equal(saved.body.prompt, "Reply briefly in English.");
-  assert.equal(saved.body.delegation, "ask");
+  assert.deepEqual(saved.body.links, { forecasting: "ask", inventory: "none" });
 
-  // Connections: add Inventory; the map draws a planned line for it.
+  // Connections: add Inventory (its file allows it); once saved, the map draws a line for it.
   const connectionCards = panel.locator(".connections-section > .panel-card-list > .panel-card");
   assert.deepEqual(await connectionCards.locator("strong").allInnerTexts(), ["Forecasting"]);
   await panel.getByRole("button", { name: "Add connection" }).click();
   await panel.getByRole("button", { name: "Connect Inventory" }).click();
   assert.deepEqual(await connectionCards.locator("strong").allInnerTexts(), ["Forecasting", "Inventory"]);
   await page.waitForFunction(() => document.activeElement?.id === "connection-card-inventory");
-  await panel.getByText(/Prototype: dashed “planned” connections/).waitFor();
   // Each connection card shows what the map line's tooltip says.
-  assert.deepEqual(await connectionCards.locator(".connection-status").allInnerTexts(), ["Asks after your OK", "Planned: Mula doesn’t hand work along this yet"]);
+  assert.deepEqual(await connectionCards.locator(".connection-status").allInnerTexts(), ["Asks after your OK", "Asks after your OK"]);
+  await panel.getByLabel("When Operator needs Inventory").selectOption("off");
   await page.screenshot({ path: screenshots + "/mula-panel-simple.png" });
+  await panel.getByRole("button", { name: "Save settings" }).click();
+  await panel.getByText("Saved for your account.").waitFor();
+  assert.deepEqual(puts.at(-1).body.links, { forecasting: "ask", inventory: "off" });
   await closePanel(page, panel);
   assert.equal(await page.locator(".map-link").count(), 2);
-  assert.equal(await page.locator('.map-link[data-planned="true"]').getAttribute("aria-label"), "Operator to Inventory: Planned: Mula doesn’t hand work along this yet");
+  assert.equal(await page.locator('.map-link[data-planned="true"]').getAttribute("aria-label"), "Operator to Inventory: Off: connected, but won’t ask");
 
   // Advanced: brain dropdown with the current brain selected; read-only "Set in config" values.
   panel = await openPanel(page, "Operator");
@@ -172,7 +179,9 @@ try {
   await panel.getByText(/sends each message, .* to Anthropic\./).waitFor();
   await panel.getByText("Unsaved changes").waitFor();
   assert.ok(await panel.getByText("Set in config").count() >= 6);
-  await panel.getByText("mula-0f8fad5bd9cb469fa16570867728950e").waitFor();
+  await panel.getByText("mula-11111111222243338444555555555555").waitFor();
+  await panel.getByRole("heading", { name: "Client access" }).waitFor();
+  await panel.getByText("No keys yet, so no client can connect.").waitFor();
   await panel.getByText("csv_read, memory_read", { exact: true }).waitFor();
   await panel.getByLabel("Reference data", { exact: true }).fill("We sell coffee.");
   await panel.getByRole("button", { name: "Save settings" }).click();
@@ -203,12 +212,14 @@ try {
   await panel.getByRole("tab", { name: "Simple" }).click();
   await panel.getByRole("button", { name: "Remove connection to Forecasting" }).click();
   await page.waitForFunction(() => document.activeElement?.textContent === "Add connection");
+  await panel.getByRole("button", { name: "Save settings" }).click();
+  await panel.getByText("Saved for your account.").waitFor();
   await closePanel(page, panel);
   assert.equal(await page.locator(".map-link").count(), 1);
-  assert.equal(await page.locator(".map-link").getAttribute("aria-label"), "Operator to Inventory: Planned: Mula doesn’t hand work along this yet");
-  // Forecasting can't ask on the runtime, so it has no approval choice, but can still get connections.
+  assert.equal(await page.locator(".map-link").getAttribute("aria-label"), "Operator to Inventory: Off: connected, but won’t ask");
+  // Forecasting's file lets it ask no one in this fake team, so it has no connections to make.
   panel = await openPanel(page, "Forecasting");
-  assert.equal(await panel.getByRole("radiogroup", { name: "When this agent needs another agent" }).count(), 0);
+  await panel.getByText("Forecasting works on its own and doesn’t ask other agents.").waitFor();
   await closePanel(page, panel);
   assert.deepEqual(errors, []);
   await context.close();

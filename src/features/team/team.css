@@ -63,12 +63,16 @@
 .agent-stamina { display: grid; gap: 6px; margin: -8px 0 24px; }
 .agent-stamina .settings-help { margin: 0; }
 /* Corner controls, outside the panned world so they stay put. */
-/* A cream sticker keeps the dark pixel outlines readable whatever the theme. */
-.pixel-tile { display: grid; place-items: center; flex-shrink: 0; width: 112px; height: 112px; border-radius: 22px; background: #f3eee8; box-shadow: inset 0 -6px 0 #e2d7c9; }
-.pixel-tile.small { width: 52px; height: 52px; border-radius: 14px; box-shadow: inset 0 -3px 0 #e2d7c9; }
-.pixel-agent { display: block; }
+/* The agents' characters (docs/design/agent-art/) sit on the art's ink tile in both themes, as the
+   brief draws them: the orb's glow and the bots' flat colours read on it. */
+.agent-tile { display: grid; place-items: center; flex-shrink: 0; width: 112px; height: 112px; border-radius: 22px; background: #0b0b0c; overflow: hidden; }
+.agent-tile.small { width: 52px; height: 52px; border-radius: 14px; }
+.agent-avatar { display: grid; place-items: center; }
+/* A mascot image can't be dragged or selected on its own; presses reach the card, which moves as a whole. */
+.map-card img { pointer-events: none; -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
+.agent-avatar-initial { border-radius: 50%; background: #2a2a2e; color: #f4f4f0; font-weight: 600; }
 .agent-badge { color: var(--muted); font-size: 11px; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 4px 10px; }
-.agent-dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(640px, 100vw); max-width: 100vw; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; box-shadow: -24px 0 60px -30px rgb(0 0 0 / .35); background: var(--background); color: var(--ink); overflow: auto; overscroll-behavior: contain; }
+.agent-dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: min(640px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; box-shadow: -24px 0 60px -30px rgb(0 0 0 / .35); background: var(--background); color: var(--ink); overflow: auto; overscroll-behavior: contain; }
 .agent-dialog[open] { animation: agent-panel-in .22s ease-out; }
 .agent-dialog::backdrop { background: rgb(0 0 0 / .3); }
 @keyframes agent-panel-in { from { translate: 28px 0; opacity: 0; } }
@@ -128,7 +132,7 @@
 .forecast-explanation { white-space: pre-wrap; color: var(--ink); line-height: 1.75; font-size: 13px; padding: 18px; border: 1px solid var(--edge); box-shadow: var(--shadow); border-radius: 12px; background: var(--surface); }
 @media (max-width: 1100px) { .team-content { padding-inline: 24px; } }
 /* Phones keep the canvas: pinch to zoom, one finger to pan, and drag cards like on larger screens. */
-@media (max-width: 699px) { .agent-map { height: min(72dvh, 620px); min-height: 420px; } .agent-dialog { width: 100vw; border-left: 0; } }
+@media (max-width: 699px) { .agent-map { height: min(72dvh, 620px); min-height: 420px; } .agent-dialog { width: 100%; border-left: 0; } }
 @media (max-width: 650px) { .team-shell { display: block; } .team-content { padding: 16px 16px 32px; } .agents-intro h1 { font-size: 30px; } .agent-dialog .agent-inspector { padding: 20px 18px 32px; } .inspector-heading { gap: 10px; } .inspector-heading .agent-badge { padding: 4px 8px; } .forecast-fields { gap: 12px; } .agent-tabs { gap: 18px; } }
 @media (prefers-reduced-motion: reduce) { .map-card, .map-card:hover, .map-card[data-dragging="true"] { transition: none; translate: none; } .stamina-cell { transition: none; } .stamina[data-unlimited="true"] .stamina-track, .stamina[data-unlimited="true"] .stamina-cell { animation: none; } .agent-dialog[open] { animation: none; } }
 .agent-brain { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; cursor: pointer; }
@@ -190,8 +194,30 @@
 .picker[hidden] { display: none; }
 .picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
 .picker > .settings-help { margin: 0; }
-.pixel-tile.tiny { width: 36px; height: 36px; border-radius: 10px; box-shadow: inset 0 -3px 0 #e2d7c9; }
-.panel-delegation { border: 0; padding: 0; margin: 10px 0 0; display: grid; gap: 10px; }
+.agent-tile.tiny { width: 36px; height: 36px; border-radius: 10px; }
+/* Connections (A2A): the mode select and the card details span the card under its avatar and name. */
+.connection-card .connection-mode, .connection-card .connection-mode-help, .connection-card .agent-card-details { grid-column: 1 / -1; }
+.connection-mode { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.connection-mode select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.connection-mode-help { margin: 0; }
+.agent-card-details summary { cursor: pointer; font-size: 12px; color: var(--accent-text); }
+.agent-card-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 8px 0 0; font-size: 12px; }
+.agent-card-fields dt { color: var(--muted); }
+.agent-card-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+/* Runtime tools: a switch per toolset; one that needs setup is dimmed and can't be switched on. */
+.runtime-tool[data-unavailable="true"] { opacity: .7; }
+.runtime-tool-names code { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
+.panel-card-text .runtime-tool-warning { color: var(--accent-text); font-weight: 500; }
+.runtime-tool-switch { width: 20px; height: 20px; accent-color: var(--accent-text); }
+/* Client access (ACP): keys, the one-time secret and the editor snippet. */
+.client-key[data-revoked="true"] { opacity: .65; }
+.client-secret { display: grid; gap: 10px; padding: 14px; margin-top: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--raised); }
+.client-secret .panel-subtitle { margin: 0; }
+.client-secret-value { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; user-select: all; }
+.client-snippet { margin: 0; padding: 12px; max-width: 100%; overflow-x: auto; border-radius: 10px; background: var(--surface); font-family: var(--mono); font-size: 11px; line-height: 1.5; }
+.client-key-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-top: 12px; }
+.client-key-form label { grid-column: 1 / -1; margin: 0; }
+.client-key-form input { min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
 .panel-subtitle { font-size: 13px; font-weight: 600; padding: 0; margin-bottom: 10px; }
 .panel-select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); font-size: 13px; }
 .panel-select:focus { outline: 0; border-color: var(--muted); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -213,6 +239,7 @@
   .agent-settings .settings-footer { margin-inline: -18px; padding-inline: 18px; }
   .config-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .agent-tab-bar { flex-wrap: wrap; }
+  .client-key-form { grid-template-columns: minmax(0, 1fr); }
 }
 /* The shared muted grey measures 4.42:1 on the light background, so the panel darkens it to pass 4.5:1.
    Dark mode's muted grey already passes. */

@@ -3,6 +3,8 @@
 // the frontend: MULA_TEST_URL, default http://localhost:3001.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -11,7 +13,7 @@ function agent(id, name, extra = {}) {
   return {
     id, name, description: `${name} test agent.`, prompt: "", data: "", tools: [], available_tools: {}, revision: 1, brain: "qwen",
     available_brains: { qwen: { name: "Qwen (local)", description: "Runs locally.", location: "local", host: "this computer", status: "ready" } },
-    delegates_to: [], delegation: null, ...extra,
+    delegates_to: [], links: {}, available_toolsets: [], runtime_toolsets: [], toolset_tools: {}, toolset_status: {}, ...extra,
   };
 }
 
@@ -21,7 +23,7 @@ async function openMap(contextOptions) {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const agents = [
-    agent("operator", "Operator", { delegates_to: ["forecasting"], delegation: "ask" }),
+    agent("operator", "Operator", { delegates_to: ["forecasting"], links: { forecasting: "ask" } }),
     agent("forecasting", "Forecasting", { stamina: { used: 45_000, limit: 50_000 } }),
     agent("inventory", "Inventory"),
   ];
@@ -36,10 +38,12 @@ async function openMap(contextOptions) {
   });
   await page.route("**/api/team/operator", (route) => {
     const body = route.request().postDataJSON();
-    Object.assign(agents[0], { delegation: body.delegation, revision: agents[0].revision + 1 });
+    Object.assign(agents[0], { links: body.links, revision: agents[0].revision + 1 });
     return route.fulfill({ json: agents[0] });
   });
-  await page.goto(baseURL + "/agents");
+  // Client access lists keys from the server; none here.
+  await page.route(/\/api\/team\/[a-z]+\/client-keys$/, (route) => route.fulfill({ json: { keys: [] } }));
+  await page.goto(baseURL + PROJECT_PATH + "/agents");
   await page.getByRole("heading", { name: "My agents", exact: true }).waitFor();
   await page.locator('.map-world[data-ready="true"]').waitFor();
   return { context, page, errors, saves };
@@ -281,6 +285,29 @@ try {
   assert.equal(await page.getByRole("dialog").count(), 0);
   await assertConnectorAligned(page);
 
+  // Pressing on the mascot image moves the whole card (the image can't be dragged on its own), and
+  // dropping it on another card pushes it to the nearest spot with at least the 24 px gap.
+  const mascot = forecastingCard.locator("img");
+  assert.equal(await mascot.getAttribute("draggable"), "false");
+  assert.equal(await mascot.evaluate((node) => getComputedStyle(node).pointerEvents), "none");
+  const mascotBox = await mascot.boundingBox();
+  const target = await box(page, "operator");
+  const savesBeforeDrop = saves.length;
+  const dropped = page.waitForRequest((request) => request.url().endsWith("/api/team/layout"));
+  await page.mouse.move(mascotBox.x + mascotBox.width / 2, mascotBox.y + mascotBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await dropped;
+  assert.ok(saves.length > savesBeforeDrop);
+  assert.equal(await page.getByRole("dialog").count(), 0);
+  const [operatorAfter, forecastingAfter] = [await box(page, "operator"), await box(page, "forecasting")];
+  const gapX = Math.max(forecastingAfter.x - (operatorAfter.x + operatorAfter.width), operatorAfter.x - (forecastingAfter.x + forecastingAfter.width));
+  const gapY = Math.max(forecastingAfter.y - (operatorAfter.y + operatorAfter.height), operatorAfter.y - (forecastingAfter.y + forecastingAfter.height));
+  const zoomNow = (await view(page)).zoom;
+  assert.ok(Math.max(gapX, gapY) >= 24 * zoomNow - 1, JSON.stringify({ gapX, gapY, zoomNow }));
+  await assertConnectorAligned(page);
+
   // Far out, cards keep the mascot, name and bar; the status and stamina label are hidden.
   const zoomOut = page.getByRole("button", { name: "Zoom out", exact: true });
   while (await zoomOut.isEnabled()) await zoomOut.click();
@@ -314,15 +341,15 @@ try {
   // The settings panel shows stamina as a named image (unlimited) or a meter (limited).
   await operatorCard.click();
   await page.getByRole("img", { name: "Stamina: unlimited" }).waitFor();
-  // Switching delegation off in the panel turns the link into a dashed, "off" planned connection.
-  await page.getByRole("radio", { name: /Don’t ask other agents/ }).check();
+  // Switching the connection off in the panel turns the link into a dashed, "off" one.
+  await page.getByLabel("When Operator needs Forecasting").selectOption("off");
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.getByText("Saved for your account.").waitFor();
   await page.getByRole("button", { name: "Close settings" }).click();
   await page.getByRole("dialog").waitFor({ state: "detached" });
   assert.equal(await link.getAttribute("data-planned"), "true");
   assert.notEqual(await line.evaluate((node) => getComputedStyle(node).strokeDasharray), "none");
-  assert.equal(await link.getAttribute("aria-label"), "Operator to Forecasting: Off: set to Don’t ask other agents");
+  assert.equal(await link.getAttribute("aria-label"), "Operator to Forecasting: Off: connected, but won’t ask");
   await assertConnectorAligned(page);
   await page.screenshot({ path: screenshots + "/mula-map-planned.png" });
   // A resize keeps the view, so the narrower window shows less; fit again to reach Forecasting.

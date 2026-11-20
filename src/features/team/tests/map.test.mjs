@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CARD, CARD_LEDGE, DEFAULT_POSITIONS, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampFraction, clampToCanvas, dragTo, isDrag, nudge, positionFor, viewStorageKey } from "../services/map.ts";
+import { CARD, CARD_GAP, CARD_LEDGE, DEFAULT_POSITIONS, WORLD, agentLinks, agentStatus, cardRect, centreOf, clampFraction, clampPosition, clampToCanvas, dragTo, freeSpot, initialLayout, isDrag, nudge, overlaps, positionFor, settleLayout, viewStorageKey } from "../services/map.ts";
 
 test("saved positions win, then defaults, then a spread for new agents", () => {
   assert.deepEqual(positionFor("operator", { operator: { x: 0.9, y: 0.1 } }, 0), { x: 0.9, y: 0.1 });
@@ -68,21 +68,86 @@ test("card status reflects the brain", () => {
   assert.deepEqual(agentStatus({ ...operator, brain: "removed" }), { text: "Ready · 1 tool", warning: false });
 });
 
-test("links follow the store's connections; only runtime-supported ones are active", () => {
-  const operator = { id: "operator", delegates_to: ["forecasting"], delegation: "ask" };
-  const forecasting = { id: "forecasting", delegates_to: [], delegation: null };
-  const inventory = { id: "inventory", delegates_to: [], delegation: null };
-  const team = [operator, forecasting, inventory];
+test("links follow each agent's saved link modes", () => {
+  const operator = { id: "operator", links: { forecasting: "ask" } };
+  const forecasting = { id: "forecasting", links: { operator: "none" } };
+  const team = [operator, forecasting];
   assert.deepEqual(agentLinks(team, { operator: ["forecasting"] }), [{ from: "operator", to: "forecasting", state: "ask", label: "Asks after your OK", planned: false }]);
-  assert.equal(agentLinks([{ ...operator, delegation: "auto" }, forecasting], { operator: ["forecasting"] })[0].label, "Asks directly, without waiting for your OK");
+  assert.equal(agentLinks([{ ...operator, links: { forecasting: "auto" } }, forecasting], { operator: ["forecasting"] })[0].label, "Asks directly, without waiting for your OK");
   // Switched off, the connection stays on the map as a dashed one.
-  assert.deepEqual(agentLinks([{ ...operator, delegation: "off" }, forecasting], { operator: ["forecasting"] }), [{ from: "operator", to: "forecasting", state: "off", label: "Off: set to Don’t ask other agents", planned: true }]);
-  // Connections added in the panel that the runtime can't use yet are planned.
-  assert.deepEqual(agentLinks(team, { operator: ["inventory"], forecasting: ["inventory"] }).map((link) => [link.from, link.to, link.state]), [["operator", "inventory", "planned"], ["forecasting", "inventory", "planned"]]);
-  // Removed connections draw nothing; unknown and self targets are ignored.
-  assert.deepEqual(agentLinks(team, { operator: [], forecasting: ["forecasting", "ghost"] }), []);
+  assert.deepEqual(agentLinks([{ ...operator, links: { forecasting: "off" } }, forecasting], { operator: ["forecasting"] }), [{ from: "operator", to: "forecasting", state: "off", label: "Off: connected, but won’t ask", planned: true }]);
+  // "none", unknown and self targets draw nothing.
+  assert.deepEqual(agentLinks(team, { operator: ["ghost", "operator"], forecasting: ["operator"] }), []);
 });
 
 test("the map view is remembered per user", () => {
   assert.equal(viewStorageKey("rafa"), "mula.team.view.rafa");
+});
+
+test("cards closer than the gap overlap; exactly the gap apart do not", () => {
+  const a = { x: 0, y: 0, width: 100, height: 100 };
+  assert.equal(overlaps(a, { x: 124, y: 0, width: 100, height: 100 }), false);
+  assert.equal(overlaps(a, { x: 123, y: 0, width: 100, height: 100 }), true);
+  assert.equal(overlaps(a, { x: 0, y: 124, width: 100, height: 100 }), false);
+  // Side by side but far apart vertically is clear.
+  assert.equal(overlaps(a, { x: 50, y: 300, width: 100, height: 100 }), false);
+});
+
+/** True when no two cards in the layout come closer than the gap. */
+function allClear(layout) {
+  const entries = Object.entries(layout);
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      if (overlaps(cardRect(centreOf(entries[i][1])), cardRect(centreOf(entries[j][1])))) return false;
+    }
+  }
+  return true;
+}
+
+test("a drop on another card moves to the nearest free spot; a clear drop stays put", () => {
+  const layout = { operator: { x: 0.5, y: 0.5 } };
+  const clear = { x: 0.2, y: 0.3 };
+  assert.deepEqual(freeSpot("forecasting", clear, layout), clear);
+  const moved = freeSpot("forecasting", { x: 0.52, y: 0.5 }, layout);
+  assert.ok(allClear({ ...layout, forecasting: moved }));
+  // Nearest: dropped just right of centre, it ends up just to the right, one card plus the gap away.
+  const centre = centreOf(moved);
+  assert.ok(centre.x > WORLD.width / 2, JSON.stringify(centre));
+  assert.ok(Math.abs(centre.x - (WORLD.width / 2 + CARD.width + CARD_GAP)) <= 10, JSON.stringify(centre));
+  // A card's own entry in the layout never blocks it.
+  assert.deepEqual(freeSpot("operator", { x: 0.5, y: 0.5 }, layout), { x: 0.5, y: 0.5 });
+});
+
+test("a free spot keeps the whole card inside the world", () => {
+  const layout = { operator: { x: 0, y: 0 } };
+  const moved = freeSpot("forecasting", { x: 0, y: 0 }, layout);
+  assert.deepEqual(clampPosition(moved), moved);
+  assert.ok(allClear({ operator: clampPosition(layout.operator), forecasting: moved }));
+});
+
+test("with no room left, a card stays where it was dropped", () => {
+  const crowded = {};
+  for (let col = 0; col < 16; col++) {
+    for (let row = 0; row < 10; row++) crowded[`a${col}-${row}`] = { x: col / 15, y: row / 9 };
+  }
+  assert.deepEqual(freeSpot("new", { x: 0.5, y: 0.5 }, crowded), { x: 0.5, y: 0.5 });
+});
+
+test("the starting layout never overlaps, keeps clear saved spots and is the same every time", () => {
+  // The fallback diagonal for agents without a default used to overlap by construction.
+  const ids = ["inventory", "procurement", "sales", "support", "marketing"];
+  const settled = initialLayout(ids, {});
+  assert.deepEqual(Object.keys(settled).sort(), [...ids].sort());
+  assert.ok(allClear(settled));
+  assert.deepEqual(initialLayout(ids, {}), settled);
+  // A saved arrangement that is already clear is kept exactly; a newcomer makes room around it.
+  const saved = { operator: { x: 0.3, y: 0.42 }, forecasting: { x: 0.7, y: 0.62 } };
+  const withNew = initialLayout(["operator", "forecasting", "inventory"], { ...saved, inventory: undefined });
+  assert.deepEqual(withNew.operator, saved.operator);
+  assert.deepEqual(withNew.forecasting, saved.forecasting);
+  assert.ok(allClear(withNew));
+  // Saved cards win their spot over unsaved ones placed on top of them.
+  const stacked = settleLayout(["operator", "forecasting"], { operator: { x: 0.5, y: 0.5 }, forecasting: { x: 0.5, y: 0.5 } });
+  assert.deepEqual(stacked.operator, { x: 0.5, y: 0.5 });
+  assert.ok(allClear(stacked));
 });

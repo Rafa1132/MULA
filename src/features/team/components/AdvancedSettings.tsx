@@ -1,13 +1,14 @@
 "use client";
 
 import type { Agent, Brain } from "../services/team";
+import ClientAccess from "./ClientAccess";
 import { INSTRUCTIONS_LIMIT, TOOL_LIMIT } from "./SimpleSettings";
 
 export const REFERENCE_LIMIT = 8000;
 
 type Props = {
   agent: Agent;
-  // The runtime profile this account's agents run in, or null when the account id isn't known.
+  // The runtime profile this agent runs in, or null when the project id isn't known.
   profile: string | null;
   tools: string[];
   brain: string;
@@ -38,7 +39,7 @@ function ReadOnly({ label, value }: { label: string; value: string }) {
   return <div className="config-row"><dt>{label}</dt><dd><code>{value}</code><span className="config-tag">Set in config</span></dd></div>;
 }
 
-/** The Advanced layer: brain, reference data, and technical values that can't be changed here yet. */
+/** The Advanced layer: brain, reference data, client access, and technical values that can't be changed here yet. */
 export default function AdvancedSettings({ agent, profile, tools, brain, onBrain, data, onData, busy }: Props) {
   const brains = agent.available_brains;
   const chosen = brains[brain];
@@ -73,6 +74,8 @@ export default function AdvancedSettings({ agent, profile, tools, brain, onBrain
       <div id="agent-data-count" className="field-caption">{data.length.toLocaleString()} / {REFERENCE_LIMIT.toLocaleString()} characters · Saved only to your account</div>
     </section>
 
+    <ClientAccess agent={agent} busy={busy} />
+
     <section className="panel-section" aria-labelledby="advanced-config">
       <h3 id="advanced-config" className="panel-section-title">Technical details</h3>
       <p className="settings-help">These come from the agent’s files and the Mula runtime and can’t be changed here yet.</p>
@@ -81,7 +84,8 @@ export default function AdvancedSettings({ agent, profile, tools, brain, onBrain
         <ReadOnly label="Runtime profile" value={profileText} />
         <ReadOnly label="Enabled tool ids" value={list(tools)} />
         <ReadOnly label="Available tool ids" value={list(Object.keys(agent.available_tools))} />
-        <ReadOnly label="Runtime hand-offs" value={list(agent.delegates_to)} />
+        <ReadOnly label="Agents it may ask (A2A)" value={list(agent.delegates_to)} />
+        <ReadOnly label="Runtime toolsets offered" value={list(agent.available_toolsets)} />
         <ReadOnly label="Limits" value={`instructions ${INSTRUCTIONS_LIMIT.toLocaleString()} · reference data ${REFERENCE_LIMIT.toLocaleString()} · up to ${TOOL_LIMIT} tools`} />
         <ReadOnly label="Settings revision" value={String(agent.revision)} />
       </dl>

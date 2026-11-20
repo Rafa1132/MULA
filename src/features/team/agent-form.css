@@ -1,0 +1,98 @@
+/* My agents: the Add agent button, the Map/List switch, the list view, the Add agent form and the
+   toast. Inter Tight (common/styles/fonts.ts) for this UI, the app's theme tokens for colour, and ink
+   for buttons and selected states: mint is reserved for the orchestrator (docs/design/agent-art/). */
+.agents-add, .agents-view-switch, .agent-list, .agent-form-dialog, .team-toast { font-family: var(--font-ui, var(--font)); }
+.agents-add { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.agents-add .icon { width: 16px; height: 16px; }
+.agents-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.agents-view-switch { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); }
+.agents-view-switch button { border: 0; background: transparent; color: var(--muted); padding: 6px 16px; border-radius: var(--radius-pill); font-size: 13px; }
+.agents-view-switch button[aria-pressed="true"] { background: var(--ink); color: var(--background); }
+.agents-view-switch button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* The list view: cards with the mascot, name, status dot and short role. */
+.agent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.agent-list-card { display: flex; align-items: flex-start; gap: 14px; width: 100%; height: 100%; padding: 16px; text-align: left; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.agent-list-card:hover { box-shadow: var(--shadow-hover); translate: 0 -1px; }
+.agent-list-card:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+.agent-list-text { display: grid; gap: 4px; min-width: 0; }
+.agent-list-text strong { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.agent-list-role { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.agent-list-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink); }
+.agent-list-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.agent-list-status[data-state="attention"] { color: var(--accent-text); }
+.agent-list-status[data-state="attention"] .agent-list-dot { background: var(--accent-text); }
+.agent-list-status[data-state="saved"] { color: var(--muted); }
+.agent-list-status[data-state="saved"] .agent-list-dot { background: transparent; border: 1.5px solid var(--muted); }
+.agent-warning-badge { justify-self: start; margin-top: 2px; padding: 3px 10px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-text); font-size: 11px; font-weight: 600; }
+.agent-list-empty { color: var(--muted); padding: 32px 0; }
+
+/* The Add agent form, in the agent side panel (team.css .agent-dialog). */
+.agent-form-dialog .inspector-heading { margin-bottom: 20px; }
+.agent-form-dialog .dialog-close { margin-left: auto; }
+.agent-form { display: grid; gap: 22px; }
+.agent-form-field { display: grid; gap: 6px; }
+.agent-form-field > label, .agent-form-group legend { font-size: 13px; font-weight: 600; color: var(--ink); }
+.agent-required, .agent-optional { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.agent-form input:not([type="checkbox"]), .agent-form select, .agent-form textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; }
+.agent-form textarea { resize: vertical; line-height: 1.6; field-sizing: fixed; max-height: none; }
+.agent-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.agent-form [aria-invalid="true"] { border-color: var(--accent-text); }
+.agent-form-error { margin: 0; font-size: 12px; color: var(--accent-text); font-weight: 500; }
+.agent-form-hint, .agent-form-count { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.agent-form-count { justify-self: end; }
+.agent-form-group { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 8px; }
+.agent-form-group:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 8px; }
+.agent-form-group legend { padding: 0; margin-bottom: 4px; }
+.agent-role-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.agent-chip { padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius-pill); background: transparent; color: var(--ink); font-size: 12px; }
+.agent-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--background); }
+
+.agent-checklist, .agent-switches { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.agent-checklist li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.agent-checklist li:has(input:checked) { border-color: var(--ink); }
+.agent-checklist li[data-disabled="true"] label { opacity: .6; }
+.agent-checklist input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--ink); }
+.agent-checklist label { display: grid; gap: 2px; min-width: 0; cursor: pointer; }
+.agent-checklist li[data-disabled="true"] label { cursor: not-allowed; }
+.agent-checklist label strong { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.agent-checklist label span { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.agent-checklist-end { display: grid; justify-items: end; gap: 4px; }
+.agent-checklist-end a { font-size: 12px; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.agent-removed { font-size: 12px; color: var(--accent-text); }
+.agent-checklist.compact li { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
+
+.agent-switches li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.agent-switches label { display: grid; gap: 2px; font-size: 14px; cursor: pointer; }
+.agent-switches label span { font-size: 12px; color: var(--muted); }
+/* A native checkbox drawn as a switch, so it keeps its keyboard and form behaviour. */
+.agent-switch { appearance: none; flex-shrink: 0; position: relative; width: 40px; height: 24px; margin: 0; border-radius: 12px; background: var(--line); cursor: pointer; transition: background-color .18s; }
+.agent-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .25); transition: translate .18s; }
+.agent-switch:checked { background: var(--ink); }
+.agent-switch:checked::after { translate: 16px 0; }
+.agent-switch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.agent-form-warning { padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 13px; line-height: 1.55; }
+.agent-form-warning ul { margin: 6px 0 0; padding-left: 18px; }
+/* The footer stays at the bottom of the panel, like the settings form's. */
+.agent-form-footer { position: sticky; bottom: 0; z-index: 1; margin: 0 -30px; padding: 14px 30px 18px; background: var(--background); flex-wrap: wrap; }
+.agent-form-footer .account-submit[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+.agent-delete { color: var(--accent-text); }
+
+/* The toast: bottom centre, above everything but the open dialog's backdrop. */
+.team-toast-region { position: fixed; left: 50%; bottom: 24px; translate: -50% 0; z-index: 50; width: max-content; max-width: calc(100vw - 32px); }
+.team-toast { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border-radius: 14px; background: var(--ink); color: var(--background); font-size: 13px; box-shadow: var(--shadow-hover); animation: toast-in .2s ease-out; }
+.team-toast .icon-button { color: var(--background); width: 28px; height: 28px; padding: 0; font-size: 18px; }
+@keyframes toast-in { from { translate: 0 8px; opacity: 0; } }
+
+@media (max-width: 650px) {
+  .agents-intro { align-items: flex-start; }
+  .agent-list { grid-template-columns: minmax(0, 1fr); }
+  .agent-form-footer { margin-inline: -18px; padding-inline: 18px; }
+  .agent-checklist li { grid-template-columns: auto minmax(0, 1fr); }
+  .agent-checklist-end { grid-column: 2; justify-items: start; grid-auto-flow: column; justify-content: start; align-items: center; gap: 10px; }
+}
+@media (max-width: 400px) {
+  .agents-intro { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .team-toast { animation: none; } .agent-switch, .agent-switch::after { transition: none; } .agent-list-card:hover { translate: none; } }

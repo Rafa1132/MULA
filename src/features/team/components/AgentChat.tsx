@@ -4,12 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import Markdown from "react-markdown";
 import { CsvAttachment, readChatStream } from "@/features/operator";
-import type { CsvFile } from "@/features/operator";
+import type { AgentRequest, CsvFile } from "@/features/operator";
+import { AgentRequestCard, attachRequests, placeRequest } from "@/features/project";
 import { Agent, teamRequest } from "../services/team";
+import { projectFetch } from "@/common/services/project";
 
-type Message = { id: string; role: "user" | "assistant"; text: string; note?: string };
+type Message = { id: string; role: "user" | "assistant"; text: string; note?: string; requests?: AgentRequest[] };
 
-// A direct conversation with one agent, kept apart from the Operator's conversation.
+async function failureDetail(response: Response, fallback: string) {
+  const failure = await response.json().catch(() => ({}));
+  if (typeof failure.detail === "string") return failure.detail;
+  return fallback;
+}
+
+// A direct conversation with one agent, kept apart from the Operator's conversation. When the agent
+// asks another one (A2A, e.g. Forecasting asking the Operator), the request shows as a card under
+// its reply; approving it runs the other agent, then this agent relays the answer here.
 export default function AgentChat({ agent }: { agent: Agent }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +35,10 @@ export default function AgentChat({ agent }: { agent: Agent }) {
   useEffect(() => {
     const abort = new AbortController();
     teamRequest(`/api/agents/${agent.id}/conversation`, { signal: abort.signal })
-      .then((saved) => setMessages(saved.messages.map((message: Message) => ({ ...message, id: String(message.id) }))))
+      .then((saved) => {
+        const loaded = saved.messages.map((message: Message) => ({ ...message, id: String(message.id) }));
+        setMessages(attachRequests(loaded, saved.requests ?? []));
+      })
       .catch((failure) => { if (!abort.signal.aborted && failure instanceof Error) setError(failure.message); })
       .finally(() => { if (!abort.signal.aborted) setLoading(false); });
     // Closing the panel stops a reply in progress; the server keeps what arrived.
@@ -42,6 +55,81 @@ export default function AgentChat({ agent }: { agent: Agent }) {
       if (message.id === id) return { ...message, text, note };
       return message;
     }));
+  }
+
+  function showRequest(messageId: string, request: AgentRequest) {
+    setMessages((previous) => placeRequest(previous, messageId, request));
+  }
+
+  async function declineRequest(requestId: string) {
+    if (controller.current) return;
+    setError("");
+    try {
+      const response = await projectFetch(`/api/agents/requests/${requestId}/decline`, { method: "POST" });
+      if (!response.ok) {
+        setError(await failureDetail(response, "Could not update this request. Please retry."));
+        return;
+      }
+      const saved = await response.json();
+      setMessages((previous) => attachRequests(previous, [saved.request]));
+    } catch {
+      setError("Could not reach Mula to update this request. Check your connection and retry.");
+    }
+  }
+
+  // Runs the other agent, then streams this agent's relay of its answer as a new reply.
+  async function approveRequest(requestId: string) {
+    if (controller.current) return;
+    const abort = new AbortController();
+    controller.current = abort;
+    const relayId = crypto.randomUUID();
+    let relayShown = false;
+    let relay = "";
+    let relayNote = "Answer from another agent";
+    let current: AgentRequest | undefined;
+    setError("");
+    setBusy(true);
+    try {
+      const response = await projectFetch(`/api/agents/requests/${requestId}/approve`, { method: "POST", signal: abort.signal });
+      if (!response.ok) throw new Error(await failureDetail(response, "Could not start this request. Please retry."));
+      if (!response.body) throw new Error("Streaming is unavailable in this browser.");
+      await readChatStream(response.body, (chunk) => {
+        if (chunk.type === "request" && chunk.request) {
+          if (chunk.request.id === requestId) current = chunk.request;
+          showRequest(relayId, chunk.request);
+          if (chunk.request.id === requestId && chunk.request.status === "answered" && !relayShown) {
+            relayShown = true;
+            relayNote = `Answer from ${chunk.request.to_name}`;
+            setMessages((previous) => [...previous, { id: relayId, role: "assistant", text: "" }]);
+          }
+        }
+        if (chunk.type === "token" && typeof chunk.content === "string") {
+          relay += chunk.content;
+          updateMessage(relayId, relay);
+        }
+        if (chunk.type === "done") {
+          let note = relayNote;
+          if (chunk.truncated) note += " · Reply reached its length limit.";
+          updateMessage(relayId, relay, note);
+        }
+      });
+    } catch (failure) {
+      // The server marks an unfinished request as failed; mirror that without reloading.
+      if (current?.status === "running") showRequest(relayId, { ...current, status: "failed" });
+      if (abort.signal.aborted) {
+        if (relayShown) updateMessage(relayId, relay, "Stopped by you.");
+      } else {
+        let detail = "Could not complete the request. Check your connection and try again.";
+        if (failure instanceof Error) detail = failure.message;
+        setError(detail);
+        if (relayShown) updateMessage(relayId, relay, "Reply incomplete.");
+      }
+    } finally {
+      if (controller.current === abort) {
+        controller.current = null;
+        setBusy(false);
+      }
+    }
   }
 
   async function send(event: FormEvent) {
@@ -62,8 +150,11 @@ export default function AgentChat({ agent }: { agent: Agent }) {
     setError("");
     setBusy(true);
     let reply = "";
+    let completed = false;
+    // "Go ahead" requests run as soon as this reply ends.
+    const approvedInAdvance: string[] = [];
     try {
-      const response = await fetch(`/api/agents/${agent.id}/chat`, {
+      const response = await projectFetch(`/api/agents/${agent.id}/chat`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, csv_file: attached }), signal: abort.signal,
       });
@@ -79,8 +170,13 @@ export default function AgentChat({ agent }: { agent: Agent }) {
           reply += chunk.content;
           updateMessage(replyId, reply);
         }
+        if (chunk.type === "request" && chunk.request) {
+          showRequest(replyId, chunk.request);
+          if (chunk.request.approved_in_advance && chunk.request.status === "pending") approvedInAdvance.push(chunk.request.id);
+        }
         if (chunk.type === "done" && chunk.truncated) updateMessage(replyId, reply, "Reply reached its length limit.");
       });
+      completed = !abort.signal.aborted;
     } catch (failure) {
       if (abort.signal.aborted) {
         updateMessage(replyId, reply, "Stopped by you.");
@@ -99,6 +195,8 @@ export default function AgentChat({ agent }: { agent: Agent }) {
         setBusy(false);
       }
     }
+    const next = approvedInAdvance[0];
+    if (completed && next) void approveRequest(next);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -123,6 +221,8 @@ export default function AgentChat({ agent }: { agent: Agent }) {
             </div>}
             {!message.text && !message.note && <div className="waiting"><span /><span /><span /><span className="waiting-label">Preparing the reply</span></div>}
             {message.note && <p className="message-note">{message.note}</p>}
+            {(message.requests ?? []).map((request) => <AgentRequestCard key={request.id} request={request} disabled={busy}
+              onApprove={(id) => void approveRequest(id)} onDecline={(id) => void declineRequest(id)} />)}
           </div>
         </article>)}
       </section>
