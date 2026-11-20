@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Hermes, then the backend, in the api container. If either stops, the container stops.
+# Start the backend, then Hermes, in the api container. If either stops, the container stops.
 set -euo pipefail
 
 APP=/app
@@ -54,30 +54,48 @@ pids=()
 stop() { kill "${pids[@]}" 2>/dev/null || true; wait || true; }
 trap stop TERM INT
 
-echo "mula-api: starting Hermes"
-bash "$APP/server/scripts/start_hermes.sh" &
-pids+=($!)
-
-for _ in $(seq 1 90); do
-  if curl -fsS -o /dev/null -H "Authorization: Bearer $HERMES_API_KEY" http://127.0.0.1:8642/v1/capabilities; then
-    break
-  fi
-  if ! kill -0 "${pids[0]}" 2>/dev/null; then
-    echo "mula-api: Hermes stopped during startup." >&2
-    exit 1
-  fi
-  sleep 1
-done
-curl -fsS -o /dev/null -H "Authorization: Bearer $HERMES_API_KEY" http://127.0.0.1:8642/v1/capabilities \
-  || { echo "mula-api: Hermes did not become ready in 90 s." >&2; stop; exit 1; }
-echo "mula-api: Hermes is ready; starting the backend"
-
+# The backend starts before Hermes, as in scripts/run.py: Hermes connects to the backend's agent
+# tools (/mcp) once per profile at startup and parks them after three failed attempts, which leaves
+# agents without their tools and, with many profiles, keeps Hermes from getting ready at all. The
+# backend only contacts Hermes when a chat turn starts, so it doesn't need Hermes to start.
 cd "$APP/server"
+echo "mula-api: starting the backend"
 # 0.0.0.0 inside compose's own network, where the web container reaches api:8000. On a VPS the
 # container shares the host's network (docker-compose.vps.yml), and MULA_API_HOST=127.0.0.1 keeps the
 # backend off the public internet: only the SSH tunnel reaches it (scripts/vps-tunnel.sh).
 python3 -m uvicorn src.main:app --host "${MULA_API_HOST:-0.0.0.0}" --port 8000 &
 pids+=($!)
+
+# Waits up to $3 seconds for URL $2, failing early if process $1 exits.
+wait_for() {
+  local pid="$1" url="$2" seconds="$3"
+  for _ in $(seq 1 "$seconds"); do
+    if curl -fsS -o /dev/null -H "Authorization: Bearer $HERMES_API_KEY" "$url"; then
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 1
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+if ! wait_for "${pids[0]}" http://127.0.0.1:8000/health 90; then
+  echo "mula-api: the backend did not become ready in 90 s." >&2
+  stop
+  exit 1
+fi
+echo "mula-api: the backend is ready; starting Hermes"
+
+bash "$APP/server/scripts/start_hermes.sh" &
+pids+=($!)
+if ! wait_for "${pids[1]}" http://127.0.0.1:8642/v1/capabilities 90; then
+  echo "mula-api: Hermes did not become ready in 90 s." >&2
+  stop
+  exit 1
+fi
+echo "mula-api: Hermes is ready"
 
 # Exit when either process exits, so Docker sees the failure and can restart the container.
 set +e
