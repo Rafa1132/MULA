@@ -31,7 +31,7 @@ Don't run `./run.sh` and the Docker app at the same time: both use port 3000.
 - `mula-hermes`: the container's Hermes home (profiles, sessions, runtime tools). Seeded from the image on
   first start. After changing `server/hermes/revision.txt`, remove it so the new Hermes is used:
   `docker compose --profile app down && docker volume rm mula_mula-hermes`.
-- `mula-workspaces`: each account's memory store.
+- `mula-workspaces`: each project's memory store and notes vault.
 
 Secrets are read at run time from `server/.env.hermes`; no image contains them.
 

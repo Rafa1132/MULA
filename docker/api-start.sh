@@ -73,7 +73,10 @@ curl -fsS -o /dev/null -H "Authorization: Bearer $HERMES_API_KEY" http://127.0.0
 echo "mula-api: Hermes is ready; starting the backend"
 
 cd "$APP/server"
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+# 0.0.0.0 inside compose's own network, where the web container reaches api:8000. On a VPS the
+# container shares the host's network (docker-compose.vps.yml), and MULA_API_HOST=127.0.0.1 keeps the
+# backend off the public internet: only the SSH tunnel reaches it (scripts/vps-tunnel.sh).
+python3 -m uvicorn src.main:app --host "${MULA_API_HOST:-0.0.0.0}" --port 8000 &
 pids+=($!)
 
 # Exit when either process exits, so Docker sees the failure and can restart the container.

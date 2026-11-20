@@ -1,0 +1,21 @@
+# The backend on a VPS, reached only through an SSH tunnel from the Mac (scripts/vps-tunnel.sh).
+# On the VPS, layer it over the main file and start only the backend and the database:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile app up -d --build api postgres
+#
+# The api container shares the VPS's network, so its 127.0.0.1 is the VPS's own loopback. That is
+# where the tunnel lands: the Mac's -L reaches the backend on 127.0.0.1:8000, and the optional -R
+# brings the Mac's Ollama to 127.0.0.1:11434 for the "Qwen (local)" brain. The backend, the runtime
+# and Postgres all bind to 127.0.0.1; keep the VPS firewall to SSH only.
+services:
+  api:
+    network_mode: host
+    environment:
+      MULA_API_HOST: 127.0.0.1
+      # Postgres publishes 127.0.0.1:5432 on the VPS (docker-compose.yml).
+      MULA_DATABASE_HOST: 127.0.0.1
+      # The Mac's Ollama, through the tunnel's -R (scripts/vps-tunnel.sh --ollama). Without it, agents
+      # on the local brain can't answer; agents on an OpenRouter brain don't need the Mac.
+      MULA_MODEL_BASE_URL: http://127.0.0.1:11434/v1
+    # Host networking can't be combined with extra host mappings, and doesn't need them.
+    extra_hosts: !reset []
