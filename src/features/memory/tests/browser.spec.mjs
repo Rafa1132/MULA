@@ -3,6 +3,8 @@
 // server's own rules are covered by server/src/features/memory/tests.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -140,7 +142,7 @@ async function openMemory(contextOptions) {
   page.on("pageerror", (error) => errors.push(error.message));
   const memory = fakeMemory();
   await page.route(/\/api\/(auth\/me|memory)/, memory.handle);
-  await page.goto(baseURL + "/memory");
+  await page.goto(baseURL + PROJECT_PATH + "/memory");
   // Attached, not visible: on a phone the tree waits in the closed drawer.
   await page.locator('[role="tree"]').waitFor({ state: "attached" });
   return { context, page, errors, memory };

@@ -102,3 +102,30 @@ test("voice provider errors leave playback idle and surface a useful error", asy
   assert.equal(states.at(-1), "idle");
   await player.dispose();
 });
+
+test("a prepared recording plays through the same path, so the orb hears it and mute stops it", async (context) => {
+  const audio = mockAudio(context);
+  const fetch = context.mock.method(globalThis, "fetch", async () => new Response(new Uint8Array([1])));
+  const states = [];
+  const analysers = [];
+  const player = new SpeechPlayer((state) => states.push(state), (analyser) => analysers.push(analyser));
+  const playing = player.play("/api/speech/welcome");
+  await tick();
+  assert.equal(fetch.mock.calls[0].arguments[0], "/api/speech/welcome");
+  assert.equal(audio.sources[0].started, true);
+  assert.equal(states.at(-1), "speaking");
+  assert.ok(analysers.some((analyser) => analyser !== null));
+  player.stop();
+  await playing;
+  assert.equal(audio.sources[0].stopped, true);
+  assert.equal(states.at(-1), "idle");
+  await player.dispose();
+});
+
+test("a recording the server refuses surfaces its reason", async (context) => {
+  mockAudio(context);
+  context.mock.method(globalThis, "fetch", async () => Response.json({ detail: "AI voice is switched off on this server. Chat still works." }, { status: 503 }));
+  const player = new SpeechPlayer(() => {}, () => {});
+  await assert.rejects(player.play("/api/speech/welcome"), /switched off/);
+  await player.dispose();
+});

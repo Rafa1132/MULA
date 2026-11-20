@@ -7,6 +7,8 @@ import { publisherFor } from "../services/publishers.ts";
 import CatalogueImage from "./CatalogueImage";
 import LaunchLink from "./LaunchLink";
 import PublisherAvatar from "./PublisherAvatar";
+import { useProjectId } from "@/common/hooks/useProjectId";
+import { projectPath } from "@/common/services/project";
 
 const STATUS_LABELS: Record<CatalogueStatus, string> = { available: "Available", added: "Added", coming_soon: "Coming soon" };
 
@@ -23,6 +25,7 @@ type CardProps = Props & {
 
 /** The card's one action: Add, Open, or a disabled Add for entries that are not ready. */
 function CardAction({ entry, onAdd, onOpenWithoutPage }: Props) {
+  const projectId = useProjectId();
   // Every card has the same verbs, so the accessible name carries the entry's name too.
   if (entry.status === "coming_soon") {
     return <button type="button" className="catalogue-action" disabled aria-label={`Add ${entry.name} (coming soon)`}>Add</button>;
@@ -31,12 +34,12 @@ function CardAction({ entry, onAdd, onOpenWithoutPage }: Props) {
     return <button type="button" className="catalogue-action catalogue-action-primary" aria-label={`Add ${entry.name}`} onClick={() => onAdd(entry)}>Add</button>;
   }
   // An added app with a launchUrl opens itself in a new tab.
-  const launch = launchUrl(entry);
+  const launch = launchUrl(entry, projectId);
   if (entry.type === "app" && launch !== undefined) {
     return <LaunchLink className="catalogue-action" href={launch} label="Open" hiddenContext={entry.name} />;
   }
   if (entry.href) {
-    return <a className="catalogue-action" href={entry.href} aria-label={`Open ${entry.name}`}>Open</a>;
+    return <a className="catalogue-action" href={projectPath(projectId, entry.href)} aria-label={`Open ${entry.name}`}>Open</a>;
   }
   return <button type="button" className="catalogue-action" aria-label={`Open ${entry.name}`} onClick={() => onOpenWithoutPage(entry)}>Open</button>;
 }
@@ -44,6 +47,7 @@ function CardAction({ entry, onAdd, onOpenWithoutPage }: Props) {
 /** A picture-first card: the artwork takes most of the space, with a short caption row below.
  * Clicking the card (or Enter on its name) opens /catalogue/<id>; the action button does not. */
 export default function CatalogueCard({ entry, hint, onAdd, onOpenWithoutPage }: CardProps) {
+  const projectId = useProjectId();
   const headingId = `catalogue-${entry.id}`;
   let typeLabel = "App";
   if (entry.type === "agent") typeLabel = "Agent";
@@ -61,7 +65,7 @@ export default function CatalogueCard({ entry, hint, onAdd, onOpenWithoutPage }:
               {/* The name is the link to the detail page; CSS stretches its click area over
                   the whole card. The action button is a sibling above that area, so it
                   keeps its own action and the two never nest. */}
-              <h3 id={headingId}><a className="catalogue-card-link" href={`/catalogue/${entry.id}`}>{entry.name}</a></h3>
+              <h3 id={headingId}><a className="catalogue-card-link" href={projectPath(projectId, `/catalogue/${entry.id}`)}>{entry.name}</a></h3>
               {/* The type is text with its own icon, so it never depends on the image or on colour. */}
               <span className={`catalogue-type catalogue-type-${entry.type}`}><Icon name={entry.type} />{typeLabel}</span>
             </div>

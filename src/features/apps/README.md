@@ -6,7 +6,7 @@ A page at `/apps` showing the apps and websites the owner has added from the Cat
 
 `services/addedApps.ts` is the only code that knows where the added list lives. Both pages use `useAddedApps()` to read it and `addApp()` / `removeApp()` to change it, so **Add** in the Catalogue and **Remove** here stay in step, including across tabs.
 
-- Today the list is saved in this browser's localStorage under `mula.prototype.added-apps`. Every read and write is wrapped in try/catch: blocked or full storage keeps the list working for the visit and logs a warning, and corrupt data starts empty.
+- Today the list is saved in this browser's localStorage under `mula.prototype.project.<project id>.added-apps`, one list per project. Lists saved before projects (under `mula.prototype.added-apps`) are left in place but no longer shown. Every read and write is wrapped in try/catch: blocked or full storage keeps the list working for the visit and logs a warning, and corrupt data starts empty.
 - Only App entries that can be added are accepted. Agents, unknown ids and Coming soon apps are refused, and so is a plugin whose parent app is not added. Removing a parent removes its plugins; a saved plugin whose parent is missing is dropped when the list is read.
 - Moving to a backend means replacing this one module; the pages don't touch storage.
 

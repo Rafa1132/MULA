@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { AppsPage } from "@/features/apps";
+import { OpenFirstProject } from "@/features/workspace";
 
-export const metadata: Metadata = { title: "Mula · My apps" };
-
+// Pages now live inside a project (/projects/<id>/apps); old links open the first project's.
 export default function Page() {
-  return <AppsPage />;
+  return <OpenFirstProject path="/apps" />;
 }

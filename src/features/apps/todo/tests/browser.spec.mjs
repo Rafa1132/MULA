@@ -2,6 +2,8 @@
 // frontend (no backend, no test account): MULA_TEST_URL, default http://localhost:3001.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -29,13 +31,13 @@ try {
   const { page, errors } = await newPage({ width: 1440, height: 1000 });
 
   // Not added yet: a short message and Add To-do instead of the app.
-  await page.goto(baseURL + "/apps/todo");
+  await page.goto(baseURL + PROJECT_PATH + "/apps/todo");
   await page.getByRole("heading", { name: "To-do isn't added yet" }).waitFor();
   assert.equal(await page.title(), "Mula · To-do");
   // A separate app: its own header with the name and a small Mula link, and no main nav.
   await page.locator(".todo-appbar").getByRole("heading", { level: 1, name: "To-do" }).waitFor();
-  assert.equal(await page.locator(".todo-appbar").getByRole("link", { name: "Mula" }).getAttribute("href"), "/");
-  assert.equal(await page.getByRole("navigation", { name: "Main navigation" }).count(), 0);
+  assert.equal(await page.locator(".todo-appbar").getByRole("link", { name: "Mula" }).getAttribute("href"), PROJECT_PATH);
+  assert.equal(await page.getByRole("navigation", { name: "Project" }).count(), 0);
   assert.equal(await page.locator(".sidebar").count(), 0);
   assert.equal(await page.getByLabel("Title").count(), 0);
   await page.getByRole("button", { name: "Add To-do" }).click();
@@ -142,7 +144,7 @@ try {
   // Every Open is a real link to a new tab, with an icon and hidden "(opens in a new tab)".
   async function checkLaunchLink(link, accessibleName) {
     assert.equal(await link.evaluate((element) => element.tagName), "A");
-    assert.equal(await link.getAttribute("href"), "/apps/todo");
+    assert.equal(await link.getAttribute("href"), PROJECT_PATH + "/apps/todo");
     assert.equal(await link.getAttribute("target"), "_blank");
     assert.equal(await link.getAttribute("rel"), "noopener noreferrer");
     assert.equal(await link.locator("svg").count(), 1);
@@ -151,7 +153,7 @@ try {
     assert.ok(hidden.width <= 1 && hidden.height <= 1, "(opens in a new tab) is visually hidden");
     assert.equal(await link.evaluate((element) => element.textContent.replace(/\s+/g, " ").trim()), accessibleName);
   }
-  await page.goto(baseURL + "/apps");
+  await page.goto(baseURL + PROJECT_PATH + "/apps");
   const myAppsOpen = page.getByRole("article", { name: "To-do" }).getByRole("link", { name: "Open To-do (opens in a new tab)" });
   await checkLaunchLink(myAppsOpen, "Open To-do (opens in a new tab)");
   // Clicking it opens the app in a second tab and leaves My apps where it was.
@@ -159,17 +161,17 @@ try {
   await popup.waitForURL("**/apps/todo");
   await popup.locator(".todo-appbar").getByRole("heading", { name: "To-do" }).waitFor();
   assert.equal(await popup.evaluate(() => window.opener), null);
-  assert.equal(new URL(page.url()).pathname, "/apps");
+  assert.equal(new URL(page.url()).pathname, PROJECT_PATH + "/apps");
   await popup.close();
-  await page.goto(baseURL + "/catalogue");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue");
   await checkLaunchLink(page.getByRole("article", { name: "To-do" }).getByRole("link", { name: "Open To-do (opens in a new tab)" }), "Open To-do (opens in a new tab)");
-  await page.goto(baseURL + "/catalogue/todo");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue/todo");
   await checkLaunchLink(page.locator(".detail-info").getByRole("link", { name: "Open To-do (opens in a new tab)" }), "Open To-do (opens in a new tab)");
   assert.deepEqual(errors, []);
 
   // Phone width: one column, no sideways scroll, big enough tap targets.
   const phone = await newPage({ width: 390, height: 844 });
-  await phone.page.goto(baseURL + "/apps/todo");
+  await phone.page.goto(baseURL + PROJECT_PATH + "/apps/todo");
   await phone.page.getByRole("button", { name: "Add To-do" }).click();
   await phone.page.getByLabel("Title").fill("Count the till");
   await phone.page.getByLabel("Title").press("Enter");

@@ -88,12 +88,22 @@ button:active:not(:disabled) { transform: scale(.97); transition-duration: .08s;
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
 /* Shell: a quiet sidebar and the main panel. */
-.app-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); height: 100dvh; min-height: 620px; background: var(--background); }
+/* The project chat's shell is exactly one screen tall: the conversation scrolls inside the chat log,
+   never the page, so the composer stays on screen. There is no pixel floor (a short laptop window or
+   a phone in landscape would scroll the page past the composer); the orb shrinks instead
+   (orbSizeFor in features/chat). The row is minmax(0, 1fr), not auto, so a sidebar taller than the
+   screen scrolls itself rather than stretching the page. 100vh is the fallback where dvh isn't supported. */
+.app-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; height: 100dvh; background: var(--background); }
+.app-shell > .sidebar { min-height: 0; overflow-y: auto; }
 .sidebar { padding: 36px 20px 24px; display: flex; flex-direction: column; background: var(--background); min-width: 0; }
 .brand { display: block; margin: 0 12px 40px; text-decoration: none; }
 /* The top-left wordmark, in place of the logo image (sidebar and phone top bar). */
 .brand-word { display: block; color: var(--ink); font-size: 15px; font-weight: 600; letter-spacing: .14em; line-height: 1; }
-.mula-logo { display: block; width: 100%; height: auto; }
+/* The logo: two stacked PNG masks (the wordmark and its star) painted with colours, so it follows the theme. The ratio is the masks' 744 x 183. */
+.mula-logo { position: relative; display: block; width: 100%; aspect-ratio: 744 / 183; }
+.mula-logo-word, .mula-logo-star { position: absolute; inset: 0; mask-size: 100% 100%; mask-repeat: no-repeat; -webkit-mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; }
+.mula-logo-word { background: var(--ink); mask-image: url("/mula-wordmark.png"); -webkit-mask-image: url("/mula-wordmark.png"); }
+.mula-logo-star { background: #79e9b3; mask-image: url("/mula-star.png"); -webkit-mask-image: url("/mula-star.png"); }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
 .nav-item { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 13px; text-decoration: none; width: 100%; }
 .nav-item:hover:not(:disabled) { color: var(--ink); background: var(--raised); }
@@ -108,28 +118,33 @@ button:active:not(:disabled) { transform: scale(.97); transition-duration: .08s;
 .topbar { display: none; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; min-height: 60px; }
 .topbar-actions { display: flex; align-items: center; gap: 4px; }
 .mobile-brand { text-decoration: none; }
+/* The project switcher: the project's name at the top left, with a list of the other projects. */
+.project-switcher { position: relative; margin: 0 4px 32px; min-width: 0; }
+.project-switcher-button { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: 12px; background: transparent; text-align: left; }
+.project-switcher-button:hover { background: var(--raised); }
+.project-switcher-button[aria-expanded="true"] { background: var(--raised); border-color: var(--line); }
+.project-switcher-label { grid-column: 1; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); opacity: .72; }
+.project-switcher-name { grid-column: 1; font-size: 15px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-switcher-button .icon { grid-column: 2; grid-row: 1 / span 2; width: 16px; height: 16px; }
+.project-switcher-panel { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; width: max(100%, 240px); max-width: calc(100vw - 32px); padding: 8px; border: 1px solid var(--edge); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow-hover); }
+.project-switcher-panel[hidden] { display: none; }
+.project-switcher-heading { margin: 4px 8px 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); opacity: .72; }
+.project-switcher-panel ul { list-style: none; margin: 0 0 6px; padding: 0; }
+.project-switcher-panel a { display: block; padding: 9px 10px; border-radius: 10px; text-decoration: none; color: var(--ink); overflow-wrap: anywhere; }
+.project-switcher-panel a:hover { background: var(--raised); }
+.project-switcher-workspace { border-top: 1px solid var(--line); border-radius: 0 0 10px 10px !important; font-weight: 500; }
+.topbar .project-switcher { margin: 0; max-width: 60vw; }
+.topbar .project-switcher-button { padding: 4px 8px; }
 .mobile-team-link { color: var(--muted); font-size: 12px; text-decoration: none; padding: 8px; }
 .mobile-team-link:hover { color: var(--ink); }
 
-/* The Operator stage: the orb in a faint dawn halo, one line of welcome, one line of status. */
-.operator-stage { position: relative; text-align: center; flex-shrink: 0; padding: 24px 20px 20px; }
-.operator-stage::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 42% 58% at 50% 50%, color-mix(in srgb, var(--glow) 50%, transparent), transparent 70%); pointer-events: none; }
-.operator-stage > * { position: relative; }
+/* The old orb (features/operator OperatorCore), kept but no longer on a page; the chat screen is features/chat. */
 .operator-core { display: block; width: clamp(220px, 34vh, 360px); aspect-ratio: 1; margin: 0 auto; }
-.operator-stage h1 { margin: 4px 0 12px; font-weight: 400; font-size: clamp(24px, 2.4vw, 34px); letter-spacing: -.03em; }
-.presence { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .eyebrow { font-size: 10px; letter-spacing: .16em; color: var(--muted); font-weight: 500; }
-
-/* Conversation. Messages are separated by space, not rules. */
-.conversation-heading { display: flex; justify-content: flex-end; max-width: 760px; width: 100%; margin: 0 auto; padding: 6px 48px; flex-shrink: 0; }
-.conversation-heading .text-button { color: var(--muted); }
-.conversation-expanded .operator-stage { display: none; }
-.conversation-expanded .conversation-heading { padding-top: 18px; }
-.conversation { flex: 1; min-height: 80px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; padding: 0 48px; }
-.empty-conversation { text-align: center; color: var(--muted); padding: 36px 10px 20px; }
-.empty-conversation p { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
 .suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .suggestion { padding: 9px 16px; font-size: 12px; font-weight: 400; color: var(--ink); }
+
+/* Message rows, used by the agent chat in My agents. */
 .messages { max-width: 760px; margin: 0 auto; }
 .message { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 16px; padding: 18px 0; }
 .message-label { color: var(--accent-text); font-size: 12px; font-weight: 500; padding-top: 3px; }
@@ -162,12 +177,11 @@ button:active:not(:disabled) { transform: scale(.97); transition-duration: .08s;
 .waiting-label { font-size: 12px; }
 
 /* Composer: one pill. The drop zone is the pill itself, so a dragged CSV lands on it. */
-.composer-wrap { padding: 14px 48px 22px; flex-shrink: 0; }
-.composer-wrap > * { max-width: 760px; margin-inline: auto; }
 .composer-hint { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0 14px 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .interim-transcript { flex-basis: 100%; color: var(--muted); font-style: italic; overflow-wrap: anywhere; }
-.csv-dropzone { position: relative; display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 10px; border: 1px solid var(--edge); border-radius: 28px; background: var(--surface); box-shadow: var(--shadow); transition: box-shadow .22s var(--ease), border-color .22s var(--ease); }
-.csv-dropzone:focus-within { box-shadow: var(--shadow-hover), 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
+/* .composer-pill is the same pill for a chat without CSV upload. */
+.csv-dropzone, .composer-pill { position: relative; display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 10px; border: 1px solid var(--edge); border-radius: 28px; background: var(--surface); box-shadow: var(--shadow); transition: box-shadow .22s var(--ease), border-color .22s var(--ease); }
+.csv-dropzone:focus-within, .composer-pill:focus-within { box-shadow: var(--shadow-hover), 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
 .csv-dropzone.dragging { box-shadow: var(--shadow-hover), 0 0 0 2px var(--accent); }
 .csv-drop-hint { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--accent-soft) 94%, transparent); border-radius: 28px; z-index: 2; color: var(--accent-text); pointer-events: none; font-size: 13px; }
 .csv-file-chip { position: absolute; left: 12px; bottom: calc(100% + 8px); display: flex; gap: 10px; align-items: center; padding: 7px 10px 7px 12px; border-radius: var(--radius-pill); background: var(--surface); border: 1px solid var(--edge); box-shadow: var(--shadow); font-size: 12px; max-width: calc(100% - 24px); }
@@ -213,20 +227,13 @@ textarea::placeholder { color: var(--muted); }
 .account-card small { color: var(--muted); line-height: 1.5; }
 .account-card .account-submit { margin-top: 12px; }
 
-@media (min-height: 900px) { .operator-stage { padding-top: 40px; padding-bottom: 28px; } }
-@media (max-width: 1200px) { .app-shell { grid-template-columns: 200px minmax(0, 1fr); } .sidebar { padding-inline: 12px; } .conversation-heading, .conversation, .composer-wrap { padding-inline: 32px; } }
+@media (max-width: 1200px) { .app-shell { grid-template-columns: 200px minmax(0, 1fr); } .sidebar { padding-inline: 12px; } }
 @media (max-width: 650px) {
-  .app-shell { grid-template-columns: minmax(0,1fr); min-height: 540px; }
+  .app-shell { grid-template-columns: minmax(0,1fr); }
   .sidebar { display: none; }
   .topbar { display: flex; }
-  .operator-stage { padding: 0 15px 14px; }
-  .operator-core { width: clamp(170px, 27vh, 250px); }
-  .operator-stage h1 { font-size: 22px; margin-bottom: 10px; }
-  .presence { font-size: 11px; }
-  .conversation-heading, .conversation { padding-inline: 16px; }
   .message { grid-template-columns: 40px minmax(0,1fr); gap: 10px; padding-block: 14px; }
-  .composer-wrap { padding: 10px 12px 12px; }
-  .csv-dropzone { gap: 0; padding: 6px 6px 6px 4px; border-radius: 24px; }
+  .csv-dropzone, .composer-pill { gap: 0; padding: 6px 6px 6px 4px; border-radius: 24px; }
   .composer { gap: 0; }
   textarea { padding-inline: 6px; font-size: 14px; }
   .attach-csv, .dictation-button, .live-button, .send-button, .composer-menu > button { width: 36px; height: 36px; padding: 6px; }

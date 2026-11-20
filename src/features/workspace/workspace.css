@@ -1,0 +1,65 @@
+/* The workspace page, one vertical page: the black entry screen (the assistant's orb and chat),
+   then the projects below, in the page's own light or dark theme. */
+.workspace-page { min-height: 100dvh; background: var(--background); color: var(--ink); }
+
+/* The entry screen is the shared chat screen (features/chat/chat.css), one screen tall, with what
+   only the workspace has: Tap to begin, the voice note and the cue down to the projects. */
+.entry-stage { height: 100svh; min-height: 520px; flex: none; }
+.entry-blank { min-height: 100svh; background: #000; }
+.entry-begin { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: auto 0; }
+.entry-begin-button { padding: 14px 28px; font-size: 15px; }
+.entry-quiet { background: none; border: 0; padding: 6px; color: var(--ink); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.entry-voice-note { margin: 0; font-size: 13px; color: var(--muted); text-align: center; line-height: 1.5; }
+.entry-cue { align-self: center; flex-shrink: 0; margin: 0 0 14px; padding: 8px 14px; border-radius: var(--radius-pill); color: var(--ink); font-size: 13px; text-decoration: none; }
+.entry-cue:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* The entrance. full: black, then the orb fades and grows in over 2 s, then the chat (2.3 s to
+   2.7 s; services/entry.ts waits as long before moving focus). short: a reload in the same session. */
+@keyframes entry-orb-in { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: scale(1); } }
+@keyframes entry-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.entry-stage[data-entrance="full"] .chat-identity { animation: entry-orb-in 2s cubic-bezier(.16, 1, .3, 1) .3s both; }
+.entry-stage[data-entrance="full"] :is(.chat-panel, .chat-expand, .entry-cue, .chat-top) { animation: entry-fade-up .4s ease 2.3s both; }
+.entry-stage[data-entrance="short"] .chat-identity { animation: entry-orb-in .4s cubic-bezier(.16, 1, .3, 1) both; }
+.entry-stage[data-entrance="short"] :is(.chat-panel, .chat-expand, .entry-cue, .chat-top) { animation: entry-fade-up .4s ease .1s both; }
+@media (prefers-reduced-motion: reduce) {
+  .entry-stage :is(.chat-identity, .chat-panel, .chat-expand, .entry-cue, .chat-top) { animation: none !important; }
+}
+.workspace-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px clamp(16px, 4vw, 40px); }
+.workspace-brand { display: inline-flex; border-radius: 8px; }
+.workspace-brand .mula-logo { width: 88px; }
+.workspace-account { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.workspace-account strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 24ch; }
+.workspace-main { display: flex; flex-direction: column; gap: 20px; padding: 48px clamp(16px, 4vw, 40px) 64px; max-width: 1400px; margin: 0 auto; scroll-margin-top: 0; }
+.workspace-title { font-size: clamp(26px, 3vw, 34px); }
+.workspace-intro p { margin: 6px 0 0; line-height: 1.6; }
+.workspace-eyebrow { color: var(--ink); opacity: .72; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 4px !important; }
+.workspace-projects { min-width: 0; }
+.workspace-limit { margin: 0 0 14px; line-height: 1.5; }
+.workspace-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.workspace-section-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.workspace-empty { padding: 28px; border: 1px dashed var(--line); border-radius: var(--radius); text-align: center; }
+.project-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.project-card, .project-new { display: flex; flex-direction: column; gap: 8px; padding: 18px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); min-width: 0; }
+.project-new { margin-bottom: 14px; }
+.project-card h3 { font-size: 17px; overflow-wrap: anywhere; }
+.project-card h3 a { text-decoration: none; }
+.project-card h3 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.project-card-icon { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); }
+.project-card-icon .icon { width: 18px; height: 18px; }
+.project-card-meta { margin: 0; font-size: 12px; opacity: .78; }
+.project-card-description { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.project-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.project-open { text-decoration: none; display: inline-flex; align-items: center; }
+.project-rename, .project-new { display: flex; flex-direction: column; gap: 6px; }
+.project-rename label, .project-new label { font-size: 13px; }
+.project-rename input, .project-new input { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--background); color: var(--ink); width: 100%; }
+.project-rename small, .project-new small { font-size: 12px; line-height: 1.5; }
+.optional { opacity: .78; }
+/* Placeholders: focusable and announced as unavailable, but they do nothing yet. */
+.coming-soon { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--line); border-radius: var(--radius-pill); padding: 8px 12px; background: transparent; color: var(--ink); font-size: 13px; cursor: not-allowed; }
+.coming-soon-badge { font-size: 11px; padding: 2px 7px; border-radius: var(--radius-pill); background: var(--raised); }
+@media (max-width: 520px) {
+  .workspace-account strong { display: none; }
+}
+/* The shared .text-button colour is the accent, 4.4:1 here; ink with an underline reads at full contrast. */
+.workspace-account .text-button { color: var(--ink); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }

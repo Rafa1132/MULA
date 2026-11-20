@@ -1,12 +1,13 @@
 # Auth (client)
 
-The sign-in and sign-up screen. It is shown whenever `/api/auth/me` returns 401.
+The sign-in and sign-up form: the `/login` and `/register` pages (`features/landing/AccountPage`), and the fallback a page shows when its session has expired.
 
 ## What it does
 
-- Switches between **Sign in** and **Create account** on one form.
+- On `/login` and `/register` the switch is a link to the other page, and success goes to `/workspace`; a signed-in visitor skips straight there. Elsewhere it flips the form in place and calls `onSignedIn()`.
+- Asks `/api/auth/rules` which rules the server applies. With the development-only relaxed rules (`MULA_RELAXED_AUTH`, see the server README) any non-empty username and password are accepted and the hints say so; otherwise the usual 3–40 character username and 10-character password.
 - Posts `{ username, password }` to `/api/auth/login` or `/api/auth/signup` through the Next.js proxy.
-- Shows the server's error message (`detail`) when there is one, such as "That username is already taken" or the 15-minute lockout after five failed attempts.
+- Shows the server's error message (`detail`) when there is one, or the first validation rule that failed, such as "That username is already taken" or the 15-minute lockout after five failed attempts.
 - Clears the password field after success, then calls `onSignedIn()` so the parent screen reloads the account and conversation.
 
 The browser never handles the session token. The server sets it in the HttpOnly `mula_session` cookie.
@@ -20,7 +21,7 @@ The browser never handles the session token. The server sets it in the HttpOnly 
 
 ## Used by
 
-`features/workspace` (`Workspace.tsx`) renders `AccountForm` when no account is loaded. The `/agents` and `/memory` pages instead redirect to `/` when the session has expired.
+`features/landing` (`/login`, `/register`). The workspace page and the project pages (chat, memory, agents, apps, catalogue) render `AccountForm` when no account is loaded, and go to `/login` after signing out.
 
 ## Server counterpart
 
@@ -28,4 +29,4 @@ The browser never handles the session token. The server sets it in the HttpOnly 
 
 ## Not yet built
 
-Password recovery, employee invitations, roles, and more than one workspace per account.
+Password recovery, employee invitations, roles, and more than one workspace per account. (Projects inside the workspace are in `features/workspace`.)

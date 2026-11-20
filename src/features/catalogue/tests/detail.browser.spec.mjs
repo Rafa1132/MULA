@@ -2,6 +2,8 @@
 // frontend (no backend, no test account): MULA_TEST_URL, default http://localhost:3001.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -23,11 +25,11 @@ try {
   const { page, errors } = await newPage({ width: 1440, height: 1000 });
 
   // Card click opens the detail page; the card's button does not.
-  await page.goto(baseURL + "/catalogue");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue");
   await page.getByRole("heading", { name: "Agents and apps for your business." }).waitFor();
   await page.getByRole("button", { name: "Add Stock sheet" }).click();
   await page.getByRole("article", { name: "Stock sheet" }).getByText("Added", { exact: true }).waitFor();
-  assert.equal(new URL(page.url()).pathname, "/catalogue");
+  assert.equal(new URL(page.url()).pathname, PROJECT_PATH + "/catalogue");
   // Click the middle of the card's picture, as a person would; the stretched link covers it.
   const picture = await page.getByRole("article", { name: "Store app" }).locator(".catalogue-media").boundingBox();
   await page.mouse.click(picture.x + picture.width / 2, picture.y + picture.height / 2);
@@ -95,13 +97,13 @@ try {
   // The adds reached the shared store: they survive a reload, and the plugin sits inside its parent in My apps.
   await page.reload();
   await page.getByRole("region", { name: "Plugins for Store app" }).getByRole("button", { name: "Store admin added" }).waitFor();
-  await page.goto(baseURL + "/apps");
+  await page.goto(baseURL + PROJECT_PATH + "/apps");
   await page.getByRole("heading", { name: "Your apps and websites." }).waitFor();
   assert.deepEqual(await page.locator(".apps-card h2").allInnerTexts(), ["Store app", "Stock sheet"]);
   assert.deepEqual(await page.getByRole("article", { name: "Store app" }).getByRole("list", { name: "Plugins" }).locator("li").allInnerTexts(), ["Store admin"]);
 
   // A plugin's own address redirects to its parent's plugins section, which gets focus.
-  await page.goto(baseURL + "/catalogue/store-monitor");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue/store-monitor");
   await page.waitForURL("**/catalogue/tokopedia-sync#plugins");
   await page.getByRole("heading", { level: 1, name: "Store app" }).waitFor();
   await page.waitForFunction(() => document.activeElement?.id === "detail-plugins-heading");
@@ -110,20 +112,20 @@ try {
   assert.ok(sectionTop >= -1 && sectionTop < 1000, `plugins section is on screen (top ${sectionTop})`);
 
   // To-do: no plugins.
-  await page.goto(baseURL + "/catalogue/todo");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue/todo");
   await page.getByRole("heading", { level: 1, name: "To-do" }).waitFor();
   assert.equal(await page.title(), "Mula · To-do");
   await page.getByRole("region", { name: "Plugins for To-do" }).getByText("No plugins yet.").waitFor();
   assert.equal(await counter(page).innerText(), "1 / 4");
 
   // An unknown id is a 404.
-  const missing = await page.goto(baseURL + "/catalogue/not-a-real-app");
+  const missing = await page.goto(baseURL + PROJECT_PATH + "/catalogue/not-a-real-app");
   assert.equal(missing.status(), 404);
   assert.deepEqual(errors, []);
 
   // Phone width: the carousel is full width and nothing scrolls sideways.
   const phone = await newPage({ width: 390, height: 844 });
-  await phone.page.goto(baseURL + "/catalogue/tokopedia-sync");
+  await phone.page.goto(baseURL + PROJECT_PATH + "/catalogue/tokopedia-sync");
   await phone.page.getByRole("heading", { level: 1, name: "Store app" }).waitFor();
   assert.equal(await phone.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   const box = await phone.page.locator(".carousel").boundingBox();
@@ -131,7 +133,7 @@ try {
   await phone.page.locator(".carousel img").first().evaluate((image) => image.complete || new Promise((resolve) => { image.onload = resolve; }));
   await phone.page.screenshot({ path: `${screenshots}/detail-phone.png`, fullPage: true });
   // On a phone the plugins section is far down, so the redirect has to scroll to it.
-  await phone.page.goto(baseURL + "/catalogue/store-admin");
+  await phone.page.goto(baseURL + PROJECT_PATH + "/catalogue/store-admin");
   await phone.page.waitForURL("**/catalogue/tokopedia-sync#plugins");
   await phone.page.waitForFunction(() => document.activeElement?.id === "detail-plugins-heading");
   const phoneTop = await phone.page.locator("#plugins").evaluate((element) => element.getBoundingClientRect().top);

@@ -1,13 +1,6 @@
-import type { Metadata } from "next";
-import { Instrument_Serif } from "next/font/google";
-import { TodoPage } from "@/features/apps";
+import { OpenFirstProject } from "@/features/workspace";
 
-export const metadata: Metadata = { title: "Mula · To-do" };
-
-// The To-do app's own display face, so it feels like a separate, printed object.
-// Bundled at build time by next/font (like Geist in the root layout); no new package.
-const serif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["normal", "italic"], variable: "--font-todo-serif", display: "swap" });
-
+// Pages now live inside a project (/projects/<id>/apps/todo); old links open the first project's.
 export default function Page() {
-  return <div className={serif.variable}><TodoPage /></div>;
+  return <OpenFirstProject path="/apps/todo" />;
 }

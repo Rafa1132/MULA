@@ -19,7 +19,7 @@ The app has its own style, a printed notebook, so it feels separate from Mula: w
 
 ## Data
 
-`store.ts` is the only module that knows where tasks live: localStorage under `mula.prototype.app.todo.tasks` (keyed by the app id). Reads and writes are wrapped in try/catch; blocked storage keeps working for the visit, and malformed saved tasks are skipped with a warning. Moving to the backend per account means changing this one file.
+`store.ts` is the only module that knows where tasks live: localStorage under `mula.prototype.project.<project id>.app.todo.tasks` (keyed by the project and the app id), so each project has its own list. Reads and writes are wrapped in try/catch; blocked storage keeps working for the visit, and malformed saved tasks are skipped with a warning. Moving to the backend per account means changing this one file.
 
 ```ts
 type Task = { id; title; note; dueDate: "YYYY-MM-DD" | null; done; createdAt; updatedAt; source: "user" | "agent" };

@@ -1,16 +1,20 @@
 // PROTOTYPE STORE for the To-do app's tasks.
 //
 // This module is the only place that knows where tasks live: today this browser's
-// localStorage, under a key named after the app id. Moving to the backend (per
-// account) means changing this file and nothing else.
+// localStorage, under a key named after the project and the app id (each project has
+// its own apps). Moving to the backend means changing this file and nothing else.
 //
 // addTask, listTasks and completeTask are plain functions with no React in them, so
 // an agent tool (for example the Operator's) can call them later. Nothing calls
 // them from an agent yet.
 import { useSyncExternalStore } from "react";
+import { currentProjectId } from "../../../common/services/project.ts";
 
 export const TODO_APP_ID = "todo";
-const STORAGE_KEY = `mula.prototype.app.${TODO_APP_ID}.tasks`;
+// Read when used, from the page's project (/projects/<id>/...).
+function storageKey() {
+  return `mula.prototype.project.${currentProjectId() ?? "none"}.app.${TODO_APP_ID}.tasks`;
+}
 const NO_TASKS: readonly Task[] = [];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TITLE_LIMIT = 200;
@@ -99,7 +103,7 @@ function readStored(): readonly Task[] {
   const storage = browserStorage();
   if (storage === null) return NO_TASKS;
   try {
-    const raw = storage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(storageKey());
     if (raw === null) return NO_TASKS;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return NO_TASKS;
@@ -116,7 +120,7 @@ function writeStored(tasks: readonly Task[]) {
   const storage = browserStorage();
   if (storage === null) return;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    storage.setItem(storageKey(), JSON.stringify(tasks));
   } catch (error) {
     console.warn("Mula could not save the tasks; the change lasts only for this visit.", error);
   }
@@ -203,7 +207,7 @@ export function reloadTasks() {
 }
 
 function onStorageEvent(event: StorageEvent) {
-  if (event.key === STORAGE_KEY || event.key === null) reloadTasks();
+  if (event.key === storageKey() || event.key === null) reloadTasks();
 }
 
 function subscribe(listener: () => void) {

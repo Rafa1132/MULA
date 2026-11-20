@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AccountForm } from "@/features/auth";
-import { Icon, Sidebar } from "@/common/components";
+import { Icon, Sidebar, ProjectSwitcher } from "@/common/components";
 import { SearchField } from "@/features/catalogue";
 import { resultCount } from "../../catalogue/services/search.ts";
 import { removeApp, useAddedApps } from "../services/addedApps.ts";
@@ -10,6 +10,8 @@ import { appCount, appsFromIds, attentionCount, filterApps, sortApps } from "../
 import type { MyApp } from "../services/myApps.ts";
 import AppCard from "./AppCard";
 import "../apps.css";
+import { useProjectId } from "@/common/hooks/useProjectId";
+import { projectPath } from "@/common/services/project";
 
 function attentionLabel(count: number) {
   if (count === 1) return "1 needs attention";
@@ -17,6 +19,7 @@ function attentionLabel(count: number) {
 }
 
 export default function AppsPage() {
+  const projectId = useProjectId();
   const [account, setAccount] = useState<{ username: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -49,7 +52,7 @@ export default function AppsPage() {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("Could not sign out.");
-      window.location.assign("/");
+      window.location.assign("/login");
     } catch (failure) { if (failure instanceof Error) setError(failure.message); }
     finally { setBusy(false); }
   }
@@ -94,7 +97,7 @@ export default function AppsPage() {
       <div className="apps-empty">
         <h2>No apps yet</h2>
         <p>My apps is where the apps and websites you add from the Catalogue live. Each one shows whether it is connected, when it last synced and which agents use it, so you can spot problems early.</p>
-        <a className="apps-button apps-button-primary" href="/catalogue">Browse the Catalogue</a>
+        <a className="apps-button apps-button-primary" href={projectPath(projectId, "/catalogue")}>Browse the Catalogue</a>
       </div>
     );
   } else {
@@ -132,7 +135,7 @@ export default function AppsPage() {
   return <div className="apps-shell">
     <Sidebar active="apps" username={account.username} onSignOut={signOut} busy={busy} />
     <main className="apps-main">
-      <header className="topbar"><a className="mobile-brand" href="/"><span className="brand-word">WORKSPACE</span></a><div className="topbar-actions"><a className="mobile-team-link" href="/">Chat</a><a className="mobile-team-link" href="/catalogue">Catalogue</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><ProjectSwitcher section="/apps" /><div className="topbar-actions"><a className="mobile-team-link" href={projectPath(projectId)}>Chat</a><a className="mobile-team-link" href={projectPath(projectId, "/catalogue")}>Catalogue</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
       <div className="apps-heading">
         <div className="eyebrow">MY APPS</div>
         <h1 ref={heading} tabIndex={-1}>Your apps and websites.</h1>

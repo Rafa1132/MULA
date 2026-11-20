@@ -3,6 +3,8 @@
 // server reads and parses them, and the browser only reshapes what /api/memory/graph and
 // /api/memory/notes/{id} return.
 
+import { projectFetch } from "../../../common/services/project.ts";
+
 export type Target = "business" | "owner";
 
 export type GraphNode = {
@@ -81,11 +83,11 @@ async function readJson<T>(response: Response, fallback: string): Promise<T> {
 }
 
 export async function fetchGraph() {
-  return readJson<Graph>(await fetch("/api/memory/graph", { cache: "no-store" }), "Could not load your notes.");
+  return readJson<Graph>(await projectFetch("/api/memory/graph", { cache: "no-store" }), "Could not load your notes.");
 }
 
 export async function fetchNote(id: number) {
-  return readJson<NoteDetail>(await fetch(`/api/memory/notes/${id}`, { cache: "no-store" }), "Could not open the note.");
+  return readJson<NoteDetail>(await projectFetch(`/api/memory/notes/${id}`, { cache: "no-store" }), "Could not open the note.");
 }
 
 export type Draft = { folder: string; title: string; text: string };
@@ -93,33 +95,33 @@ export type Draft = { folder: string; title: string; text: string };
 export async function saveNote(draft: Draft, existing: NoteDetail | null) {
   const json = { "Content-Type": "application/json" };
   if (existing === null) {
-    return readJson<SaveResult>(await fetch("/api/memory/notes", { method: "POST", headers: json, body: JSON.stringify(draft) }), "Could not save the note.");
+    return readJson<SaveResult>(await projectFetch("/api/memory/notes", { method: "POST", headers: json, body: JSON.stringify(draft) }), "Could not save the note.");
   }
   const body = JSON.stringify({ ...draft, base_version: existing.version });
-  return readJson<SaveResult>(await fetch(`/api/memory/notes/${existing.id}`, { method: "PUT", headers: json, body }), "Could not save the note.");
+  return readJson<SaveResult>(await projectFetch(`/api/memory/notes/${existing.id}`, { method: "PUT", headers: json, body }), "Could not save the note.");
 }
 
 export async function relinkNote(id: number, from: { folder: string; title: string }) {
   const body = JSON.stringify({ from_folder: from.folder, from_title: from.title });
   return readJson<{ updated: number; stale_facts: number }>(
-    await fetch(`/api/memory/notes/${id}/relink`, { method: "POST", headers: { "Content-Type": "application/json" }, body }),
+    await projectFetch(`/api/memory/notes/${id}/relink`, { method: "POST", headers: { "Content-Type": "application/json" }, body }),
     "Could not update the links.");
 }
 
 /** A new, empty folder in the vault ('a/b' makes b inside a). */
 export async function createFolder(folder: string) {
   return readJson<{ folder: string }>(
-    await fetch("/api/memory/folders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folder }) }),
+    await projectFetch("/api/memory/folders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folder }) }),
     "Could not create the folder.");
 }
 
 export async function archiveNote(id: number) {
-  return readJson<{ note_id: number }>(await fetch(`/api/memory/notes/${id}/archive`, { method: "POST" }), "Could not archive the note.");
+  return readJson<{ note_id: number }>(await projectFetch(`/api/memory/notes/${id}/archive`, { method: "POST" }), "Could not archive the note.");
 }
 
 export async function searchMemory(question: string) {
   const body = await readJson<{ results: SearchHit[] }>(
-    await fetch("/api/memory/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) }),
+    await projectFetch("/api/memory/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) }),
     "Search failed.");
   return body.results;
 }

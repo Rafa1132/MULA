@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccountForm } from "@/features/auth";
-import { Icon, Sidebar } from "@/common/components";
+import { Icon, Sidebar, ProjectSwitcher } from "@/common/components";
 import { addApp, useAddedApps } from "../../apps/services/addedApps.ts";
 import { CATALOGUE_ENTRIES } from "../data.ts";
 import type { CatalogueEntry, CatalogueStatus, CatalogueType } from "../data.ts";
@@ -11,6 +11,8 @@ import { resultCount } from "../services/search.ts";
 import CatalogueCard from "./CatalogueCard";
 import SearchField from "./SearchField";
 import "../catalogue.css";
+import { useProjectId } from "@/common/hooks/useProjectId";
+import { projectPath } from "@/common/services/project";
 
 const SECTIONS: { type: CatalogueType; title: string }[] = [{ type: "agent", title: "Agents" }, { type: "app", title: "Apps" }];
 
@@ -28,6 +30,7 @@ function withCurrentStatus(entry: CatalogueEntry, agentStatuses: Record<string, 
 }
 
 export default function CataloguePage() {
+  const projectId = useProjectId();
   const [account, setAccount] = useState<{ username: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -60,7 +63,7 @@ export default function CataloguePage() {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("Could not sign out.");
-      window.location.assign("/");
+      window.location.assign("/login");
     } catch (failure) { if (failure instanceof Error) setError(failure.message); }
     finally { setBusy(false); }
   }
@@ -122,7 +125,7 @@ export default function CataloguePage() {
   return <div className="catalogue-shell">
     <Sidebar active="catalogue" username={account.username} onSignOut={signOut} busy={busy} />
     <main className="catalogue-main">
-      <header className="topbar"><a className="mobile-brand" href="/"><span className="brand-word">WORKSPACE</span></a><div className="topbar-actions"><a className="mobile-team-link" href="/">Chat</a><a className="mobile-team-link" href="/agents">My agents</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><ProjectSwitcher section="/catalogue" /><div className="topbar-actions"><a className="mobile-team-link" href={projectPath(projectId)}>Chat</a><a className="mobile-team-link" href={projectPath(projectId, "/agents")}>My agents</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
       <div className="catalogue-heading">
         <div className="eyebrow">CATALOGUE</div>
         <h1>Agents and apps for your business.</h1>

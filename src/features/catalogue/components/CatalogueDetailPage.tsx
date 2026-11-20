@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AccountForm } from "@/features/auth";
-import { Icon, Sidebar } from "@/common/components";
+import { Icon, Sidebar, ProjectSwitcher } from "@/common/components";
 import { addApp, useAddedApps } from "../../apps/services/addedApps.ts";
 import type { CatalogueEntry } from "../data.ts";
 import { findEntry, formatPrice } from "../services/details.ts";
@@ -15,6 +15,8 @@ import PluginsSection from "./PluginsSection";
 import PublisherAvatar from "./PublisherAvatar";
 import "../catalogue.css";
 import "../detail.css";
+import { useProjectId } from "@/common/hooks/useProjectId";
+import { projectPath } from "@/common/services/project";
 
 const STATUS_LABELS = { available: "Available", added: "Added", coming_soon: "Coming soon" };
 
@@ -25,17 +27,19 @@ function isAdded(entry: CatalogueEntry, addedApps: readonly string[]) {
 }
 
 function PrimaryAction({ entry, added, onAdd }: { entry: CatalogueEntry; added: boolean; onAdd: (entry: CatalogueEntry) => void }) {
-  const launch = launchUrl(entry);
+  const projectId = useProjectId();
+  const launch = launchUrl(entry, projectId);
   if (added && entry.type === "app" && launch !== undefined) return <LaunchLink className="catalogue-action catalogue-action-primary detail-action" href={launch} label={`Open ${entry.name}`} />;
-  if (added && entry.type === "app") return <a className="catalogue-action catalogue-action-primary detail-action" href="/apps">Open in My apps</a>;
-  if (added && entry.href) return <a className="catalogue-action catalogue-action-primary detail-action" href={entry.href}>Open</a>;
+  if (added && entry.type === "app") return <a className="catalogue-action catalogue-action-primary detail-action" href={projectPath(projectId, "/apps")}>Open in My apps</a>;
+  if (added && entry.href) return <a className="catalogue-action catalogue-action-primary detail-action" href={projectPath(projectId, entry.href)}>Open</a>;
   if (entry.status === "coming_soon") return <button type="button" className="catalogue-action detail-action" disabled aria-label={`Add ${entry.name} (coming soon)`}>Add</button>;
   if (entry.type === "app") return <button type="button" className="catalogue-action catalogue-action-primary detail-action" onClick={() => onAdd(entry)}>Add</button>;
   // Agents are not added from here yet; My agents manages the real ones.
-  return <a className="catalogue-action detail-action" href="/agents">Open My agents</a>;
+  return <a className="catalogue-action detail-action" href={projectPath(projectId, "/agents")}>Open My agents</a>;
 }
 
 export default function CatalogueDetailPage({ id }: { id: string }) {
+  const projectId = useProjectId();
   const [account, setAccount] = useState<{ username: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -72,7 +76,7 @@ export default function CatalogueDetailPage({ id }: { id: string }) {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("Could not sign out.");
-      window.location.assign("/");
+      window.location.assign("/login");
     } catch (failure) { if (failure instanceof Error) setError(failure.message); }
     finally { setBusy(false); }
   }
@@ -86,10 +90,10 @@ export default function CatalogueDetailPage({ id }: { id: string }) {
   if (!account && error) return <main className="account-screen"><div><p role="alert">{error}</p><button onClick={() => window.location.reload()}>Retry</button></div></main>;
   if (!account) return <AccountForm onSignedIn={load} />;
   // The route checks the id before rendering, so this only guards against stale data.
-  if (entry === undefined) return <main className="account-screen"><p role="alert">This entry is not in the catalogue. <a href="/catalogue">Back to Catalogue</a></p></main>;
+  if (entry === undefined) return <main className="account-screen"><p role="alert">This entry is not in the catalogue. <a href={projectPath(projectId, "/catalogue")}>Back to Catalogue</a></p></main>;
   // The route redirects plugins to their parent; this covers a stale client link.
   const parent = parentOf(entry);
-  if (parent !== undefined) return <main className="account-screen"><p role="alert">{entry.name} is a plugin. <a href={`/catalogue/${parent.id}#plugins`}>See it in {parent.name}</a></p></main>;
+  if (parent !== undefined) return <main className="account-screen"><p role="alert">{entry.name} is a plugin. <a href={projectPath(projectId, `/catalogue/${parent.id}#plugins`)}>See it in {parent.name}</a></p></main>;
 
   const added = isAdded(entry, addedApps);
   const publisher = publisherFor(entry);
@@ -102,8 +106,8 @@ export default function CatalogueDetailPage({ id }: { id: string }) {
   return <div className="catalogue-shell">
     <Sidebar active="catalogue" username={account.username} onSignOut={signOut} busy={busy} />
     <main className="catalogue-main detail-main">
-      <header className="topbar"><a className="mobile-brand" href="/"><span className="brand-word">WORKSPACE</span></a><div className="topbar-actions"><a className="mobile-team-link" href="/apps">My apps</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
-      <a className="detail-back" href="/catalogue"><Icon name="arrow" />Back to Catalogue</a>
+      <header className="topbar"><ProjectSwitcher section="/catalogue" /><div className="topbar-actions"><a className="mobile-team-link" href={projectPath(projectId, "/apps")}>My apps</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
+      <a className="detail-back" href={projectPath(projectId, "/catalogue")}><Icon name="arrow" />Back to Catalogue</a>
       {error && <p className="error" role="alert">{error}</p>}
       {notice && <p className="catalogue-notice detail-notice" role="status">{notice}</p>}
       <div className="detail-layout">

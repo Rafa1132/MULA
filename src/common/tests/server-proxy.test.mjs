@@ -69,3 +69,24 @@ test("speech proxy preserves audio bytes, authentication and no-store", async (c
   assert.match(response.headers.get("cache-control"), /no-store/);
   assert.equal(await response.text(), "RIFF");
 });
+
+test("the page's project goes to the server only when it is a well-formed id", async (context) => {
+  const seen = [];
+  context.mock.method(globalThis, "fetch", async (url, options) => {
+    seen.push(options.headers["X-Mula-Project"]);
+    return Response.json({});
+  });
+  const project = "11111111-2222-4333-8444-555555555555";
+  for (const value of [project, "../../etc", "1; DROP TABLE"]) {
+    await proxyBackend(new Request("http://localhost:3000/api/memory", { headers: { "X-Mula-Project": value } }), "/api/memory");
+  }
+  await proxyBackend(new Request("http://localhost:3000/api/memory"), "/api/memory");
+  assert.deepEqual(seen, [project, undefined, undefined, undefined]);
+});
+
+test("project names are bounded at the proxy", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", () => { throw new Error("Must not forward"); });
+  const response = await proxyBackend(new Request("http://localhost:3000/api/projects", { method: "POST", body: "x".repeat(4001) }), "/api/projects");
+  assert.equal(response.status, 413);
+  assert.equal(fetch.mock.callCount(), 0);
+});

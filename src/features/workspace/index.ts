@@ -1,1 +1,2 @@
-export { default as Workspace } from "./components/Workspace";
+export { default as WorkspacePage } from "./components/WorkspacePage";
+export { default as OpenFirstProject } from "./components/OpenFirstProject";

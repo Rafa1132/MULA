@@ -7,6 +7,7 @@ import type { AppConnection } from "../../catalogue/data.ts";
 import { alsoRemovesLabel } from "../../catalogue/services/plugins.ts";
 import { lastSyncedLabel, usedByLabel } from "../services/myApps.ts";
 import type { MyApp } from "../services/myApps.ts";
+import { useProjectId } from "@/common/hooks/useProjectId";
 
 // Each state has its own icon and words, so it never depends on colour.
 const CONNECTIONS: Record<AppConnection, { label: string; icon: "connected" | "attention" | "unlinked" }> = {
@@ -41,7 +42,7 @@ export default function AppCard({ app, now, onOpen, onSettings, onRemove }: Prop
   }, [confirming]);
 
   // A real link to the app in a new tab when it has a launchUrl; otherwise a notice.
-  const launch = launchUrl(app);
+  const launch = launchUrl(app, useProjectId());
   let openAction = <button type="button" className="apps-button apps-button-primary" aria-label={`Open ${app.name}`} onClick={() => onOpen(app)}>Open</button>;
   if (launch !== undefined) openAction = <LaunchLink className="apps-button apps-button-primary" href={launch} label="Open" hiddenContext={app.name} />;
 

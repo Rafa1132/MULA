@@ -1,7 +1,8 @@
 // PROTOTYPE STORE for the apps an owner has added from the Catalogue.
 //
 // This module is the only place that knows where the list lives. Today that is
-// this browser's localStorage; replacing it with a backend call means changing
+// this browser's localStorage, one list per project (each project has its own
+// apps); replacing it with a backend call means changing
 // this file and nothing else. The Catalogue and My apps both read it through
 // useAddedApps() and change it through addApp() and removeApp().
 //
@@ -10,8 +11,12 @@
 // its parent app, and removing a parent removes its plugins too.
 import { useSyncExternalStore } from "react";
 import { CATALOGUE_ENTRIES } from "../../catalogue/data.ts";
+import { currentProjectId } from "../../../common/services/project.ts";
 
-const STORAGE_KEY = "mula.prototype.added-apps";
+// Read when used, from the page's project (/projects/<id>/...).
+function storageKey() {
+  return `mula.prototype.project.${currentProjectId() ?? "none"}.added-apps`;
+}
 const NO_APPS: readonly string[] = [];
 
 // The current list, read from storage on first use. Writes update it first, so the
@@ -58,7 +63,7 @@ function readStored(): readonly string[] {
   const storage = browserStorage();
   if (storage === null) return NO_APPS;
   try {
-    const raw = storage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(storageKey());
     if (raw === null) return NO_APPS;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return NO_APPS;
@@ -73,7 +78,7 @@ function writeStored(ids: readonly string[]) {
   const storage = browserStorage();
   if (storage === null) return;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(ids));
+    storage.setItem(storageKey(), JSON.stringify(ids));
   } catch (error) {
     console.warn("Mula could not save the added apps; the change lasts only for this visit.", error);
   }
@@ -122,7 +127,7 @@ export function reloadAddedApps() {
 }
 
 function onStorageEvent(event: StorageEvent) {
-  if (event.key === STORAGE_KEY || event.key === null) reloadAddedApps();
+  if (event.key === storageKey() || event.key === null) reloadAddedApps();
 }
 
 function subscribe(listener: () => void) {

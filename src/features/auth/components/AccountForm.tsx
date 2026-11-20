@@ -1,26 +1,64 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { MulaLogo } from "@/common/components";
 
-export default function AccountForm({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
-  const [signup, setSignup] = useState(false);
+export type AccountMode = "login" | "register";
+
+type Props = {
+  onSignedIn: () => Promise<void> | void;
+  mode?: AccountMode;
+  // On /login and /register the switch is a link to the other page; elsewhere (a page whose
+  // session expired) it flips the form in place so the page can reload after signing in.
+  standalone?: boolean;
+};
+
+// The server says whether its development-only relaxed rules are on (MULA_RELAXED_AUTH), so the
+// form never asks for more, or less, than the server will accept.
+async function fetchRelaxed() {
+  const response = await fetch("/api/auth/rules", { cache: "no-store" });
+  if (!response.ok) return false;
+  const rules = await response.json();
+  return rules.relaxed === true;
+}
+
+export default function AccountForm({ onSignedIn, mode = "login", standalone = false }: Props) {
+  const [signup, setSignup] = useState(mode === "register");
+  const [relaxed, setRelaxed] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetchRelaxed().then(setRelaxed).catch(() => setRelaxed(false));
+  }, []);
+
   let title = "Welcome back";
-  let action = "Sign in";
+  let action = "Log in";
   let toggle = "Create an account";
+  let toggleHref = "/register";
   let endpoint = "login";
   let autocomplete = "current-password";
   if (signup) {
     title = "Your beginning starts here";
     action = "Create account";
     toggle = "I already have an account";
+    toggleHref = "/login";
     endpoint = "signup";
     autocomplete = "new-password";
   }
+  let usernameHint = "3–40 letters, numbers, dots, underscores or hyphens.";
+  let passwordHint = "At least 10 characters.";
+  let usernamePattern: string | undefined = "[A-Za-z0-9_.\\-]{3,40}";
+  let passwordMin = 10;
+  if (relaxed) {
+    usernameHint = "Development mode: any username works.";
+    passwordHint = "Development mode: any password works.";
+    usernamePattern = undefined;
+    passwordMin = 1;
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -33,6 +71,8 @@ export default function AccountForm({ onSignedIn }: { onSignedIn: () => Promise<
       if (!response.ok) {
         const failure = await response.json();
         if (typeof failure.detail === "string") throw new Error(failure.detail);
+        // FastAPI's validation errors are a list; show the first rule that failed.
+        if (Array.isArray(failure.detail) && typeof failure.detail[0]?.msg === "string") throw new Error(failure.detail[0].msg.replace(/^Value error, /, ""));
         throw new Error("Check your username and password and try again.");
       }
       setPassword("");
@@ -43,20 +83,27 @@ export default function AccountForm({ onSignedIn }: { onSignedIn: () => Promise<
       setBusy(false);
     }
   }
+
+  function switchMode() {
+    setSignup(!signup);
+    setError("");
+  }
+
   return <main className="account-screen">
-    <form className="account-card" onSubmit={submit}>
-      <MulaLogo />
-      <h1>{title}</h1>
-      <p>Your business, your Operator, one ongoing conversation.</p>
+    <form className="account-card" onSubmit={submit} aria-labelledby="account-title">
+      <a href="/" className="account-home" aria-label="Mula home"><MulaLogo /></a>
+      <h1 id="account-title">{title}</h1>
+      <p>Your business, your agents, one ongoing conversation.</p>
       <label htmlFor="username">Username</label>
-      <input id="username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" minLength={3} maxLength={40} pattern="[A-Za-z0-9_.-]{3,40}" required disabled={busy} />
-      <small>3–40 letters, numbers, dots, underscores or hyphens.</small>
+      <input id="username" value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" maxLength={40} pattern={usernamePattern} aria-describedby="username-hint" required disabled={busy} />
+      <small id="username-hint">{usernameHint}</small>
       <label htmlFor="password">Password</label>
-      <input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={autocomplete} minLength={10} maxLength={128} required disabled={busy} />
-      <small>At least 10 characters.</small>
+      <input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={autocomplete} minLength={passwordMin} maxLength={128} aria-describedby="password-hint" required disabled={busy} />
+      <small id="password-hint">{passwordHint}</small>
       {error && <p className="error" role="alert">{error}</p>}
       <button className="account-submit" disabled={busy}>{action}</button>
-      <button className="account-toggle" type="button" disabled={busy} onClick={() => { setSignup(!signup); setError(""); }}>{toggle}</button>
+      {standalone && <a className="account-toggle account-link" href={toggleHref}>{toggle}</a>}
+      {!standalone && <button className="account-toggle" type="button" disabled={busy} onClick={switchMode}>{toggle}</button>}
     </form>
   </main>;
 }

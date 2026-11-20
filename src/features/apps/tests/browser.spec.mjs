@@ -3,6 +3,8 @@
 // test account): MULA_TEST_URL, default http://localhost:3001.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -21,10 +23,10 @@ try {
   const { page, errors } = await newPage({ width: 1440, height: 1000 });
 
   // Empty state first, with a way to the Catalogue.
-  await page.goto(baseURL + "/apps");
+  await page.goto(baseURL + PROJECT_PATH + "/apps");
   await page.getByRole("heading", { name: "No apps yet" }).waitFor();
   assert.equal(await page.title(), "Mula · My apps");
-  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  const nav = page.getByRole("navigation", { name: "Project" });
   const labels = (await nav.locator(".nav-item").allInnerTexts()).map((text) => text.replace("Soon", "").trim());
   assert.deepEqual(labels.slice(0, 3), ["Chat", "Catalogue", "My apps"]);
   assert.equal(await nav.getByRole("link", { name: "My apps" }).getAttribute("aria-current"), "page");
@@ -70,9 +72,9 @@ try {
   assert.equal(await page.locator(".apps-card").count(), 3);
 
   // Plugins nest inside their parent's card, and removing the parent says it takes them too.
-  await page.goto(baseURL + "/catalogue/tokopedia-sync");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue/tokopedia-sync");
   for (const name of ["Store monitor", "Store admin"]) await page.getByRole("button", { name: `Add ${name}` }).click();
-  await page.goto(baseURL + "/apps");
+  await page.goto(baseURL + PROJECT_PATH + "/apps");
   await page.getByRole("heading", { name: "Your apps and websites." }).waitFor();
   assert.equal(await page.locator(".apps-card").count(), 3);
   assert.deepEqual(await sync.getByRole("list", { name: "Plugins" }).locator("li").allInnerTexts(), ["Store monitor", "Store admin"]);
@@ -81,9 +83,9 @@ try {
   await sync.getByRole("button", { name: "Yes, remove" }).click();
   await page.getByText("Store app removed. It's back in the Catalogue as Available. Its 2 plugins were removed too.").waitFor();
   assert.equal(await page.locator(".apps-card").count(), 2);
-  await page.goto(baseURL + "/catalogue/tokopedia-sync");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue/tokopedia-sync");
   await page.getByRole("button", { name: "Add Store app first to add Store monitor" }).waitFor();
-  await page.goto(baseURL + "/apps");
+  await page.goto(baseURL + PROJECT_PATH + "/apps");
   await page.getByRole("heading", { name: "Your apps and websites." }).waitFor();
 
   // Remove, by keyboard only: Escape cancels and returns focus, confirming removes.
@@ -106,16 +108,16 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Your apps and websites." }).waitFor();
   assert.equal(await page.locator(".apps-card").count(), 1);
-  await page.goto(baseURL + "/catalogue");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue");
   await page.getByRole("article", { name: "Invoice maker" }).getByText("Available", { exact: true }).waitFor();
   await page.getByRole("article", { name: "Stock sheet" }).getByText("Added", { exact: true }).waitFor();
   assert.deepEqual(errors, []);
 
   // Phone width: one column, no sideways scroll.
   const phone = await newPage({ width: 390, height: 844 });
-  await phone.page.goto(baseURL + "/catalogue");
+  await phone.page.goto(baseURL + PROJECT_PATH + "/catalogue");
   await phone.page.getByRole("button", { name: "Add Store app" }).click();
-  await phone.page.goto(baseURL + "/apps");
+  await phone.page.goto(baseURL + PROJECT_PATH + "/apps");
   await phone.page.getByRole("heading", { name: "Your apps and websites." }).waitFor();
   assert.equal(await phone.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   // Images load lazily; wait for the card's picture so the screenshot shows it.

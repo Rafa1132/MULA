@@ -25,8 +25,9 @@ try {
   Object.defineProperty(window,'webkitSpeechRecognition',{value:undefined,configurable:true});
   window.__emit=rows=>window.__recognitions.at(-1).onresult?.({results:rows.map(([text,final])=>Object.assign([{transcript:text}],{isFinal:final}))});
  });
- await page.goto(baseURL);
- const input=page.getByLabel('Message Mula',{exact:true});await input.waitFor();
+ // The chat is a project page; the API is faked, so any well-formed id works.
+ await page.goto(baseURL + "/projects/11111111-2222-4333-8444-555555555555");
+ const input=page.getByLabel('Message Operator',{exact:true});await input.waitFor();
  await input.fill('My cafe:');
  // The speech language lives in the composer's voice options menu.
  await page.getByRole('button',{name:'Voice options',exact:true}).click();
@@ -87,10 +88,10 @@ try {
   Object.defineProperty(window,'SpeechRecognition',{value:undefined,configurable:true});
   Object.defineProperty(window,'webkitSpeechRecognition',{value:undefined,configurable:true});
  });
- await unsupported.goto(baseURL);
+ await unsupported.goto(baseURL + "/projects/11111111-2222-4333-8444-555555555555");
  await unsupported.getByRole('button',{name:'Speech input unavailable in this browser',exact:true}).waitFor();
  assert.equal(await unsupported.getByRole('button',{name:'Speech input unavailable in this browser',exact:true}).isDisabled(),true);
- await unsupported.getByLabel('Message Mula',{exact:true}).fill('Typing still works');
+ await unsupported.getByLabel('Message Operator',{exact:true}).fill('Typing still works');
  assert.equal(await unsupported.getByRole('button',{name:'Send message',exact:true}).isEnabled(),true);
  assert.deepEqual(errors,[]);
  console.log('PASS: scripted speech engine UI, interim vs final text, no duplicates, edits preserved, stop/review/send, permission failure, hide cancellation, language persistence, length bound, mobile layout, unsupported-browser typing. No real microphone or recognition accuracy was tested.');

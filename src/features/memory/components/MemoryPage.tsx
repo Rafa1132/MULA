@@ -2,18 +2,21 @@
 
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { AccountForm } from "@/features/auth";
-import { Icon, Sidebar } from "@/common/components";
+import { Icon, Sidebar, ProjectSwitcher } from "@/common/components";
 import { Overview, fetchOverview } from "../services/facts";
 import { Graph, fetchGraph } from "../services/notes";
 import { DEFAULT_FILTER, MapFilter } from "../services/graph";
 import FoldersView from "./FoldersView";
 import MemoryMap from "./MemoryMap";
 import "../memory.css";
+import { useProjectId } from "@/common/hooks/useProjectId";
+import { projectPath } from "@/common/services/project";
 
 type Mode = "folders" | "map";
 const MODES: { id: Mode; label: string }[] = [{ id: "folders", label: "Folders" }, { id: "map", label: "Map" }];
 
 export default function MemoryPage() {
+  const projectId = useProjectId();
   const [account, setAccount] = useState<{ username: string } | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [graph, setGraph] = useState<Graph | null>(null);
@@ -98,7 +101,7 @@ export default function MemoryPage() {
     try {
       const response = await fetch("/api/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("Could not sign out.");
-      window.location.assign("/");
+      window.location.assign("/login");
     } catch (failure) { if (failure instanceof Error) setError(failure.message); }
     finally { setBusy(false); }
   }
@@ -110,7 +113,7 @@ export default function MemoryPage() {
   return <div className="memory-shell">
     <Sidebar active="memory" username={account.username} onSignOut={signOut} busy={busy} />
     <main className="memory-main">
-      <header className="topbar"><span className="mobile-brand"><span className="brand-word">WORKSPACE</span></span><div className="topbar-actions"><a className="text-button" href="/">Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
+      <header className="topbar"><ProjectSwitcher section="/memory" /><div className="topbar-actions"><a className="text-button" href={projectPath(projectId)}>Back to Operator</a><button className="mobile-signout icon-button" aria-label="Sign out" onClick={signOut} disabled={busy}><Icon name="exit" /></button></div></header>
       <div className="memory-heading">
         <div className="eyebrow">WHAT MULA REMEMBERS</div>
         <h1>Memory</h1>

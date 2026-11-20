@@ -1,4 +1,4 @@
-export type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified" | "edit" | "trash" | "external" | "infinity" | "zoomIn" | "zoomOut" | "fit" | "info" | "repeat" | "trend" | "tool" | "newNote" | "newFolder" | "collapseAll";
+export type IconName = "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified" | "edit" | "trash" | "external" | "infinity" | "zoomIn" | "zoomOut" | "fit" | "info" | "repeat" | "trend" | "tool" | "newNote" | "newFolder" | "collapseAll" | "chevron" | "folder";
 
 const paths: Record<IconName, string> = {
   microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
@@ -18,6 +18,9 @@ const paths: Record<IconName, string> = {
   newNote: "M14 3H6v18h12V7ZM14 3v4h4M12 11v6M9 14h6",
   newFolder: "M3 6h6l2 2h10v12H3ZM12 11v6M9 14h6",
   collapseAll: "M7 4l5 5 5-5M7 20l5-5 5 5",
+  // The project switcher's "opens a list" mark, and a project card.
+  chevron: "m7 10 5 5 5-5",
+  folder: "M3 6h6l2 2h10v12H3Z",
   live: "M4 11v2M8 8v8M12 4v16M16 8v8M20 11v2",
   options: "M4 7h9M17 7h3M15 4v6M4 17h3M11 17h9M9 14v6",
   // An open book, for the Catalogue of agents and apps.

@@ -9,6 +9,8 @@ export type AgentRequest = {
   answer: string | null;
   message_id: number | null;
   approved_in_advance: boolean;
+  // The A2A task state derived from status (server/src/features/a2a/tasks.py), e.g. "auth-required".
+  state?: string;
 };
 
 export type ChatEvent = {

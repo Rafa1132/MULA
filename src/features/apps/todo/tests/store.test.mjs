@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const KEY = "mula.prototype.app.todo.tasks";
+// The page's project; each project keeps its own list.
+const PROJECT = "11111111-2222-4333-8444-555555555555";
+const KEY = `mula.prototype.project.${PROJECT}.app.todo.tasks`;
 const warnings = [];
 console.warn = (...args) => warnings.push(args[0]);
 
@@ -15,6 +17,7 @@ function installWindow({ throwOnAccess = false, throwOnWrite = false, initial } 
   };
   globalThis.window = {
     addEventListener() {}, removeEventListener() {},
+    location: { pathname: `/projects/${PROJECT}/apps` },
     get localStorage() { if (throwOnAccess) throw new Error("blocked"); return storage; },
   };
   return values;

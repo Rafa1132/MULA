@@ -1,3 +1,5 @@
+import { PROJECT_HEADER, isProjectId } from "./project.ts";
+
 // Proxy only known application endpoints; credentials stay in HttpOnly cookies.
 export async function proxyBackend(request: Request, path: string) {
   if (request.method !== "GET") {
@@ -17,11 +19,15 @@ export async function proxyBackend(request: Request, path: string) {
     "Content-Type": "application/json",
     Cookie: request.headers.get("cookie") || "",
   };
+  // Which project the call is for (see common/services/project.ts). Only a well-formed id is
+  // passed on; the server still checks that the account may open that project.
+  const project = request.headers.get(PROJECT_HEADER);
+  if (project !== null && isProjectId(project)) headers[PROJECT_HEADER] = project;
   const options: RequestInit = {
     method: request.method, headers, cache: "no-store", signal: request.signal,
   };
   if (request.method !== "GET") {
-    if ((path.startsWith("/api/agents/") || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting")) && request.body) {
+    if ((path.startsWith("/api/agents/") || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting") || path.startsWith("/api/projects") || path.startsWith("/api/onboarding") || path.startsWith("/api/orchestrator")) && request.body) {
       // JSON can expand CSV characters into escapes; allow that overhead while
       // bounding the upload before buffering or forwarding it to the server.
       const reader = request.body.getReader();
@@ -33,6 +39,10 @@ export async function proxyBackend(request: Request, path: string) {
       // A note holds up to 20,000 characters; as UTF-8 inside JSON that can reach ~4 bytes each.
       if (path.startsWith("/api/memory/notes")) maxBytes = 200_000;
       if (path.startsWith("/api/team")) maxBytes = 100_000;
+      // A project name is at most 80 characters.
+      if (path.startsWith("/api/projects")) maxBytes = 4_000;
+      // Profile answers and assistant messages: at most 8,000 characters of text.
+      if (path.startsWith("/api/onboarding") || path.startsWith("/api/orchestrator")) maxBytes = 40_000;
       try {
         while (true) {
           const chunk = await reader.read();

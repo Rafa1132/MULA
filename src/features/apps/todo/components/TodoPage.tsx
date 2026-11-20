@@ -12,6 +12,8 @@ import type { TaskFields } from "./TaskForm";
 import TaskItem from "./TaskItem";
 import "../../apps.css";
 import "../todo.css";
+import { useProjectId } from "@/common/hooks/useProjectId";
+import { projectPath } from "@/common/services/project";
 
 // How long "Task deleted · Undo" stays on screen.
 const UNDO_MS = 6000;
@@ -21,6 +23,7 @@ function checkboxOf(taskId: string) {
 }
 
 export default function TodoPage() {
+  const projectId = useProjectId();
   const [account, setAccount] = useState<{ username: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -147,7 +150,7 @@ export default function TodoPage() {
         <p className="todo-dateline">{dateline}</p>
         <h1 className="todo-appname">To-do</h1>
       </div>
-      <a className="todo-home" href="/">Mula</a>
+      <a className="todo-home" href={projectPath(projectId)}>Mula</a>
     </header>
     <main className="todo-main">
       <p className="todo-summary">{summaryLabel(tasks, today)}. Tasks are remembered in this browser.</p>

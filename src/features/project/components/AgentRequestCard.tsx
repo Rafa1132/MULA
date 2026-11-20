@@ -2,15 +2,15 @@ import type { AgentRequest } from "@/features/operator";
 
 const AGENT_NAMES: Record<string, string> = { operator: "Operator", forecasting: "Forecasting" };
 
-function statusText(request: AgentRequest) {
+function statusText(request: AgentRequest, caller: string) {
   const target = request.to_name;
   const texts: Record<AgentRequest["status"], string> = {
     pending: "",
     running: `${target} is working on it…`,
-    answered: `${target} answered. The Operator's summary is below.`,
+    answered: `${target} answered. ${caller}'s summary is below.`,
     declined: "You chose not to ask.",
-    failed: `${target} could not answer. Ask the Operator again when you're ready.`,
-    expired: "This request expired. Ask the Operator again.",
+    failed: `${target} could not answer. Ask ${caller} again when you're ready.`,
+    expired: `This request expired. Ask ${caller} again.`,
   };
   return texts[request.status];
 }
@@ -30,8 +30,8 @@ export default function AgentRequestCard({ request, disabled, onApprove, onDecli
         <button type="button" onClick={() => onApprove(request.id)} disabled={disabled}>Ask {request.to_name}</button>
         <button type="button" className="text-button" onClick={() => onDecline(request.id)} disabled={disabled}>Not now</button>
       </div>}
-      {request.status === "running" && <p className="agent-request-status" role="status"><span className="shimmer">{statusText(request)}</span></p>}
-      {request.status !== "pending" && request.status !== "running" && <p className="agent-request-status" role="status">{statusText(request)}</p>}
+      {request.status === "running" && <p className="agent-request-status" role="status"><span className="shimmer">{statusText(request, caller)}</span></p>}
+      {request.status !== "pending" && request.status !== "running" && <p className="agent-request-status" role="status">{statusText(request, caller)}</p>}
     </div>
   );
 }

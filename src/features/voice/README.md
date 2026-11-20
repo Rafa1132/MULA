@@ -8,7 +8,8 @@ Everything voice-related in the browser:
 ## AI voice output: `services/speech.ts`
 
 - `speechChunks(markdown)` removes code and Markdown formatting and splits the reply into chunks that fit the server's 1,200-character limit.
-- `SpeechPlayer` requests each chunk from `POST /api/speech`, decodes the WAV with Web Audio, and plays it through an `AnalyserNode`. `OperatorCore` animates from that analyser.
+- `SpeechPlayer` requests each chunk from `POST /api/speech`, decodes the WAV with Web Audio, and plays it through an `AnalyserNode`. The chat screen's orb (`features/chat` → `features/orb`) animates from that analyser.
+- `SpeechPlayer.play(url)` plays one recording made ahead of time (the workspace's spoken welcome) through the same analyser, so the orb reacts to it and `stop()` mutes it.
 - A generation counter discards pending downloads and decodes after a cancel, so muted audio never starts late.
 - Playback stops on mute or Chat mode, on a new message, when the tab is hidden, and on sign-out. The mute preference is saved in `localStorage` as `mula.voice-muted`. Earlier history never plays automatically.
 
@@ -42,7 +43,7 @@ Everything voice-related in the browser:
 
 ## Used by
 
-`features/workspace`.
+`features/chat` (`useChatComposer`), which both the workspace assistant and project chat use.
 
 ## Server counterpart
 

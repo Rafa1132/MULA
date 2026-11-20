@@ -2,6 +2,8 @@
 // frontend (no backend, no test account): MULA_TEST_URL, default http://localhost:3001.
 import assert from "node:assert/strict";
 const { chromium } = await import(process.env.MULA_PLAYWRIGHT_MODULE || "playwright");
+// Project pages live under /projects/<id>/; the API is faked, so any well-formed id works.
+const PROJECT_PATH = "/projects/11111111-2222-4333-8444-555555555555";
 const baseURL = process.env.MULA_TEST_URL || "http://localhost:3001";
 const screenshots = process.env.MULA_SCREENSHOT_DIR || "/tmp";
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MULA_BROWSER_PATH });
@@ -13,7 +15,7 @@ async function openCatalogue(viewport) {
   await page.route("**/api/auth/me", (route) => route.fulfill({ json: { id: "preview", username: "preview" } }));
   // One missing picture, to prove a card falls back to its initial instead of looking broken.
   await page.route("**/catalogue/invoice-maker.png", (route) => route.fulfill({ status: 404, body: "" }));
-  await page.goto(baseURL + "/catalogue");
+  await page.goto(baseURL + PROJECT_PATH + "/catalogue");
   await page.getByRole("heading", { name: "Agents and apps for your business." }).waitFor();
   return { page, errors };
 }
@@ -23,7 +25,7 @@ try {
   assert.equal(await page.title(), "Mula · Catalogue");
 
   // Nav: Catalogue sits right after Chat and is the current page.
-  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  const nav = page.getByRole("navigation", { name: "Project" });
   const labels = (await nav.locator(".nav-item").allInnerTexts()).map((text) => text.replace("Soon", "").trim());
   assert.deepEqual(labels.slice(0, 2), ["Chat", "Catalogue"]);
   assert.equal(await nav.getByRole("link", { name: "Catalogue" }).getAttribute("aria-current"), "page");
@@ -41,7 +43,7 @@ try {
   const avatar = await operator.locator(".catalogue-publisher img").boundingBox();
   assert.equal(Math.round(avatar.width), 16);
   assert.equal(Math.round(avatar.height), 16);
-  assert.equal(await operator.getByRole("link", { name: "Open Operator" }).getAttribute("href"), "/");
+  assert.equal(await operator.getByRole("link", { name: "Open Operator" }).getAttribute("href"), PROJECT_PATH);
   assert.equal(await page.getByRole("img", { name: "Portrait of the Operator agent" }).count(), 1);
   assert.ok(await page.getByRole("button", { name: "Add Store (coming soon)" }).isDisabled());
 
@@ -102,7 +104,7 @@ try {
   const sync = page.getByRole("article", { name: "Store app" });
   await sync.getByText("Added", { exact: true }).waitFor();
   await page.getByText("Store app added. Find it in My apps.").waitFor();
-  assert.equal(await sync.getByRole("link", { name: "Open Store app" }).getAttribute("href"), "/apps");
+  assert.equal(await sync.getByRole("link", { name: "Open Store app" }).getAttribute("href"), PROJECT_PATH + "/apps");
   assert.deepEqual(errors, []);
 
   // Phone width: no sideways scroll, the top bar replaces the sidebar.

@@ -35,7 +35,7 @@ try {
    analyser.getByteTimeDomainData=buffer=>{read(buffer);for(const sample of buffer)window.__audioPeak=Math.max(window.__audioPeak,Math.abs(sample-128));};return analyser;
   };
  });
- await page.goto(baseURL);
+ await page.goto(baseURL + "/workspace");
  await page.getByRole('button',{name:'Create an account',exact:true}).click();
  await page.getByLabel('Username',{exact:true}).fill('live_check_'+Date.now());
  await page.getByLabel('Password',{exact:true}).fill('live-check-password-12345');
@@ -52,7 +52,7 @@ try {
  await page.evaluate(()=>window.__finishAnswer());
  await page.waitForFunction(()=>window.__engines.length===2,null,{timeout:45000});
  await page.getByRole('button',{name:'Finish spoken turn',exact:true}).waitFor();
- assert.equal(await page.getByLabel('Message Mula',{exact:true}).inputValue(),'');
+ assert.equal(await page.getByLabel('Message Operator',{exact:true}).inputValue(),'');
  await page.evaluate(()=>window.__say('Can we change that?'));
  await page.getByText('Speaking…',{exact:true}).waitFor({timeout:45000});
  const oldFinish=await page.evaluateHandle(()=>window.__finishAnswer);

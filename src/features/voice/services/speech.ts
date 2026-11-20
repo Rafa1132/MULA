@@ -1,3 +1,5 @@
+import { projectFetch } from "../../../common/services/project.ts";
+
 export type VoiceState = "idle" | "preparing" | "speaking";
 
 export function speechChunks(markdown: string): string[] {
@@ -84,50 +86,36 @@ export class SpeechPlayer {
     const generation = this.generation;
     const chunks = speechChunks(text);
     if (!chunks.length) return;
+    await this.run(generation, async () => {
+      for (const chunk of chunks) {
+        if (generation !== this.generation) return;
+        const bytes = await this.download(() => projectFetch("/api/speech", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: chunk }), signal: this.request!.signal,
+        }));
+        if (generation !== this.generation) return;
+        await this.playBytes(bytes, generation);
+      }
+    });
+  }
+
+  /** One recording made ahead of time (the spoken welcome), through the same path, so the orb reacts and mute works. */
+  async play(url: string) {
+    this.stop();
+    const generation = this.generation;
+    await this.run(generation, async () => {
+      const bytes = await this.download(() => fetch(url, { signal: this.request!.signal }));
+      if (generation !== this.generation) return;
+      await this.playBytes(bytes, generation);
+    });
+  }
+
+  /** Shared by speak and play: unlock audio, run the work, and turn failures into readable errors. */
+  private async run(generation: number, work: () => Promise<void>) {
     try {
       await this.unlock();
       if (generation !== this.generation) return;
-      const context = this.context!;
-      for (const chunk of chunks) {
-        if (generation !== this.generation) return;
-        this.onState("preparing");
-        const request = new AbortController();
-        this.request = request;
-        const timeout = setTimeout(() => request.abort(), 35000);
-        let bytes: ArrayBuffer;
-        try {
-          const response = await fetch("/api/speech", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: chunk }), signal: request.signal,
-          });
-          if (!response.ok) {
-            const failure = await response.json();
-            if (typeof failure.detail === "string") throw new Error(failure.detail);
-            throw new Error("Could not create AI voice. Chat still works.");
-          }
-          bytes = await response.arrayBuffer();
-        } finally {
-          clearTimeout(timeout);
-        }
-        if (generation !== this.generation) return;
-        const buffer = await context.decodeAudioData(bytes);
-        if (generation !== this.generation) return;
-        const source = context.createBufferSource();
-        source.buffer = buffer;
-        source.connect(this.analyser!);
-        this.source = source;
-        await new Promise<void>((resolve) => {
-          this.finishPlayback = resolve;
-          source.onended = () => {
-            source.disconnect();
-            this.source = null;
-            this.finishPlayback = null;
-            resolve();
-          };
-          source.start();
-          this.onState("speaking");
-        });
-      }
+      await work();
     } catch (failure) {
       if (generation !== this.generation) return;
       this.stop();
@@ -141,6 +129,47 @@ export class SpeechPlayer {
         this.onState("idle");
       }
     }
+  }
+
+  /** The audio bytes from one request, with a timeout, and the backend's message when it refuses. */
+  private async download(send: () => Promise<Response>) {
+    this.onState("preparing");
+    const request = new AbortController();
+    this.request = request;
+    const timeout = setTimeout(() => request.abort(), 35000);
+    try {
+      const response = await send();
+      if (!response.ok) {
+        const failure = await response.json();
+        if (typeof failure.detail === "string") throw new Error(failure.detail);
+        throw new Error("Could not create AI voice. Chat still works.");
+      }
+      return await response.arrayBuffer();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /** Decode and play, resolving when playback ends or is stopped. Does nothing once a newer call has started. */
+  private async playBytes(bytes: ArrayBuffer, generation: number) {
+    const context = this.context!;
+    const buffer = await context.decodeAudioData(bytes);
+    if (generation !== this.generation) return;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.analyser!);
+    this.source = source;
+    await new Promise<void>((resolve) => {
+      this.finishPlayback = resolve;
+      source.onended = () => {
+        source.disconnect();
+        this.source = null;
+        this.finishPlayback = null;
+        resolve();
+      };
+      source.start();
+      this.onState("speaking");
+    });
   }
 
   async dispose() {
