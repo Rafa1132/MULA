@@ -30,23 +30,26 @@ def ticket_in(request):
 
 class AgentFixture(AccountFixture):
     def set_delegation(self, mode):
-        saved = self.client.put("/api/team/operator", json={"prompt": "", "data": "", "tools": ["csv_read", "memory_read", "memory_write"], "revision": 0, "brain": "qwen", "delegation": mode})
+        self.set_link("operator", "forecasting", mode, ["csv_read", "memory_read", "memory_write"])
+
+    def set_link(self, agent_id, to_agent, mode, tools=()):
+        saved = self.client.put(f"/api/team/{agent_id}", json={"prompt": "", "data": "", "tools": list(tools), "revision": 0, "brain": "qwen", "links": {to_agent: mode}})
         self.assertEqual(saved.status_code, 200, saved.text)
 
     def operator_ticket(self, attachment=None, message_id=None):
-        return service.issue_ticket(self.account["id"], "operator", attachment, message_id=message_id)
+        return service.issue_ticket(self.project["id"], "operator", attachment, message_id=message_id)
 
 
 class TicketTests(AgentFixture, unittest.TestCase):
     def test_tickets_are_scoped_to_agent_and_expire(self):
         operator = self.operator_ticket()
-        forecasting = service.issue_ticket(self.account["id"], "forecasting", CSV)
+        forecasting = service.issue_ticket(self.project["id"], "forecasting", CSV)
         self.assertEqual(service.resolve_ticket(forecasting, "calculate_forecast")["attachment"], CSV)
-        for token, tool in [(operator, "calculate_forecast"), (forecasting, "ask_agent"), ("made-up", "latest_forecast"), ("", "latest_forecast")]:
+        for token, tool in [(operator, "calculate_forecast"), (forecasting, "remember"), ("made-up", "latest_forecast"), ("", "latest_forecast")]:
             with self.subTest(tool=tool), self.assertRaises(service.ToolDenied):
                 service.resolve_ticket(token, tool)
         with patch.object(service, "TICKET_SECONDS", 0):
-            expired = service.issue_ticket(self.account["id"], "forecasting", CSV)
+            expired = service.issue_ticket(self.project["id"], "forecasting", CSV)
         with self.assertRaises(service.ToolDenied):
             service.resolve_ticket(expired, "calculate_forecast")
         # Only the hash is stored.
@@ -56,7 +59,7 @@ class TicketTests(AgentFixture, unittest.TestCase):
 
 class ForecastToolTests(AgentFixture, unittest.TestCase):
     def test_calculate_forecast_saves_the_run_for_the_tickets_account(self):
-        ticket = service.issue_ticket(self.account["id"], "forecasting", CSV)
+        ticket = service.issue_ticket(self.project["id"], "forecasting", CSV)
         result = json.loads(tools.calculate_forecast(ticket, "date", "sales", horizon=3, method="drift"))
         self.assertEqual(result["method"], "drift")
         self.assertEqual([point["value"] for point in result["forecast"]], [410, 420, 430])
@@ -65,11 +68,11 @@ class ForecastToolTests(AgentFixture, unittest.TestCase):
         self.assertEqual(json.loads(tools.latest_forecast(ticket))["id"], result["id"])
 
     def test_forecast_tool_failures_are_readable(self):
-        no_csv = service.issue_ticket(self.account["id"], "forecasting")
+        no_csv = service.issue_ticket(self.project["id"], "forecasting")
         with self.assertRaisesRegex(ToolError, "No CSV is attached"):
             tools.calculate_forecast(no_csv, "date", "sales")
         self.assertEqual(tools.latest_forecast(no_csv), "The owner has no saved forecasts yet.")
-        ticket = service.issue_ticket(self.account["id"], "forecasting", CSV)
+        ticket = service.issue_ticket(self.project["id"], "forecasting", CSV)
         with self.assertRaisesRegex(ToolError, "Choose columns from the uploaded CSV"):
             tools.calculate_forecast(ticket, "day", "sales")
         self.client.put("/api/team/forecasting", json={"prompt": "", "data": "", "tools": ["naive"], "revision": 0, "brain": "qwen"})
@@ -81,7 +84,7 @@ class ForecastToolTests(AgentFixture, unittest.TestCase):
 
 class DelegationTests(AgentFixture, unittest.TestCase):
     def test_ask_first_queues_a_request_without_running_another_agent(self):
-        message_id = accounts.add_message(self.account["id"], "assistant", "", None)
+        message_id = accounts.add_message(self.project["id"], "assistant", "", None)
         ticket = self.operator_ticket(CSV, message_id)
         with gateway(lambda request: self.fail("No agent may run before approval")):
             reply = tools.ask_agent(ticket, "forecasting", "Forecast next week")
@@ -106,10 +109,15 @@ class DelegationTests(AgentFixture, unittest.TestCase):
         self.set_delegation("off")
         with self.assertRaisesRegex(ToolError, "turned off"):
             tools.ask_agent(self.operator_ticket(), "forecasting", "Forecast")
-        forecasting = service.issue_ticket(self.account["id"], "forecasting")
-        with self.assertRaisesRegex(ToolError, "cannot use ask_agent"):
+        forecasting = service.issue_ticket(self.project["id"], "forecasting")
+        with self.assertRaisesRegex(ToolError, "cannot ask 'forecasting'"):
             tools.ask_agent(forecasting, "forecasting", "Forecast")
-        nested = service.issue_ticket(self.account["id"], "operator", depth=1)
+        # Forecasting may ask the Operator only once the owner connects them.
+        with self.assertRaisesRegex(ToolError, "has not connected Forecasting to Operator"):
+            tools.ask_agent(forecasting, "operator", "What do we sell?")
+        with self.assertRaisesRegex(ToolError, "cannot ask 'inventory'"):
+            tools.ask_agent(self.operator_ticket(), "inventory", "Stock?")
+        nested = service.issue_ticket(self.project["id"], "operator", depth=1)
         with self.assertRaisesRegex(ToolError, "cannot ask"):
             tools.ask_agent(nested, "forecasting", "Forecast")
 
@@ -132,7 +140,7 @@ class DelegationTests(AgentFixture, unittest.TestCase):
 
 class ApprovalTests(AgentFixture, unittest.TestCase):
     def pending(self):
-        message_id = accounts.add_message(self.account["id"], "assistant", "Shall I ask Forecasting?", None)
+        message_id = accounts.add_message(self.project["id"], "assistant", "Shall I ask Forecasting?", None)
         service.ask_agent(self.operator_ticket(CSV, message_id), "forecasting", "Forecast next week")
         return self.client.get("/api/conversation").json()["requests"][0]["id"]
 
@@ -158,7 +166,7 @@ class ApprovalTests(AgentFixture, unittest.TestCase):
         self.assertEqual(service.resolve_ticket(ticket_in(captured[0]), "calculate_forecast")["attachment"], CSV)
         relay = json.loads(captured[1].content)["messages"][1]["content"]
         self.assertIn("About 450 per day.", relay)
-        self.assertEqual(captured[1].headers["X-Hermes-Session-Id"], f"mula-operator-{self.account['conversation_id']}")
+        self.assertEqual(captured[1].headers["X-Hermes-Session-Id"], f"mula-operator-{self.project_conversation}")
         conversation = self.client.get("/api/conversation").json()
         self.assertEqual(conversation["messages"][-1]["text"], "Forecasting expects about 450 per day.")
         self.assertEqual(conversation["messages"][-1]["note"], "Answer from Forecasting")
@@ -174,7 +182,7 @@ class ApprovalTests(AgentFixture, unittest.TestCase):
         self.assertEqual(self.client.get("/api/conversation").json()["requests"][0]["status"], "failed")
 
     def test_stopped_approval_does_not_leave_the_request_running(self):
-        request = service.start_request(self.account["id"], self.pending())
+        request = service.start_request(self.project["id"], self.pending())
         stream = routes.approved_events(self.account, request)
 
         async def stop_after_first_event():
@@ -192,7 +200,7 @@ class ApprovalTests(AgentFixture, unittest.TestCase):
             self.assertEqual(self.client.get("/api/conversation").json()["requests"][1]["status"], "expired")
             self.assertEqual(self.client.post(f"/api/agents/requests/{stale}/approve").status_code, 409)
         other = self.pending()
-        self.client.post("/api/auth/signup", json={"username": "other", "password": "long-password-123"})
+        self.switch_to_new_account("other")
         self.assertEqual(self.client.post(f"/api/agents/requests/{other}/approve").status_code, 404)
         self.assertEqual(self.client.post(f"/api/agents/requests/{other}/decline").status_code, 404)
         self.assertEqual(self.client.get("/api/conversation").json()["requests"], [])
@@ -225,7 +233,7 @@ class DirectChatTests(AgentFixture, unittest.TestCase):
     def test_messages_from_before_agent_histories_stay_with_the_operator(self):
         # A message written without an agent (as the old database did) belongs to the Operator.
         with accounts.database() as db:
-            db.execute("INSERT INTO messages (account_id, role, text) VALUES (%s, 'user', 'Old question')", (self.account["id"],))
+            db.execute("INSERT INTO messages (project_id, role, text) VALUES (%s, 'user', 'Old question')", (self.project["id"],))
         self.assertEqual(self.client.get("/api/conversation").json()["messages"][0]["text"], "Old question")
         self.assertEqual(self.client.get("/api/agents/forecasting/conversation").json()["messages"], [])
 

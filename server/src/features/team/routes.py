@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from ..auth import accounts
+from ..workspaces.access import current_project
 from ..operator.runtime import HermesError, configured_models
 from ...common import brains
 from . import service
@@ -36,23 +36,23 @@ async def with_brain_statuses(agents: list[dict]) -> list[dict]:
 
 
 @router.get("/api/team")
-async def team(account: dict = Depends(accounts.current_account)):
-    agents = [service.settings(account["id"], agent_id) for agent_id in service.AGENTS]
-    return {"agents": await with_brain_statuses(agents), "layout": service.layout(account["id"])}
+async def team(project: dict = Depends(current_project)):
+    agents = [service.settings(project["id"], agent_id) for agent_id in service.AGENTS]
+    return {"agents": await with_brain_statuses(agents), "layout": service.layout(project["id"])}
 
 
 # Registered before /api/team/{agent_id} so "layout" is never read as an agent id.
 @router.put("/api/team/layout")
-def save_layout(value: service.LayoutInput, account: dict = Depends(accounts.current_account)):
-    return {"layout": service.save_layout(account["id"], value)}
+def save_layout(value: service.LayoutInput, project: dict = Depends(current_project)):
+    return {"layout": service.save_layout(project["id"], value)}
 
 
 @router.delete("/api/team/layout")
-def reset_layout(account: dict = Depends(accounts.current_account)):
-    return {"layout": service.reset_layout(account["id"])}
+def reset_layout(project: dict = Depends(current_project)):
+    return {"layout": service.reset_layout(project["id"])}
 
 
 @router.put("/api/team/{agent_id}")
-async def update(agent_id: str, value: service.SettingsInput, account: dict = Depends(accounts.current_account)):
-    saved = service.save(account["id"], agent_id, value)
+async def update(agent_id: str, value: service.SettingsInput, project: dict = Depends(current_project)):
+    saved = service.save(project["id"], agent_id, value)
     return (await with_brain_statuses([saved]))[0]

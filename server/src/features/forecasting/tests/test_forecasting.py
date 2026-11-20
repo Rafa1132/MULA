@@ -87,7 +87,7 @@ class ForecastApiTests(AccountFixture, unittest.TestCase):
         report = self.client.post("/api/forecasting/run", json=request()).json()
         self.client.post("/api/auth/logout")
         self.assertEqual(self.client.post("/api/forecasting/run", json=request()).status_code, 401)
-        self.client.post("/api/auth/signup", json={"username": "other", "password": "long-password-123"})
+        self.switch_to_new_account("other")
         self.assertIsNone(self.client.get("/api/forecasting/latest").json()["report"])
         self.assertEqual(self.client.post("/api/forecasting/explain", json={"run_id": report["id"]}).status_code, 404)
 
@@ -109,7 +109,7 @@ class ForecastApiTests(AccountFixture, unittest.TestCase):
         self.assertEqual(supplied_report["history_periods"], 30)
         self.assertIn("Use all 30 observations", supplied_report["method_description"])
         self.assertNotIn("parameters", supplied_report)
-        self.assertNotIn(self.account["conversation_id"], captured[0].headers["X-Hermes-Session-Id"])
+        self.assertNotIn(self.project_conversation, captured[0].headers["X-Hermes-Session-Id"])
         self.assertEqual(self.client.get("/api/forecasting/latest").json()["explanation"], "Here is the forecast.")
         self.assertEqual(self.client.get("/api/conversation").json()["messages"], [])
 

@@ -1,6 +1,8 @@
 import time
 import unittest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
+from src.common import config
 from src.features.auth import accounts
 from src.main import app
 from tests.support.account_fixture import AccountFixture
@@ -43,17 +45,46 @@ class AccountTests(AccountFixture, unittest.TestCase):
             self.assertEqual(self.client.post('/api/auth/login', json={'username': 'owner', 'password': 'incorrect-password'}).status_code, 401)
         self.assertEqual(self.client.post('/api/auth/login', json=credentials).status_code, 429)
 
+    def test_strict_rules_by_default_and_relaxed_rules_for_development(self):
+        other = TestClient(app)
+        self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': False})
+        for username, password in (('ab', 'long-password-123'), ('has space', 'long-password-123'), ('valid', 'short')):
+            self.assertEqual(other.post('/api/auth/signup', json={'username': username, 'password': password}).status_code, 422)
+        with patch.object(config, 'MULA_RELAXED_AUTH', True):
+            self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': True})
+            response = other.post('/api/auth/signup', json={'username': ' A b ', 'password': 'x'})
+            self.assertEqual(response.status_code, 201, response.text)
+            self.assertEqual(response.json()['username'], 'a b')
+            # Empty values are still refused, and the password is still hashed.
+            for username, password in (('', 'x'), ('   ', 'x'), ('someone', '')):
+                self.assertEqual(other.post('/api/auth/signup', json={'username': username, 'password': password}).status_code, 422)
+            self.assertEqual(TestClient(app).post('/api/auth/login', json={'username': 'a b', 'password': 'x'}).status_code, 200)
+        with accounts.database() as db:
+            self.assertNotEqual(db.execute("SELECT password_hash FROM accounts WHERE username = 'a b'").fetchone()['password_hash'], 'x')
+
+    def test_relaxed_rules_refuse_to_start_with_secure_cookies(self):
+        import os
+        import subprocess
+        import sys
+        env = {**os.environ, 'MULA_RELAXED_AUTH': 'true', 'LARAS_SECURE_COOKIES': 'true'}
+        result = subprocess.run([sys.executable, '-c', 'import src.common.config'], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('MULA_RELAXED_AUTH is for local development', result.stderr)
+
     def test_history_ownership_and_login_continuity(self):
         second = TestClient(app)
-        second_account = second.post('/api/auth/signup', json={'username': 'second', 'password': 'another-password'}).json()
+        self.switch_to_new_account('second', second)
         with gateway(lambda request: stream_response(answer('Hello owner'))):
             self.assertEqual(self.client.post('/api/agents/operator/chat', json={'message': 'Private business'}).status_code, 200)
-            forbidden = second.post('/api/agents/operator/chat', json={'message': 'hi', 'session_id': self.account['conversation_id']})
+            owner_session = self.client.get('/api/conversation').json()['session_id']
+            forbidden = second.post('/api/agents/operator/chat', json={'message': 'hi', 'session_id': owner_session})
         self.assertEqual(forbidden.status_code, 403)
         self.assertEqual(second.get('/api/conversation').json()['messages'], [])
         saved = self.client.get('/api/conversation').json()
         self.assertEqual([m['text'] for m in saved['messages']], ['Private business', 'Hello owner'])
-        self.assertNotEqual(second_account['conversation_id'], saved['session_id'])
+        self.assertNotEqual(second.get('/api/conversation').json()['session_id'], saved['session_id'])
+        # The second account can't open the owner's project at all.
+        self.assertEqual(second.get('/api/conversation', headers={'X-Mula-Project': self.project['id']}).status_code, 404)
         self.client.post('/api/auth/logout')
         self.client.post('/api/auth/login', json={'username': 'owner', 'password': 'long-password-123'})
         self.assertEqual(self.client.get('/api/conversation').json(), saved)

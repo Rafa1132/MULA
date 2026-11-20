@@ -38,8 +38,8 @@ class OperatorTests(AccountFixture, unittest.TestCase):
         self.assertFalse(result['truncated'])
         request = requests[0]
         # The turn runs in the account's own runtime profile, with that profile's key.
-        self.assertEqual(request.url.path, f'/p/{profiles.profile_name(self.account["id"])}/v1/chat/completions')
-        self.assertEqual(request.headers['Authorization'], 'Bearer ' + profiles.profile_key(self.account['id']))
+        self.assertEqual(request.url.path, f'/p/{profiles.profile_name(self.project["id"])}/v1/chat/completions')
+        self.assertEqual(request.headers['Authorization'], 'Bearer ' + profiles.profile_key(self.project["id"]))
         self.assertNotEqual(request.headers['Authorization'], 'Bearer test-key')
         self.assertEqual(request.headers['X-Hermes-Session-Id'], f'mula-operator-{session}')
         payload = json.loads(request.content)
@@ -56,7 +56,7 @@ class OperatorTests(AccountFixture, unittest.TestCase):
 
     def test_continuation_reuses_identity_without_replaying_history(self):
         requests = []
-        session = self.account["conversation_id"]
+        session = self.project_conversation
 
         def handler(request):
             requests.append(request)
@@ -145,19 +145,18 @@ if __name__ == '__main__':
 
 class OperatorBrainTests(AccountFixture, unittest.TestCase):
     def chat_path(self):
-        return f'/p/{profiles.profile_name(self.account["id"])}/v1/chat/completions'
+        return f'/p/{profiles.profile_name(self.project["id"])}/v1/chat/completions'
 
     def choose(self, brain):
         saved = self.client.put('/api/team/operator', json={
             'prompt': '', 'data': '', 'tools': ['csv_read', 'memory_read', 'memory_write'], 'revision': 0, 'brain': brain,
-            'delegation': 'ask',
         })
         self.assertEqual(saved.status_code, 200, saved.text)
 
     def test_owner_instructions_are_repeated_after_the_message(self):
         saved = self.client.put('/api/team/operator', json={
             'prompt': 'Reply in Indonesian.', 'data': '', 'tools': ['csv_read', 'memory_read', 'memory_write'], 'revision': 0,
-            'brain': 'qwen', 'delegation': 'ask',
+            'brain': 'qwen',
         })
         self.assertEqual(saved.status_code, 200, saved.text)
         requests = []
@@ -173,7 +172,7 @@ class OperatorBrainTests(AccountFixture, unittest.TestCase):
         self.assertIn('Reply in Indonesian.', system['content'])
         self.assertEqual(user['content'], "Hi\n\n(Owner's standing instructions for this reply: Reply in Indonesian.)")
         # The visible chat keeps the owner's own words only.
-        self.assertEqual(accounts.history(self.account['id'])[-2]['text'], 'Hi')
+        self.assertEqual(accounts.history(self.project["id"])[-2]['text'], 'Hi')
 
     def test_default_brain_uses_gateway_default_without_model_lookup(self):
         requests = []

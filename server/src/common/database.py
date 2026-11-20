@@ -99,8 +99,8 @@ def connect(url: str | None = None, schema: str | None = None, autocommit: bool 
                            connect_timeout=CONNECT_TIMEOUT_SECONDS)
 
 
-def migrate(url: str | None = None, schema: str | None = None) -> None:
-    """Bring the schema to the latest Alembic revision. Idempotent."""
+def migrate(url: str | None = None, schema: str | None = None, revision: str = "head") -> None:
+    """Bring the schema to an Alembic revision, the latest by default. Idempotent."""
     if url is None:
         url = DATABASE_URL
     if schema is None:
@@ -113,7 +113,16 @@ def migrate(url: str | None = None, schema: str | None = None) -> None:
     config.set_main_option("script_location", str(MIGRATIONS))
     config.attributes["url"] = url
     config.attributes["schema"] = schema
-    command.upgrade(config, "head")
+    command.upgrade(config, revision)
+
+
+def downgrade(url: str, schema: str, revision: str) -> None:
+    """Take the schema back to an earlier revision; only the SQLite copy script uses this."""
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS))
+    config.attributes["url"] = url
+    config.attributes["schema"] = schema
+    command.downgrade(config, revision)
 
 
 def reachable(url: str | None = None) -> bool:

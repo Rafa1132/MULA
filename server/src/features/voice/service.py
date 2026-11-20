@@ -1,4 +1,6 @@
-"""Temporary, local macOS speech provider. No external service or API key."""
+"""AI voice for /api/speech. One provider for now: macOS `say`, local, with no external service or
+API key. `MULA_SPEECH_PROVIDER=off` refuses voice with a clear message instead (a Linux server
+without a provider yet); chat and captions work either way."""
 
 import asyncio
 from pathlib import Path
@@ -7,13 +9,22 @@ import tempfile
 
 from fastapi import HTTPException
 
+from ...common import config
+
 
 # One bounded synthesis job per process. Reject excess work rather than building
 # an unbounded queue behind the model on a developer's machine.
 _synthesis_lock = asyncio.Lock()
 
 
+def provider_key() -> str:
+    """Names the engine and voice, so audio made once (the welcome) is made again when they change."""
+    return config.MULA_SPEECH_PROVIDER
+
+
 async def synthesize(text: str) -> bytes:
+    if config.MULA_SPEECH_PROVIDER == "off":
+        raise HTTPException(503, "AI voice is switched off on this server. Chat still works.")
     if sys.platform != "darwin":
         raise HTTPException(503, "AI voice currently needs the Mula backend to run on macOS. Chat still works.")
     if _synthesis_lock.locked():

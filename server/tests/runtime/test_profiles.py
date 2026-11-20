@@ -37,6 +37,61 @@ class ProfileDerivationTests(unittest.TestCase):
             profiles.profile_name("../not-an-account")
 
 
+class AgentProfileTests(unittest.TestCase):
+    """Agents other than the Operator get a profile of their own, offering their runtime toolsets."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.home = Path(directory.name) / "hermes"
+        self.home.mkdir()
+        (self.home / ".env").write_text("API_SERVER_KEY=root-key\nMULA_TOOLS_KEY=tools-key\n")
+        for target, value in (("RUNTIME_HOME", self.home), ("KEY_SEED", "test-seed")):
+            patcher = patch.object(profiles, target, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.project_id = str(uuid4())
+
+    def toolset_line(self, folder):
+        import yaml
+        return yaml.safe_load((folder / "config.yaml").read_text())["platform_toolsets"]["api_server"]
+
+    def test_the_operator_keeps_the_project_profile_and_others_get_their_own(self):
+        self.assertEqual(profiles.profile_name(self.project_id, "operator"), profiles.profile_name(self.project_id))
+        self.assertEqual(profiles.profile_key(self.project_id, "operator"), profiles.profile_key(self.project_id))
+        name = profiles.profile_name(self.project_id, "forecasting")
+        self.assertEqual(name, profiles.profile_name(self.project_id) + "-forecasting")
+        self.assertTrue(profiles.PROFILE_ID.match(name))
+        self.assertNotEqual(profiles.profile_key(self.project_id, "forecasting"), profiles.profile_key(self.project_id))
+        # The longest agent id the catalog allows still names a valid profile.
+        self.assertTrue(profiles.PROFILE_ID.match(profiles.profile_name(self.project_id, "a" * 26)))
+
+    def test_each_profile_offers_exactly_its_agents_toolsets(self):
+        operator = profiles.ensure_profile(self.project_id, agent_id="operator", toolsets=["todo"])
+        forecasting = profiles.ensure_profile(self.project_id, agent_id="forecasting", toolsets=["session_search", "todo"])
+        self.assertEqual(self.toolset_line(operator), ["mula", "todo"])
+        self.assertEqual(self.toolset_line(forecasting), ["mula", "session_search", "todo"])
+        self.assertEqual(profiles.env_values(forecasting / ".env")["API_SERVER_KEY"], profiles.profile_key(self.project_id, "forecasting"))
+        self.assertTrue(profiles.profile_memory_is_off(forecasting))
+        # Switching a toolset off takes it out of the profile again.
+        profiles.ensure_profile(self.project_id, agent_id="forecasting")
+        self.assertEqual(self.toolset_line(forecasting), ["mula"])
+
+    def test_unsafe_toolsets_are_never_written(self):
+        for unsafe in (["terminal"], ["todo", "file"], ["hermes-api-server"]):
+            with self.subTest(toolsets=unsafe), self.assertRaises(profiles.ProfileError):
+                profiles.ensure_profile(self.project_id, agent_id="forecasting", toolsets=unsafe)
+        self.assertFalse(profiles.profile_dir(self.project_id, "forecasting").exists())
+
+    def test_refresh_keeps_each_agent_profiles_own_key(self):
+        from scripts import provision_profiles
+        profiles.ensure_profile(self.project_id, agent_id="forecasting", toolsets=["todo"])
+        self.assertEqual(provision_profiles.owner_of(profiles.profile_name(self.project_id, "forecasting")), (self.project_id, "forecasting"))
+        self.assertEqual(provision_profiles.owner_of(profiles.profile_name(self.project_id)), (self.project_id, None))
+        self.assertIsNone(provision_profiles.owner_of(profiles.profile_name(self.project_id) + "-unknown"))
+        self.assertIsNone(provision_profiles.owner_of("mula-not-a-uuid"))
+
+
 class ProfileFilesTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -115,25 +170,25 @@ class ProfileIsolationTests(AccountFixture, unittest.TestCase):
             return stream_response(answer("Hello from your profile."))
         return handler
 
-    def test_each_account_reaches_only_its_own_profile(self):
-        _, other = accounts.create_account("other", "other-long-password")
-        self.account_ids = [self.account["id"], other["id"]]
+    def test_each_project_reaches_only_its_own_profile(self):
+        _, other = self.switch_to_new_account("other", TestClient(app))
+        self.account_ids = [self.project["id"], other["id"]]
         requests = []
         with gateway(self.runtime_like(requests)):
             response = self.client.post("/api/agents/operator/chat", json={"message": "Hi"})
             self.assertEqual(response.status_code, 200, response.text)
             self.assertEqual(response.json()["reply"], "Hello from your profile.")
-        self.assertEqual(requests[0].url.path, f"/p/{profiles.profile_name(self.account['id'])}/v1/chat/completions")
-        # Both profiles exist on disk, each with its own key; a signup provisions it.
+        self.assertEqual(requests[0].url.path, f"/p/{profiles.profile_name(self.project["id"])}/v1/chat/completions")
+        # Both profiles exist on disk, each with its own key; creating a project provisions it.
         for account_id in self.account_ids:
             folder = profiles.profile_dir(account_id)
             self.assertTrue((folder / "config.yaml").is_file())
             self.assertEqual(profiles.env_values(folder / ".env")["API_SERVER_KEY"], profiles.profile_key(account_id))
-        self.assertNotEqual(profiles.profile_key(self.account["id"]), profiles.profile_key(other["id"]))
+        self.assertNotEqual(profiles.profile_key(self.project["id"]), profiles.profile_key(other["id"]))
 
         # One account's key against another's profile is refused, as the runtime does.
         async def cross_call():
-            headers = runtime.request_headers(None, "operator", self.account["id"])
+            headers = runtime.request_headers(None, "operator", self.project["id"])
             # Inside `gateway`, the client already carries the stand-in transport.
             async with httpx.AsyncClient() as client:
                 return await client.get(profiles.profile_base_url("http://runtime", other["id"]) + "/v1/models", headers=headers)
@@ -146,11 +201,10 @@ class ProfileIsolationTests(AccountFixture, unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertIn("not set up", response.json()["detail"])
 
-    def test_sessions_and_memory_stay_with_the_account(self):
+    def test_sessions_and_memory_stay_with_the_project(self):
         self.client.post("/api/memory/entries", json={"target": "business", "fact": "Only the owner should see this supplier note."})
-        TestClient(app).post("/api/auth/signup", json={"username": "second", "password": "second-long-password"})
         other = TestClient(app)
-        other.post("/api/auth/login", json={"username": "second", "password": "second-long-password"})
+        self.switch_to_new_account("second", other)
         self.assertNotIn("supplier note", json.dumps(other.get("/api/memory").json()))
         self.assertEqual(other.post("/api/memory/entries/1/retire").status_code, 404)
 

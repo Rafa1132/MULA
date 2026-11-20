@@ -13,7 +13,8 @@ HEADER = {
     "order": "1",
     "capabilities": "{}",
     "runtime_tools": "[]",
-    "delegates_to": "[]",
+    "runtime_toolsets": "[]",
+    "delegates_to": "{}",
 }
 
 
@@ -55,13 +56,40 @@ class AgentFolderTests(unittest.TestCase):
         self.assertEqual(list(load_catalog(self.folder)), ["zeta", "alpha", "beta"])
 
     def test_delegation_must_name_a_known_agent_and_use_ask_agent(self):
-        self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": "[missing]"}))
+        self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": "{missing: ask}"}))
         self.assertRefused("'missing', which has no file")
-        self.write("helper.md", agent_file({"delegates_to": "[other]"}))
+        self.write("helper.md", agent_file({"delegates_to": "{other: ask}"}))
         self.write("other.md", agent_file())
         self.assertRefused("needs ask_agent")
-        self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": "[helper]"}))
+        self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": "{helper: ask}"}))
         self.assertRefused("cannot delegate to itself")
+
+    def test_links_name_a_default_mode(self):
+        self.write("other.md", agent_file())
+        self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": "{other: none}"}))
+        self.assertEqual(load_catalog(self.folder)["helper"]["delegates_to"], {"other": "none"})
+        for links, fragment in (("[other]", "must be 'agent: mode' lines"), ("{other: maybe}", "must be one of ask, auto, off, none")):
+            with self.subTest(links=links):
+                self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": links}))
+                self.assertRefused(fragment)
+
+    def test_only_safe_runtime_toolsets_can_be_offered(self):
+        self.write("helper.md", agent_file({"runtime_toolsets": "[todo, web]"}))
+        self.assertEqual(load_catalog(self.folder)["helper"]["runtime_toolsets"], ["todo", "web"])
+        for unsafe in ("terminal", "file", "code_execution", "browser", "computer_use", "cronjob", "skills", "delegation"):
+            with self.subTest(toolset=unsafe):
+                self.write("helper.md", agent_file({"runtime_toolsets": f"[{unsafe}]"}))
+                self.assertRefused(f"not {unsafe}")
+
+    def test_agent_ids_fit_a_runtime_profile_name(self):
+        self.write("a" + "b" * 26 + ".md", agent_file())
+        self.assertRefused("at most 26 characters")
+
+    def test_version_changes_with_the_file(self):
+        self.write("helper.md", agent_file())
+        first = load_catalog(self.folder)["helper"]["version"]
+        self.write("helper.md", agent_file(persona="You are a different helper.\n"))
+        self.assertNotEqual(first, load_catalog(self.folder)["helper"]["version"])
 
     def test_refuses_broken_files_with_the_file_name(self):
         cases = [
@@ -69,7 +97,7 @@ class AgentFolderTests(unittest.TestCase):
             ("unclosed", "---\nname: Helper\n", "no closing"),
             ("bad yaml", "---\nname: [unclosed\n---\nHi\n", "not valid YAML"),
             ("missing key", agent_file(drop=("description",)), "missing description"),
-            ("misspelt key", agent_file({"delegate_to": "[]"}), "unknown delegate_to"),
+            ("misspelt key", agent_file({"delegate_to": "{}"}), "unknown delegate_to"),
             ("empty name", agent_file({"name": "''"}), "name must be non-empty"),
             ("boolean order", agent_file({"order": "yes"}), "order must be a whole number"),
             ("unknown tool", agent_file({"runtime_tools": "[shell]"}), "unknown runtime tool shell"),
@@ -105,19 +133,37 @@ class ShippedAgentsTests(unittest.TestCase):
     def test_shipped_agents_load_in_display_order(self):
         catalog = load_catalog()
         self.assertEqual(list(catalog), ["operator", "forecasting"])
-        self.assertEqual(catalog["operator"]["delegates_to"], ["forecasting"])
+        self.assertEqual(catalog["operator"]["delegates_to"], {"forecasting": "ask"})
+        # Forecasting may ask the Operator, but is not connected until the owner connects it.
+        self.assertEqual(catalog["forecasting"]["delegates_to"], {"operator": "none"})
         self.assertEqual(catalog["operator"]["runtime_tools"], frozenset({"ask_agent", "remember"}))
-        self.assertEqual(catalog["forecasting"]["runtime_tools"], frozenset({"calculate_forecast", "latest_forecast"}))
+        self.assertEqual(catalog["forecasting"]["runtime_tools"], frozenset({"ask_agent", "calculate_forecast", "latest_forecast"}))
+        for agent in catalog.values():
+            self.assertEqual(set(agent["runtime_toolsets"]), set(agent_catalog.SAFE_TOOLSETS))
         self.assertTrue(catalog["operator"]["persona"].startswith("You are the Operator AI"))
 
     def test_known_runtime_tools_match_the_tool_server(self):
         from src.features.agents.tools import server
         served = {tool.name for tool in asyncio.run(server.list_tools())}
-        self.assertEqual(served, set(agent_catalog.RUNTIME_TOOLS))
+        self.assertEqual(served, set(agent_catalog.RUNTIME_TOOLS | agent_catalog.ASSISTANT_TOOLS))
+        self.assertFalse(agent_catalog.RUNTIME_TOOLS & agent_catalog.ASSISTANT_TOOLS)
+
+    def test_the_runtime_templates_offer_every_served_tool(self):
+        # The runtime only offers the tools on its include list, so a tool missing there is never seen.
+        import yaml
+        for name in ("config.yaml", "profile.config.yaml"):
+            template = yaml.safe_load((Path(__file__).resolve().parents[2] / "hermes" / name).read_text())
+            include = set(template["mcp_servers"]["mula"]["tools"]["include"])
+            self.assertEqual(include, set(agent_catalog.RUNTIME_TOOLS | agent_catalog.ASSISTANT_TOOLS), name)
+
+    def test_safe_tool_names_match_the_runtime_patch(self):
+        from scripts.apply_hermes_profile import SAFE_TOOL_NAMES
+        names = {name for tools in agent_catalog.SAFE_TOOLSETS.values() for name in tools}
+        self.assertEqual(names, set(SAFE_TOOL_NAMES))
 
     def test_team_api_shape_hides_persona_and_runtime_tools(self):
         from src.features.team import service as team
-        self.assertEqual(set(team.AGENTS["operator"]), {"name", "description", "tools", "delegates_to"})
+        self.assertEqual(set(team.AGENTS["operator"]), {"name", "description", "tools", "delegates_to", "available_toolsets"})
         self.assertEqual(list(team.AGENTS["operator"]["tools"]), ["csv_read", "memory_read", "memory_write"])
 
 

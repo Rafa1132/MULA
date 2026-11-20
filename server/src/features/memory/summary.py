@@ -47,13 +47,13 @@ def render(entries):
     return HEADER + section("business", ordered) + section("owner", ordered)
 
 
-def summary_path(account_id):
-    return store.memory_folder(account_id) / "MEMORY.md"
+def summary_path(project_id):
+    return store.memory_folder(project_id) / "MEMORY.md"
 
 
-def regenerate(account_id, entries):
+def regenerate(project_id, entries):
     text = render(entries)
-    path = summary_path(account_id)
+    path = summary_path(project_id)
     if path.is_symlink():
         raise HTTPException(409, "The memory summary must not be a symbolic link.")
     try:
@@ -72,8 +72,8 @@ def regenerate(account_id, entries):
     return text
 
 
-def current(account_id):
+def current(project_id):
     """The summary for the store as it is now. Always regenerated, so a hand edit never leaks into a prompt."""
-    with store.open_store(account_id) as db:
+    with store.open_store(project_id) as db:
         entries = store.active_entries(db)
-    return regenerate(account_id, entries)
+    return regenerate(project_id, entries)

@@ -100,12 +100,12 @@ class AsyncStreamingTests(unittest.IsolatedAsyncioTestCase):
             patcher = patch.object(profiles, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
-        self.account = {'id': str(uuid4())}
+        self.project = {'id': str(uuid4())}
 
     async def test_first_token_arrives_before_completion_and_close_reaches_upstream(self):
         upstream = GatedStream()
         with gateway(lambda request: httpx.Response(200, stream=upstream, headers={'content-type': 'text/event-stream'})):
-            stream = stream_chat('Instructions', 'Hello', uuid4(), account_id=self.account['id'])
+            stream = stream_chat('Instructions', 'Hello', uuid4(), project_id=self.project["id"])
             first = await asyncio.wait_for(anext(stream), timeout=1)
             self.assertEqual(first, {'type': 'token', 'content': 'Halo 👋'})
             self.assertFalse(upstream.release.is_set())
@@ -115,7 +115,7 @@ class AsyncStreamingTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancellation_while_waiting_closes_upstream(self):
         upstream = GatedStream()
         with gateway(lambda request: httpx.Response(200, stream=upstream, headers={'content-type': 'text/event-stream'})):
-            stream = stream_chat('Instructions', 'Hello', uuid4(), account_id=self.account['id'])
+            stream = stream_chat('Instructions', 'Hello', uuid4(), project_id=self.project["id"])
             await anext(stream)
             pending = asyncio.create_task(anext(stream))
             await asyncio.sleep(0)

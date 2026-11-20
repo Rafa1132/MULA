@@ -1,4 +1,4 @@
-"""Local accounts, opaque sessions and account-owned conversation storage.
+"""Local accounts, opaque sessions and the visible chat history of each project's conversations.
 
 The tables (`accounts`, `sessions`, `messages`, `login_failures`) are defined by the Alembic
 revisions under server/migrations; `database()` is the shared PostgreSQL transaction every
@@ -10,7 +10,7 @@ import secrets
 import time
 from uuid import uuid4
 
-from ...common import profiles
+from ..workspaces import service as workspaces
 from ...common.database import UniqueViolation, database  # noqa: F401  (database is shared through this module)
 
 from fastapi import Cookie, HTTPException
@@ -35,23 +35,11 @@ def create_account(username, password):
         with database() as db:
             db.execute("INSERT INTO accounts (id, username, salt, password_hash, conversation_id) VALUES (%s, %s, %s, %s, %s)",
                        (account_id, username, salt, digest, str(uuid4())))
+            # The account's own workspace, in the same transaction; projects are added from it.
+            workspaces.create_workspace(db, account_id)
     except UniqueViolation as error:
         raise HTTPException(409, "That username is already taken.") from error
-    provision_profile(account_id)
     return authenticate(username, password)
-
-
-def provision_profile(account_id):
-    """Each account gets its own runtime profile, so no runtime state is ever shared."""
-    if not profiles.configured():
-        # Without the seed there is nothing to derive a key from; every agent turn says so.
-        return
-    try:
-        profiles.ensure_profile(account_id)
-    except profiles.ProfileError as error:
-        raise HTTPException(503, str(error)) from error
-    # The gateway finds new profile folders on a 30-second rescan; asking now makes the first turn work.
-    profiles.announce_profile(account_id)
 
 
 def authenticate(username, password):
@@ -103,10 +91,11 @@ def logout(token):
             db.execute("DELETE FROM sessions WHERE token_hash = %s", (token_hash(token),))
 
 
-def add_message(account_id, role, text, note=None, agent_id="operator"):
+# The visible history of a project's conversations: the Operator's, and each agent's direct chat.
+def add_message(project_id, role, text, note=None, agent_id="operator"):
     with database() as db:
-        row = db.execute("INSERT INTO messages (account_id, role, text, note, agent_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                         (account_id, role, text, note, agent_id)).fetchone()
+        row = db.execute("INSERT INTO messages (project_id, role, text, note, agent_id) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                         (project_id, role, text, note, agent_id)).fetchone()
         return row["id"]
 
 
@@ -115,7 +104,7 @@ def save_reply(message_id, text, note):
         db.execute("UPDATE messages SET text = %s, note = %s WHERE id = %s", (text, note, message_id))
 
 
-def history(account_id, agent_id="operator"):
+def history(project_id, agent_id="operator"):
     with database() as db:
-        rows = db.execute("SELECT id, role, text, note FROM messages WHERE account_id = %s AND agent_id = %s ORDER BY id", (account_id, agent_id)).fetchall()
+        rows = db.execute("SELECT id, role, text, note FROM messages WHERE project_id = %s AND agent_id = %s ORDER BY id", (project_id, agent_id)).fetchall()
     return [dict(row) for row in rows]

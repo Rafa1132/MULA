@@ -22,9 +22,12 @@ agent:
   task_completion_guidance: false
   parallel_tool_call_guidance: false
 
-# Agents get only the business tools the Mula backend serves at /mcp
-# (server/src/features/agents/tools.py). Terminal, file, web and delegation
-# tools stay off. The backend checks every call against a per-turn ticket and
+# Agents get the business tools the Mula backend serves at /mcp
+# (server/src/features/agents/tools.py). Each agent's own profile adds the
+# runtime toolsets its owner switched on in My agents, from the safe set in
+# server/src/common/agent_catalog.py (common/profiles.py writes the line
+# below). Terminal, file, browser, code and the runtime's delegation tools
+# stay off. The backend checks every call against a per-turn ticket and
 # the owner's settings, including approval before asking another agent.
 platform_toolsets:
   api_server: [mula]
@@ -37,7 +40,7 @@ mcp_servers:
     trust: full
     timeout: 300
     tools:
-      include: [ask_agent, calculate_forecast, latest_forecast, remember]
+      include: [ask_agent, calculate_forecast, create_project, latest_forecast, remember]
       resources: false
       prompts: false
 tools:

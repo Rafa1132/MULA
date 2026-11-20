@@ -11,7 +11,7 @@ The main chat agent. It authorizes each turn, builds the Operator's context (rol
 5. **Memory retrieval:** if `memory_read` is enabled, retrieve the essential files plus up to 3 keyword matches.
 6. Build the system prompt: the persona in `server/agents/operator.md` + retrieved memory + the owner's extra instructions and reference data + a list of disabled capabilities.
 7. Save the user message and an empty assistant placeholder (note: "Reply interrupted.").
-8. Issue the turn's tool ticket (`features/agents`) and add the `ask_agent` instructions that match the owner's delegation setting.
+8. Issue the turn's tool ticket (`features/agents`) and add the `ask_agent` instructions for the Operator's connections and their modes (`agent_links`).
 9. Send the request to Mula with the brain's alias as `model`, either streamed (NDJSON) or as a single reply. Just before `done`, the stream sends a `request` event for each request the Operator made during the turn; the single reply lists them as `requests`. The `finally` block always saves whatever text arrived.
 
 `GET /api/conversation` returns `{ session_id, messages, requests }`: the visible history and the Operator's requests to other agents.
@@ -47,7 +47,7 @@ Limits are **50 KB, 500 rows, 40 columns, 2,000 characters per cell, and 24,000 
 
 ## Current limits
 
-- The only tool the Operator can call is `ask_agent`, to ask Forecasting (see `features/agents`). CSV reading, memory and `/remember` are still triggered by the application, not chosen by the model. Mula's own memory is off.
+- The Mula tool the Operator can call is `ask_agent`, to ask a connected agent (see `features/agents`). It can also use the runtime toolsets the owner switched on in My agents (Runtime tools), from the safe set only. None of those asks for approval, so a turn never stops on `approval.request` for them. CSV reading, memory and `/remember` are still triggered by the application, not chosen by the model. Mula's own memory is off.
 - The Operator asks no agent other than Forecasting.
 - All accounts share one Hermes profile; conversations are kept apart only by the session header.
 - CSV rows live only in Hermes's conversation history and can be lost when Hermes compresses older messages.

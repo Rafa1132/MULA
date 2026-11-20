@@ -14,6 +14,10 @@ from .features.memory.routes import router as memory_router
 from .features.team.routes import router as team_router
 from .features.forecasting.routes import router as forecasting_router
 from .features.agents.routes import router as agents_router
+from .features.workspaces.routes import router as workspaces_router
+from .features.orchestrator.routes import router as orchestrator_router
+from .features.a2a.routes import router as a2a_router
+from .features.acp.routes import router as acp_router
 from .features.agents.tools import gateway as tool_gateway
 
 
@@ -46,8 +50,13 @@ app.include_router(operator_router)
 app.include_router(agents_router)
 app.include_router(voice_router)
 app.include_router(memory_router)
+# Before the team router: /api/team/tasks and the card and key routes are its neighbours.
+app.include_router(a2a_router)
+app.include_router(acp_router)
 app.include_router(team_router)
 app.include_router(forecasting_router)
+app.include_router(workspaces_router)
+app.include_router(orchestrator_router)
 # Agent tools for the Mula runtime. The Next.js proxy never forwards /mcp, and every request needs MULA_TOOLS_KEY.
 app.mount("/mcp", tool_gateway)
 

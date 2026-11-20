@@ -33,6 +33,10 @@ class ProvisionProfilesTests(DatabaseFixture, unittest.TestCase):
             for index, account_id in enumerate(self.ids):
                 db.execute("INSERT INTO accounts (id, username, salt, password_hash, conversation_id) VALUES (%s, %s, 'salt', 'hash', %s)",
                            (account_id, f"owner{index}", str(uuid4())))
+                # Each account's first project, as migration 0002 makes it: the project id is the account id.
+                workspace_id = str(uuid4())
+                db.execute("INSERT INTO workspaces (id, owner_account_id) VALUES (%s, %s)", (workspace_id, account_id))
+                db.execute("INSERT INTO projects (id, workspace_id, conversation_id) VALUES (%s, %s, %s)", (account_id, workspace_id, str(uuid4())))
         for module, name, value in ((provision_profiles, "BACKEND", self.backend), (provision_profiles, "RUNTIME_HOME", self.home)):
             patcher = patch.object(module, name, value)
             patcher.start()
@@ -51,14 +55,14 @@ class ProvisionProfilesTests(DatabaseFixture, unittest.TestCase):
     def test_dry_run_reports_without_writing(self):
         before = (self.backend / ".env.hermes").read_text()
         output = self.run_script()
-        self.assertIn("Accounts: 2. Without a profile: 2.", output)
+        self.assertIn("Projects: 2. Without a profile: 2.", output)
         self.assertIn("seed in server/.env.hermes: missing", output)
         self.assertIn("multiplex_profiles: off", output)
         self.assertEqual((self.backend / ".env.hermes").read_text(), before)
         self.assertEqual((self.home / "config.yaml").read_text(), CONFIG)
         self.assertFalse((self.home / "profiles").exists())
 
-    def test_apply_writes_seed_flag_and_one_profile_per_account(self):
+    def test_apply_writes_seed_flag_and_one_profile_per_project(self):
         output = self.run_script("--apply")
         seed = profiles.env_values(self.backend / ".env.hermes")["MULA_PROFILE_KEY_SEED"]
         self.assertGreaterEqual(len(seed), 32)

@@ -25,7 +25,7 @@ The installer downloads the pinned upstream checkout into `.runtime/hermes-sourc
 
 The supplied profile selects `huihui_ai/qwen3-abliterated:latest` through `MULA_MODEL_BASE_URL` (default `http://127.0.0.1:11434/v1`) with the observed 40,960-token window.
 
-Upstream Hermes enforces a 64,000-token startup minimum. `scripts/apply_hermes_profile.py` applies a small, reproducible exception against the pinned source revision. It allows only the explicitly enabled `agent.mula_compact_operator` API-server profile, the selected Qwen model, windows between 8,192 and 40,960, and at most five tools, all of them Mula's own (`mcp__mula__*`). The same exception covers the check upstream repeats before each request that offers tools (`_ollama_context_limit_error`). Terminal, file, web or any other server's tools, other models and other platforms all keep the upstream check. This is a local modification to Hermes, not an upstream configuration option.
+Upstream Hermes enforces a 64,000-token startup minimum. `scripts/apply_hermes_profile.py` applies a small, reproducible exception against the pinned source revision. It allows only the explicitly enabled `agent.mula_compact_operator` API-server profile, the selected Qwen model, windows between 8,192 and 40,960, and at most twelve tools, each either Mula's own (`mcp__mula__*`) or one from the safe runtime toolsets an owner can switch on in My agents (`web_search`, `web_extract`, `vision_analyze`, `image_generate`, `todo_list`, `session_search`). The same exception covers the check upstream repeats before each request that offers tools (`_ollama_context_limit_error`). Terminal, file, browser, code or any other server's tools, other models and other platforms all keep the upstream check. `scripts/start_hermes.sh` applies the patch at every start, and accepts the previous version of it, so a restart upgrades it. This is a local modification to Hermes, not an upstream configuration option.
 
 The patch is applied during install and startup. It checks the revision, preserves unrelated edits, and refuses unexpected source changes. Keep using `start_hermes.sh`; launching an unpatched Hermes installation directly will retain the original minimum.
 
@@ -177,14 +177,14 @@ It writes a fresh shared key to `server/.env.hermes` and `.runtime/hermes/.env`,
 - `src/features/operator/routes.py`: chat routes and account-owned conversation routing.
 - `src/features/agents/`: agent personas, tickets, requests between agents, direct agent chat and the `/mcp` tool server.
 - `scripts/connect_agents.py`: connects an existing runtime profile to the agent tools.
-- `src/common/profiles.py`: one runtime profile per account, with derived names and keys; `src/common/runtime_control.py`: asks the running gateway to serve a new profile now.
+- `src/common/profiles.py`: one runtime profile per project, with derived names and keys; `src/common/runtime_control.py`: asks the running gateway to serve a new profile now.
 - `scripts/provision_profiles.py`: gives existing accounts their profiles; `scripts/migrate_memory_entries.py`: imports the old memory files.
 - `src/features/memory/`: the append-only memory store, its pipeline and the summary.
-- `src/features/voice/`: authenticated speech routes, local TTS service and tests.
-- `hermes/config.yaml`: template for the root runtime profile; `hermes/profile.config.yaml`: template for each account's profile.
+- `src/features/voice/`: authenticated speech routes, local TTS service, the cached spoken welcome and tests; `scripts/generate_welcome_audio.py` makes the welcome ahead of time.
+- `hermes/config.yaml`: template for the root runtime profile; `hermes/profile.config.yaml`: template for each project's profile.
 - `.runtime/hermes`: private runtime configuration and durable Hermes state (ignored); `.runtime/hermes/profiles/mula-<account>/`: the account profiles.
 
-Mula runs two agents, Operator and Forecasting. The API platform has only Mula's own tools, the CLI has none, and the runtime's own cross-chat memory is off everywhere; Mula's memory store takes its place. Upstream delegation, terminal, file and web toolsets stay off; Mula's agents ask each other only through `ask_agent` and the owner's approval setting. Adding Inventory or Procurement requires specialist instructions, scoped business tools and tenant permissions first. Keep business records in the application database rather than treating model memory as the source of truth.
+Mula runs two agents, Operator and Forecasting. The API platform has only Mula's own tools, the CLI has none, and the runtime's own cross-chat memory is off everywhere; Mula's memory store takes its place. Upstream delegation, terminal, file and web toolsets stay off; Mula's agents ask each other only through `ask_agent` and the owner's approval setting. The workspace assistant has one tool, `create_project`, which only proposes; the owner creates the project with a button. Both runtime templates list every tool in `tools.include`; an install made before this tool existed needs `server/.venv/bin/python server/scripts/connect_agents.py` once so the root profile's list includes it (project profiles are rewritten from the template on their own). Adding Inventory or Procurement requires specialist instructions, scoped business tools and tenant permissions first. Keep business records in the application database rather than treating model memory as the source of truth.
 
 ## Checks
 
@@ -198,12 +198,12 @@ Tests need a reachable PostgreSQL: `MULA_TEST_DATABASE_URL`, default `postgresql
 
 ### Simple accounts
 
-Create an account through the UI with a 3–40 character username and a 10–128 character password. Usernames are case-insensitive. The first version has one workspace per account, with no invitations, password reset or employee roles.
+Create an account through the UI with a 3–40 character username and a 10–128 character password. Usernames are case-insensitive. The development launcher turns on `MULA_RELAXED_AUTH`, which accepts any non-empty username and password (still hashed); see `src/features/auth/README.md`. Each account has one workspace holding its projects (`src/features/workspaces/README.md`) and its own assistant with onboarding (`src/features/orchestrator/README.md`), with no invitations, password reset or employee roles yet.
 
 - `POST /api/auth/signup` and `/api/auth/login`: username/password JSON, returning public account information and an HttpOnly, SameSite=Strict cookie.
 - `GET /api/auth/me`: current account; 401 if signed out or expired.
 - `POST /api/auth/logout`: revokes the session and clears the cookie.
-- `GET /api/conversation`: only the signed-in account’s saved chat.
+- `GET /api/conversation`: the saved chat of the project in `X-Mula-Project`, only for a member of that project.
 
 Passwords use salted scrypt hashes. Opaque random sessions are stored as SHA-256 hashes and expire after seven days. Failed login attempts are limited to five per username per 15 minutes. The frontend proxy checks mutation origins and forwards private cookies server-side. Account creation remains open in this local first version.
 
@@ -211,7 +211,7 @@ Accounts and visible history live in the PostgreSQL database; back it up with `p
 
 ## Database
 
-The application database is PostgreSQL (`src/common/database.py`): accounts, login sessions, chat history, agent settings, map positions, forecast runs, tool tickets and agent requests. `MULA_DATABASE_URL` in `server/.env.hermes` names it. The backend runs the Alembic migrations in `migrations/` at startup and refuses to start without the URL or with an unreachable server. Each account's memory store stays a SQLite file under `.runtime/workspaces/` (see `docs/memory-and-sqlite.md`); `MULA_DATA_DIR` moves that folder.
+The application database is PostgreSQL (`src/common/database.py`): accounts, login sessions, workspaces and projects with their members, and per project the chat history, agent settings, map positions, forecast runs, tool tickets and agent requests. `MULA_DATABASE_URL` in `server/.env.hermes` names it. The backend runs the Alembic migrations in `migrations/` at startup and refuses to start without the URL or with an unreachable server. Each account's memory store stays a SQLite file under `.runtime/workspaces/` (see `docs/memory-and-sqlite.md`); `MULA_DATA_DIR` moves that folder.
 
 Two ways to run PostgreSQL locally:
 
@@ -223,6 +223,8 @@ Inspect it read-only:
 ```sh
 psql "$(grep ^MULA_DATABASE_URL= server/.env.hermes | cut -d= -f2-)" -c '\dt'
 ```
+
+Back up before a start that applies a new revision: `pg_dump --no-owner "$URL" > .runtime/backups/mula-<date>.sql` (keep the file private; it holds password hashes and chat history). Revision `0002_workspaces_projects` renames each business table's `account_id` to `project_id` and gives every existing account a workspace and one project with the account's id.
 
 Schema changes are new revisions under `migrations/versions/`, applied by the backend at the next start, or by hand with `server/.venv/bin/alembic -c server/alembic.ini upgrade head` (it needs `MULA_DATABASE_URL` in the environment).
 
@@ -239,24 +241,24 @@ server/.venv/bin/python server/scripts/migrate_sqlite_to_postgres.py --apply    
 
 The script opens the file read-only and never changes it. It copies every table in one transaction, keeps message ids, and compares row counts on both sides; a difference exits with status 1. It refuses to write into tables that already hold rows unless you add `--replace`. The leftover `memory_*` tables from the old memory service are listed and not copied. Keep the SQLite file until you have checked the app on PostgreSQL; until then, rolling back is checking out the previous commit. After that, back up with `pg_dump -Fc mula > mula.dump`.
 
-## Account profiles and memory
+## Project profiles and memory
 
-Each account has its own runtime profile at `.runtime/hermes/profiles/mula-<account>/`, so runtime sessions, config and secrets are never shared between owners. The root profile's config has `gateway.multiplex_profiles: true`, and the backend sends each turn to `/p/<profile>/v1/chat/completions` with that profile's own `API_SERVER_KEY`, derived from `MULA_PROFILE_KEY_SEED` in `server/.env.hermes` (`src/common/profiles.py`); nothing per account is stored or logged. A profile reads only its own `.env`, so it carries a copy of `MULA_TOOLS_KEY` and, when those brains are on, `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY`; `connect_agents.py`, `enable_claude.py` and `enable_openrouter.py` refresh every profile after changing those. The profile config comes from `hermes/profile.config.yaml` and keeps the runtime's memory off; the backend refuses to start if any profile has it on.
+Each project has its own runtime profile at `.runtime/hermes/profiles/mula-<project>/`, so runtime sessions, config and secrets are never shared between projects or owners. A project made from an account before projects existed has the account's id, so it kept its profile. The root profile's config has `gateway.multiplex_profiles: true`, and the backend sends each turn to `/p/<profile>/v1/chat/completions` with that profile's own `API_SERVER_KEY`, derived from `MULA_PROFILE_KEY_SEED` in `server/.env.hermes` (`src/common/profiles.py`); nothing per account is stored or logged. A profile reads only its own `.env`, so it carries a copy of `MULA_TOOLS_KEY` and, when those brains are on, `ANTHROPIC_API_KEY` and `OPENROUTER_API_KEY`; `connect_agents.py`, `enable_claude.py` and `enable_openrouter.py` refresh every profile after changing those. The profile config comes from `hermes/profile.config.yaml` and keeps the runtime's memory off; the backend refuses to start if any profile has it on.
 
-The gateway finds a new profile folder on its own only every 30 seconds, and a turn sent before that fails inside the gateway with `profile_mismatch`. So the backend talks to the gateway's control socket (`gateway.sock` in the runtime home, or the path in `gateway.sock.path`; `src/common/runtime_control.py`): signup asks for a `rescan-profiles`, and before every turn `profiles.ensure_served` checks `gateway_state.json`, asks for a rescan when the profile is missing, and refuses the turn with "Try again in a moment" only if a running gateway still does not serve it after 12 seconds. When no gateway answers, the turn is sent as before and fails on its own connection error. Nothing is written for an account whose key cannot be derived; a missing `MULA_PROFILE_KEY_SEED` leaves no half profile behind.
+The gateway finds a new profile folder on its own only every 30 seconds, and a turn sent before that fails inside the gateway with `profile_mismatch`. So the backend talks to the gateway's control socket (`gateway.sock` in the runtime home, or the path in `gateway.sock.path`; `src/common/runtime_control.py`): creating a project asks for a `rescan-profiles`, and before every turn `profiles.ensure_served` checks `gateway_state.json`, asks for a rescan when the profile is missing, and refuses the turn with "Try again in a moment" only if a running gateway still does not serve it after 12 seconds. When no gateway answers, the turn is sent as before and fails on its own connection error. Nothing is written for a project whose key cannot be derived; a missing `MULA_PROFILE_KEY_SEED` leaves no half profile behind.
 
-Profiles are written on signup. For an existing installation:
+Profiles are written when a project is created. For an existing installation:
 
 ```sh
 server/.venv/bin/python server/scripts/connect_agents.py            # adds the remember tool to the root profile
-server/.venv/bin/python server/scripts/provision_profiles.py --apply # seed, flag and one profile per account
+server/.venv/bin/python server/scripts/provision_profiles.py --apply # seed, flag and one profile per project
 server/.venv/bin/python server/scripts/migrate_memory_entries.py --apply   # old Markdown memory → the store
 ./run.sh
 ```
 
 Both scripts report without `--apply`, and neither moves or deletes anything. Runtime sessions start fresh in the new profiles; the visible chat history in the application database is unchanged.
 
-Memory itself is an append-only SQLite store per account with a regenerated `MEMORY.md` summary; the Operator saves through `remember`, the owner through `/remember` or the Memory page, all through one pipeline. See `src/features/memory/README.md` and `docs/memory-and-sqlite.md`.
+Memory itself is an append-only SQLite store per project with a regenerated `MEMORY.md` summary; the Operator saves through `remember`, the owner through `/remember` or the Memory page, all through one pipeline. See `src/features/memory/README.md` and `docs/memory-and-sqlite.md`.
 
 Live validation after the compact-profile change: Qwen replied through Hermes and a second turn recalled a shop name using the same session UUID. Automated backend checks also verify that tools, other models and other platforms retain the upstream minimum. This validates short conversation execution; it is not a long-context quality or throughput benchmark.
 

@@ -1,4 +1,5 @@
 import json
+import time
 from contextlib import aclosing
 from uuid import UUID, uuid5
 
@@ -7,9 +8,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..auth import accounts
+from ..workspaces.access import current_project
 from ..operator.csv_files import CsvFile, prepare_csv
 from ..operator.routes import operator_events
 from ..operator.runtime import HermesError, stream_chat
+from ..forecasting import runs
 from ..team import service as team
 from ...common import brains
 from . import service
@@ -40,9 +43,9 @@ def direct_agent(agent_id):
     return agent_id
 
 
-def direct_session(account, agent_id):
-    # One ongoing runtime session per account and agent, separate from the Operator's.
-    return uuid5(UUID(account["conversation_id"]), "agent:" + agent_id)
+def direct_session(project, agent_id):
+    # One ongoing runtime session per project and agent, separate from the Operator's.
+    return uuid5(UUID(project["conversation_id"]), "agent:" + agent_id)
 
 
 def event(payload):
@@ -50,45 +53,65 @@ def event(payload):
 
 
 @router.get("/api/agents/{agent_id}/conversation")
-def agent_conversation(agent_id: str, account: dict = Depends(accounts.current_account)):
+def agent_conversation(agent_id: str, project: dict = Depends(current_project)):
     direct_agent(agent_id)
-    return {"messages": accounts.history(account["id"], agent_id)}
+    return {"messages": accounts.history(project["id"], agent_id), "requests": service.conversation_requests(project["id"], agent_id)}
 
 
 @router.post("/api/agents/{agent_id}/chat")
-async def chat_with_agent(agent_id: str, request: AgentChatRequest, account: dict = Depends(accounts.current_account)):
+async def chat_with_agent(agent_id: str, request: AgentChatRequest, project: dict = Depends(current_project)):
     direct_agent(agent_id)
-    config = team.settings(account["id"], agent_id)
+    return agent_turn(project, agent_id, request, direct_session(project, agent_id))
+
+
+def agent_turn(project, agent_id, request: AgentChatRequest, session_id, client_note=None):
+    """One turn in an agent's own chat: from My agents, or from a connected client (features/acp).
+
+    A client turn (`client_note` set) is saved in the same history with that note and cannot ask
+    other agents, as in operator_turn.
+    """
+    via_client = client_note is not None
+    config = team.settings(project["id"], agent_id)
     message = request.message
     user_note = None
     if request.csv_file is not None:
         # Validates the file now, so a bad CSV fails before anything is saved.
         _, user_note = prepare_csv(request.csv_file)
         message += "\n\n" + service.csv_preview(request.csv_file)
-    accounts.add_message(account["id"], "user", request.message, user_note, agent_id)
-    reply_id = accounts.add_message(account["id"], "assistant", "", "Reply interrupted.", agent_id)
-    token = service.issue_ticket(account["id"], agent_id, request.csv_file, message_id=reply_id)
-    system_prompt = service.system_prompt(agent_id, config, token)
+    saved_note = join_notes(client_note, user_note)
+    accounts.add_message(project["id"], "user", request.message, saved_note, agent_id)
+    reply_id = accounts.add_message(project["id"], "assistant", "", "Reply interrupted.", agent_id)
+    depth = 0
+    if via_client:
+        # Depth 1 makes ask_agent refuse, as for a turn that answers another agent's request.
+        depth = 1
+    token = service.issue_ticket(project["id"], agent_id, request.csv_file, message_id=reply_id, depth=depth)
+    system_prompt = service.system_prompt(agent_id, config, token, via_client)
     message += team.instructions_reminder(config)
     model = brains.alias_for(config["brain"])
-    return StreamingResponse(agent_events(account["id"], agent_id, system_prompt, message, direct_session(account, agent_id), model, reply_id, user_note),
+    return StreamingResponse(agent_events(project["id"], agent_id, system_prompt, message, session_id, model, reply_id, user_note, token,
+                                          toolsets=config["runtime_toolsets"]),
                              media_type="application/x-ndjson", headers=STREAM_HEADERS)
 
 
-async def agent_events(account_id, agent_id, system_prompt, message, session_id, model, reply_id, user_note):
+async def agent_events(project_id, agent_id, system_prompt, message, session_id, model, reply_id, user_note, ticket=None, done_note=None, toolsets=()):
     parts = []
     note = "Reply interrupted."
     try:
         if user_note:
             yield event({"type": "attachment", "note": user_note})
-        async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id, account_id=account_id)) as events:
+        async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id, project_id=project_id, toolsets=toolsets)) as events:
             async for item in events:
                 if item["type"] == "token":
                     parts.append(item["content"])
                 if item["type"] == "done":
-                    note = None
+                    note = done_note
                     if item.get("truncated"):
-                        note = "Reply reached its length limit."
+                        note = join_notes(note, "Reply reached its length limit.")
+                    # Before "done", as in the Operator's chat: clients stop reading once the reply has finished.
+                    if ticket is not None:
+                        for agent_request in service.requests_for_ticket(ticket):
+                            yield event({"type": "request", "request": agent_request})
                 yield event(item)
     except HermesError as error:
         yield event({"type": "error", "detail": str(error), "status_code": error.status_code})
@@ -96,11 +119,11 @@ async def agent_events(account_id, agent_id, system_prompt, message, session_id,
         accounts.save_reply(reply_id, "".join(parts), note)
 
 
-def pending_request(account, request_id):
-    """Claim a pending request for this account, or explain why it can't run."""
-    request = service.start_request(account["id"], request_id)
+def pending_request(project, request_id):
+    """Claim a pending request in this project, or explain why it can't run."""
+    request = service.start_request(project["id"], request_id)
     if request is None:
-        raise HTTPException(404, "This request was not found in your account.")
+        raise HTTPException(404, "This request was not found in this project.")
     if request["status"] == "expired":
         raise HTTPException(409, "This request expired. Ask the Operator again.")
     if not request["claimed"]:
@@ -109,24 +132,25 @@ def pending_request(account, request_id):
 
 
 @router.post("/api/agents/requests/{request_id}/approve")
-async def approve_request(request_id: str, account: dict = Depends(accounts.current_account)):
-    request = pending_request(account, request_id)
-    return StreamingResponse(approved_events(account, request), media_type="application/x-ndjson", headers=STREAM_HEADERS)
+async def approve_request(request_id: str, project: dict = Depends(current_project)):
+    request = pending_request(project, request_id)
+    return StreamingResponse(approved_events(project, request), media_type="application/x-ndjson", headers=STREAM_HEADERS)
 
 
-async def approved_events(account, request):
-    """Run the approved agent, then have the Operator relay its answer in the conversation."""
+async def approved_events(project, request):
+    """Run the approved agent, then have the agent that asked relay its answer in its own chat."""
     caller = team.AGENTS[request["from_agent"]]["name"]
     target = request["to_name"]
     answered = False
+    started = int(time.time())
     try:
         yield event({"type": "request", "request": public(request)})
         answer, truncated = await service.answer_as(
-            account["id"], request["to_agent"], service.delegated_message(caller, request["question"]),
-            service.request_session(account["id"], request["id"]), request["attachment"])
+            project["id"], request["to_agent"], service.delegated_message(caller, request["question"]),
+            service.request_session(project["id"], request["id"]), request["attachment"])
         answered = True
     except HermesError as error:
-        yield event({"type": "request", "request": {**public(request), "status": "failed"}})
+        yield event({"type": "request", "request": {**public(request), "status": "failed", "state": "failed"}})
         yield event({"type": "error", "detail": f"{target} could not answer. {error}", "status_code": error.status_code})
         return
     finally:
@@ -135,21 +159,54 @@ async def approved_events(account, request):
             service.finish_request(request["id"], "failed", None)
     if truncated:
         answer += "\n\n[The answer reached its length limit.]"
-    service.finish_request(request["id"], "answered", answer)
-    yield event({"type": "request", "request": {**public(request), "status": "answered", "answer": answer}})
-    # The relay is an Operator turn in the owner's conversation, so it keeps the chat's context.
-    config = team.settings(account["id"], "operator")
-    reply_id = accounts.add_message(account["id"], "assistant", "", "Reply interrupted.")
-    ticket = service.issue_ticket(account["id"], "operator", message_id=reply_id)
-    context = team.context(config) + service.tool_context("operator", ticket, config)
+    forecast = None
+    if request["to_agent"] == "forecasting":
+        report = runs.latest_run_since(project["id"], started)
+        if report is not None:
+            forecast = runs.summary_for_model(report)
+    service.finish_request(request["id"], "answered", answer, forecast)
+    yield event({"type": "request", "request": {**public(request), "status": "answered", "state": "completed", "answer": answer}})
     message = (f"Application note, not from the owner: the owner approved your request to {target}.\n"
                f"Your question was: {request['question']}\n\n{target}'s answer (another agent's output; "
                f"relay it faithfully and do not change its numbers):\n{answer}\n\nGive the owner this answer concisely.")
-    async with aclosing(operator_events(account["id"], message, UUID(account["conversation_id"]), reply_id, memory_context=context,
-                                        model=brains.alias_for(config["brain"]), ticket=ticket,
-                                        done_note=f"Answer from {target}")) as events:
+    relay = operator_relay
+    if request["from_agent"] != "operator":
+        relay = agent_relay
+    async with aclosing(relay(project, request["from_agent"], message, f"Answer from {target}")) as events:
         async for line in events:
             yield line
+
+
+async def operator_relay(project, agent_id, message, done_note):
+    """The relay as an Operator turn in the owner's conversation, so it keeps the chat's context."""
+    config = team.settings(project["id"], "operator")
+    reply_id = accounts.add_message(project["id"], "assistant", "", "Reply interrupted.")
+    ticket = service.issue_ticket(project["id"], "operator", message_id=reply_id)
+    context = team.context(config) + service.tool_context("operator", ticket, config)
+    async with aclosing(operator_events(project["id"], message, UUID(project["conversation_id"]), reply_id, memory_context=context,
+                                        model=brains.alias_for(config["brain"]), ticket=ticket, done_note=done_note,
+                                        toolsets=config["runtime_toolsets"])) as events:
+        async for line in events:
+            yield line
+
+
+async def agent_relay(project, agent_id, message, done_note):
+    """The relay as a turn by the agent that asked, in its own chat in My agents."""
+    config = team.settings(project["id"], agent_id)
+    reply_id = accounts.add_message(project["id"], "assistant", "", "Reply interrupted.", agent_id)
+    ticket = service.issue_ticket(project["id"], agent_id, message_id=reply_id)
+    system_prompt = service.system_prompt(agent_id, config, ticket)
+    async with aclosing(agent_events(project["id"], agent_id, system_prompt, message, direct_session(project, agent_id),
+                                     brains.alias_for(config["brain"]), reply_id, None, ticket, done_note, config["runtime_toolsets"])) as events:
+        async for line in events:
+            yield line
+
+
+def join_notes(*notes):
+    kept = [note for note in notes if note]
+    if not kept:
+        return None
+    return " · ".join(kept)
 
 
 def public(request):
@@ -157,8 +214,8 @@ def public(request):
 
 
 @router.post("/api/agents/requests/{request_id}/decline")
-def decline_request(request_id: str, account: dict = Depends(accounts.current_account)):
-    request = service.decline_request(account["id"], request_id)
+def decline_request(request_id: str, project: dict = Depends(current_project)):
+    request = service.decline_request(project["id"], request_id)
     if request is None:
-        raise HTTPException(404, "This request was not found in your account.")
+        raise HTTPException(404, "This request was not found in this project.")
     return {"request": request}

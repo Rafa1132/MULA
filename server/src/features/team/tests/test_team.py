@@ -12,25 +12,25 @@ class TeamTests(AccountFixture, unittest.TestCase):
     def test_only_real_agents_and_persistent_settings(self):
         agents = self.client.get("/api/team").json()["agents"]
         self.assertEqual([agent["id"] for agent in agents], ["operator", "forecasting"])
-        saved = self.client.put("/api/team/operator", json={"prompt": "Be brief", "data": "We sell tea", "tools": ["csv_read"], "revision": 0, "brain": "qwen", "delegation": "ask"})
+        saved = self.client.put("/api/team/operator", json={"prompt": "Be brief", "data": "We sell tea", "tools": ["csv_read"], "revision": 0, "brain": "qwen"})
         self.assertEqual(saved.status_code, 200, saved.text)
         self.assertEqual(saved.json()["revision"], 1)
         self.assertEqual(self.client.get("/api/team").json()["agents"][0], saved.json())
-        self.assertEqual(self.client.put("/api/team/operator", json={"prompt": "Lost update", "data": "", "tools": [], "revision": 0, "brain": "qwen", "delegation": "ask"}).status_code, 409)
+        self.assertEqual(self.client.put("/api/team/operator", json={"prompt": "Lost update", "data": "", "tools": [], "revision": 0, "brain": "qwen"}).status_code, 409)
 
     def test_isolation_and_allowlist(self):
-        payload = {"prompt": "Private", "data": "", "tools": ["shell"], "revision": 0, "brain": "qwen", "delegation": "ask"}
+        payload = {"prompt": "Private", "data": "", "tools": ["shell"], "revision": 0, "brain": "qwen"}
         self.assertEqual(self.client.put("/api/team/operator", json=payload).status_code, 422)
         payload["tools"] = []
         self.assertEqual(self.client.put("/api/team/inventory", json=payload).status_code, 404)
         self.assertEqual(self.client.put("/api/team/operator", json=payload).status_code, 200)
         self.client.post("/api/auth/logout")
         self.assertEqual(self.client.get("/api/team").status_code, 401)
-        self.client.post("/api/auth/signup", json={"username": "other", "password": "long-password-123"})
+        self.switch_to_new_account("other")
         self.assertEqual(self.client.get("/api/team").json()["agents"][0]["prompt"], "")
 
     def test_operator_tools_are_enforced_and_prompt_reaches_gateway(self):
-        self.client.put("/api/team/operator", json={"prompt": "Use Indonesian", "data": "Our shop sells tea", "tools": [], "revision": 0, "brain": "qwen", "delegation": "ask"})
+        self.client.put("/api/team/operator", json={"prompt": "Use Indonesian", "data": "Our shop sells tea", "tools": [], "revision": 0, "brain": "qwen"})
         self.assertEqual(self.client.post("/api/agents/operator/chat", json={"message": "hi", "csv_file": {"name": "x.csv", "content": "x\n1"}}).status_code, 403)
         self.assertEqual(self.client.post("/api/agents/operator/chat", json={"message": "/remember A fact"}).status_code, 403)
         requests = []
@@ -54,8 +54,6 @@ def models_response(*aliases):
 class BrainSettingsTests(AccountFixture, unittest.TestCase):
     def save(self, agent_id, **changes):
         payload = {"prompt": "", "data": "", "tools": [], "revision": 0, **changes}
-        if agent_id == "operator":
-            payload.setdefault("delegation", "ask")
         return self.client.put(f"/api/team/{agent_id}", json=payload)
 
     def test_every_agent_defaults_to_local_brain_and_lists_choices(self):
@@ -100,37 +98,69 @@ class BrainSettingsTests(AccountFixture, unittest.TestCase):
             saved = self.save("operator", brain="qwen").json()
         self.assertEqual(saved["available_brains"]["claude-haiku"]["status"], "needs_setup")
 
-    def test_settings_saved_before_brains_and_delegation_get_the_defaults(self):
-        # Rows copied from the old database carry NULL for brain and delegation.
+    def test_settings_saved_before_brains_get_the_defaults(self):
+        # Rows copied from the old database carry NULL for brain.
         with accounts.database() as db:
-            db.execute("INSERT INTO agent_settings (account_id, agent_id, prompt, data, tools, revision, brain, delegation) VALUES (%s, 'operator', 'Old prompt', '', '[]'::jsonb, 1, NULL, NULL)",
-                       (self.account["id"],))
+            db.execute("INSERT INTO agent_settings (project_id, agent_id, prompt, data, tools, revision, brain) VALUES (%s, 'operator', 'Old prompt', '', '[]'::jsonb, 1, NULL)",
+                       (self.project["id"],))
         operator = self.client.get("/api/team").json()["agents"][0]
-        self.assertEqual((operator["prompt"], operator["brain"], operator["delegation"]), ("Old prompt", DEFAULT_BRAIN, "ask"))
-        saved = self.save("operator", brain="claude-haiku", revision=1, delegation="auto").json()
-        self.assertEqual((saved["brain"], saved["delegation"]), ("claude-haiku", "auto"))
+        self.assertEqual((operator["prompt"], operator["brain"], operator["links"]), ("Old prompt", DEFAULT_BRAIN, {"forecasting": "ask"}))
+        saved = self.save("operator", brain="claude-haiku", revision=1, links={"forecasting": "auto"}).json()
+        self.assertEqual((saved["brain"], saved["links"]), ("claude-haiku", {"forecasting": "auto"}))
 
 
-class DelegationSettingsTests(AccountFixture, unittest.TestCase):
+class LinkSettingsTests(AccountFixture, unittest.TestCase):
     def save(self, agent_id, **changes):
         payload = {"prompt": "", "data": "", "tools": [], "revision": 0, "brain": "qwen", **changes}
         return self.client.put(f"/api/team/{agent_id}", json=payload)
 
-    def test_operator_asks_first_by_default_and_only_it_has_the_setting(self):
+    def test_links_start_from_the_agent_files(self):
         operator, forecasting = self.client.get("/api/team").json()["agents"]
-        self.assertEqual((operator["delegation"], operator["delegates_to"]), ("ask", ["forecasting"]))
-        self.assertEqual((forecasting["delegation"], forecasting["delegates_to"]), (None, []))
+        self.assertEqual((operator["links"], operator["delegates_to"]), ({"forecasting": "ask"}, ["forecasting"]))
+        self.assertEqual((forecasting["links"], forecasting["delegates_to"]), ({"operator": "none"}, ["operator"]))
 
-    def test_delegation_is_validated_and_persisted(self):
-        self.assertEqual(self.save("operator").status_code, 422)
-        self.assertEqual(self.save("operator", delegation="maybe").status_code, 422)
-        self.assertEqual(self.save("forecasting", delegation="ask").status_code, 422)
-        for revision, mode in enumerate(("off", "auto", "ask")):
+    def test_links_are_validated_and_persisted(self):
+        self.assertEqual(self.save("operator", links={"forecasting": "maybe"}).status_code, 422)
+        self.assertEqual(self.save("operator", links={"inventory": "ask"}).status_code, 422)
+        self.assertEqual(self.save("operator", links={"operator": "ask"}).status_code, 422)
+        for revision, mode in enumerate(("off", "auto", "none", "ask")):
             with self.subTest(mode=mode):
-                saved = self.save("operator", delegation=mode, revision=revision)
+                saved = self.save("operator", links={"forecasting": mode}, revision=revision)
                 self.assertEqual(saved.status_code, 200, saved.text)
-                self.assertEqual(self.client.get("/api/team").json()["agents"][0]["delegation"], mode)
-        self.assertEqual(self.save("forecasting").status_code, 200)
+                self.assertEqual(self.client.get("/api/team").json()["agents"][0]["links"], {"forecasting": mode})
+        # A save that leaves a link out keeps it.
+        self.assertEqual(self.save("operator", revision=4).json()["links"], {"forecasting": "ask"})
+        self.assertEqual(self.save("forecasting", links={"operator": "auto"}).json()["links"], {"operator": "auto"})
+
+    def test_links_are_per_project(self):
+        self.save("operator", links={"forecasting": "off"})
+        self.switch_to_new_account("other")
+        self.assertEqual(self.client.get("/api/team").json()["agents"][0]["links"], {"forecasting": "ask"})
+
+
+class RuntimeToolsetTests(AccountFixture, unittest.TestCase):
+    def save(self, agent_id, **changes):
+        payload = {"prompt": "", "data": "", "tools": [], "revision": 0, "brain": "qwen", **changes}
+        return self.client.put(f"/api/team/{agent_id}", json=payload)
+
+    def test_every_toolset_starts_off_with_its_tools_and_status(self):
+        for agent in self.client.get("/api/team").json()["agents"]:
+            with self.subTest(agent=agent["id"]):
+                self.assertEqual(agent["runtime_toolsets"], [])
+                self.assertEqual(set(agent["available_toolsets"]), {"web", "vision", "image_gen", "todo", "session_search"})
+                self.assertEqual(agent["toolset_tools"]["web"], ["web_search", "web_extract"])
+                self.assertEqual(agent["toolset_status"]["todo"]["status"], "ready")
+                self.assertEqual(agent["toolset_status"]["web"]["status"], "needs_setup")
+
+    def test_only_safe_ready_toolsets_can_be_switched_on(self):
+        for toolsets in (["terminal"], ["todo", "todo"], ["web"], ["image_gen"]):
+            with self.subTest(toolsets=toolsets):
+                self.assertEqual(self.save("operator", runtime_toolsets=toolsets).status_code, 422)
+        saved = self.save("operator", runtime_toolsets=["todo", "session_search", "vision"])
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["runtime_toolsets"], ["todo", "session_search", "vision"])
+        # Each agent has its own switches.
+        self.assertEqual(self.client.get("/api/team").json()["agents"][1]["runtime_toolsets"], [])
 
 
 class MapLayoutTests(AccountFixture, unittest.TestCase):
@@ -168,13 +198,13 @@ class MapLayoutTests(AccountFixture, unittest.TestCase):
         self.assertEqual(self.client.get("/api/team").json()["layout"], {"operator": {"x": 0.5, "y": 0.5}})
 
     def test_layout_is_independent_of_settings_and_accounts(self):
-        saved = self.client.put("/api/team/operator", json={"prompt": "", "data": "", "tools": [], "revision": 0, "brain": "qwen", "delegation": "ask"}).json()
+        saved = self.client.put("/api/team/operator", json={"prompt": "", "data": "", "tools": [], "revision": 0, "brain": "qwen"}).json()
         self.client.put("/api/team/layout", json={"positions": {"operator": {"x": 0.1, "y": 0.2}}})
         self.assertEqual(self.client.get("/api/team").json()["agents"][0]["revision"], saved["revision"])
         # The settings form opened before the drag can still save without a conflict.
-        again = self.client.put("/api/team/operator", json={"prompt": "Still saves", "data": "", "tools": [], "revision": saved["revision"], "brain": "qwen", "delegation": "ask"})
+        again = self.client.put("/api/team/operator", json={"prompt": "Still saves", "data": "", "tools": [], "revision": saved["revision"], "brain": "qwen"})
         self.assertEqual(again.status_code, 200)
         self.client.post("/api/auth/logout")
         self.assertEqual(self.client.put("/api/team/layout", json={"positions": {}}).status_code, 401)
-        self.client.post("/api/auth/signup", json={"username": "other", "password": "long-password-123"})
+        self.switch_to_new_account("other")
         self.assertEqual(self.client.get("/api/team").json()["layout"], {})

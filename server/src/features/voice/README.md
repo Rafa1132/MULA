@@ -7,6 +7,7 @@ Text-to-speech for AI voice output. It currently uses macOS's built-in `say` com
 | Method | Path | Body | Response |
 |---|---|---|---|
 | POST | `/api/speech` | `{ text }`: 1–1,200 characters, not blank, no NUL characters; requires login | `audio/wav` (16-bit, 22,050 Hz), `Cache-Control: no-store` |
+| GET | `/api/speech/welcome` | Requires login | The workspace's spoken welcome (`orchestrator.onboarding.WELCOME`) as `audio/wav`, `Cache-Control: private, max-age=86400` |
 
 A plain GET returns 405. `scripts/run.py` uses that to check that a running server has this route.
 
@@ -19,9 +20,17 @@ A plain GET returns 405. `scripts/run.py` uses that to check that a running serv
 
 This only produces audio; it doesn't call the model or add anything to the conversation.
 
+## The spoken welcome (`welcome.py`)
+
+The welcome's words are fixed, so its audio is made once and kept at `<data dir>/speech/welcome-<hash>.wav` (owner-only, written atomically; the hash covers the provider and the text, so a change to either makes a new file). The first request makes it if it is missing; `server/.venv/bin/python server/scripts/generate_welcome_audio.py` makes it ahead of time.
+
+## Provider
+
+`MULA_SPEECH_PROVIDER` picks the voice: `say` (the default, macOS) or `off` (every speech route answers 503 "AI voice is switched off on this server. Chat still works."; the workspace then shows the welcome as text). Hosted options for later, not wired in and needing approval for a key or a download: OpenRouter text-to-speech (paid per request) or Piper (local, free, a model download, works on Linux).
+
 ## Files
 
-`routes.py`, `service.py`, `tests/test_speech.py`. `__init__.py` exports `router`.
+`routes.py`, `service.py`, `welcome.py`, `tests/test_speech.py`. `__init__.py` exports `router`.
 
 ## Client counterpart
 

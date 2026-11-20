@@ -2,7 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from ..auth import accounts
+from ..workspaces.access import current_project
 from . import filters, notes, pipeline, service
 from .filters import MemoryRefused
 
@@ -57,85 +57,85 @@ def saved(result):
 
 
 @router.get("")
-def list_memory(account: dict = Depends(accounts.current_account)):
-    return service.overview(account["id"])
+def list_memory(project: dict = Depends(current_project)):
+    return service.overview(project["id"])
 
 
 @router.post("/entries")
-def add_entry(request: EntryRequest, account: dict = Depends(accounts.current_account)):
-    return saved(service.owner_remember(account["id"], request.target, request.fact))
+def add_entry(request: EntryRequest, project: dict = Depends(current_project)):
+    return saved(service.owner_remember(project["id"], request.target, request.fact))
 
 
 @router.post("/entries/{entry_id}/supersede")
-def correct_entry(entry_id: int, request: CorrectionRequest, account: dict = Depends(accounts.current_account)):
-    previous = pipeline.store_entry(account["id"], entry_id)
+def correct_entry(entry_id: int, request: CorrectionRequest, project: dict = Depends(current_project)):
+    previous = pipeline.store_entry(project["id"], entry_id)
     if previous is None:
         raise HTTPException(404, "This memory was not found.")
     try:
-        return saved(pipeline.remember(account["id"], previous["target"], request.fact, "owner", replaces=entry_id))
+        return saved(pipeline.remember(project["id"], previous["target"], request.fact, "owner", replaces=entry_id))
     except MemoryRefused as refusal:
         raise HTTPException(422, str(refusal)) from refusal
 
 
 @router.post("/entries/{entry_id}/retire")
-def retire_entry(entry_id: int, account: dict = Depends(accounts.current_account)):
-    return {"entry": pipeline.retire(account["id"], entry_id, "owner")}
+def retire_entry(entry_id: int, project: dict = Depends(current_project)):
+    return {"entry": pipeline.retire(project["id"], entry_id, "owner")}
 
 
 @router.post("/search")
-def search_memory(request: SearchRequest, account: dict = Depends(accounts.current_account)):
-    return {"results": service.search(account["id"], request.question)}
+def search_memory(request: SearchRequest, project: dict = Depends(current_project)):
+    return {"results": service.search(project["id"], request.question)}
 
 
-def note_saved(account_id, result):
+def note_saved(project_id, result):
     """A save's outcome plus the note as it now reads, so the page needs no second request."""
-    return {**result, "note": service.note(account_id, result["note_id"])}
+    return {**result, "note": service.note(project_id, result["note_id"])}
 
 
 @router.get("/graph")
-def note_graph(account: dict = Depends(accounts.current_account)):
-    return service.graph(account["id"])
+def note_graph(project: dict = Depends(current_project)):
+    return service.graph(project["id"])
 
 
 @router.get("/notes/{note_id}")
-def read_note(note_id: int, account: dict = Depends(accounts.current_account)):
-    return service.note(account["id"], note_id)
+def read_note(note_id: int, project: dict = Depends(current_project)):
+    return service.note(project["id"], note_id)
 
 
 @router.post("/notes", status_code=201)
-def create_note(request: NoteRequest, account: dict = Depends(accounts.current_account)):
+def create_note(request: NoteRequest, project: dict = Depends(current_project)):
     try:
-        result = pipeline.save_note(account["id"], None, request.folder, request.title, request.text, "owner")
+        result = pipeline.save_note(project["id"], None, request.folder, request.title, request.text, "owner")
     except MemoryRefused as refusal:
         raise HTTPException(422, str(refusal)) from refusal
-    return note_saved(account["id"], result)
+    return note_saved(project["id"], result)
 
 
 @router.put("/notes/{note_id}")
-def edit_note(note_id: int, request: NoteEditRequest, account: dict = Depends(accounts.current_account)):
+def edit_note(note_id: int, request: NoteEditRequest, project: dict = Depends(current_project)):
     try:
-        result = pipeline.save_note(account["id"], note_id, request.folder, request.title, request.text, "owner", request.base_version)
+        result = pipeline.save_note(project["id"], note_id, request.folder, request.title, request.text, "owner", request.base_version)
     except MemoryRefused as refusal:
         raise HTTPException(422, str(refusal)) from refusal
-    return note_saved(account["id"], result)
+    return note_saved(project["id"], result)
 
 
 @router.post("/notes/{note_id}/relink")
-def relink_note(note_id: int, request: RelinkRequest, account: dict = Depends(accounts.current_account)):
+def relink_note(note_id: int, request: RelinkRequest, project: dict = Depends(current_project)):
     try:
-        return pipeline.relink(account["id"], note_id, request.from_folder, request.from_title, "owner")
+        return pipeline.relink(project["id"], note_id, request.from_folder, request.from_title, "owner")
     except MemoryRefused as refusal:
         raise HTTPException(422, str(refusal)) from refusal
 
 
 @router.post("/notes/{note_id}/archive")
-def archive_note(note_id: int, account: dict = Depends(accounts.current_account)):
-    return pipeline.archive_note(account["id"], note_id, "owner")
+def archive_note(note_id: int, project: dict = Depends(current_project)):
+    return pipeline.archive_note(project["id"], note_id, "owner")
 
 
 @router.post("/folders", status_code=201)
-def create_folder(request: FolderRequest, account: dict = Depends(accounts.current_account)):
+def create_folder(request: FolderRequest, project: dict = Depends(current_project)):
     try:
-        return pipeline.create_folder(account["id"], request.folder, "owner")
+        return pipeline.create_folder(project["id"], request.folder, "owner")
     except MemoryRefused as refusal:
         raise HTTPException(422, str(refusal)) from refusal

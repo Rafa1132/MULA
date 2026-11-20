@@ -17,13 +17,13 @@ from .filters import MemoryRefused
 ACTORS = ("operator", "owner", "migration")
 
 
-def remember(account_id, target, fact, actor, origin_message_id=None, replaces=None):
+def remember(project_id, target, fact, actor, origin_message_id=None, replaces=None):
     """Save one fact. Returns {"outcome": saved|duplicate, "entry": row}; raises MemoryRefused."""
     if actor not in ACTORS:
         raise ValueError("Unknown memory actor.")
     if target not in store.TARGETS:
         raise MemoryRefused("Choose 'business' or 'owner' as the memory target.")
-    with store.open_store(account_id) as db:
+    with store.open_store(project_id) as db:
         try:
             text = filters.check(fact)
         except MemoryRefused as refusal:
@@ -51,25 +51,25 @@ def remember(account_id, target, fact, actor, origin_message_id=None, replaces=N
             store.record(db, "replaced", old["id"], actor, replaced_by=entry_id)
         saved = store.entry(db, entry_id)
         entries = store.active_entries(db)
-    summary.regenerate(account_id, entries)
+    summary.regenerate(project_id, entries)
     return {"outcome": "saved", "entry": saved}
 
 
-def retire(account_id, entry_id, actor):
+def retire(project_id, entry_id, actor):
     """Mark a fact as no longer true, without a replacement."""
-    with store.open_store(account_id) as db:
+    with store.open_store(project_id) as db:
         existing = store.entry(db, entry_id)
         if existing is None:
             raise HTTPException(404, "This memory was not found.")
         store.supersede(db, entry_id, None, "retired")
         store.record(db, "retired", entry_id, actor)
         entries = store.active_entries(db)
-    summary.regenerate(account_id, entries)
-    return store_entry(account_id, entry_id)
+    summary.regenerate(project_id, entries)
+    return store_entry(project_id, entry_id)
 
 
-def store_entry(account_id, entry_id):
-    with store.open_store(account_id) as db:
+def store_entry(project_id, entry_id):
+    with store.open_store(project_id) as db:
         return store.entry(db, entry_id)
 
 
@@ -138,7 +138,7 @@ def current_file(db, note_id):
     return record["path"]
 
 
-def save_note(account_id, note_id, folder, title, text, actor, base_version=None):
+def save_note(project_id, note_id, folder, title, text, actor, base_version=None):
     """Create a note (note_id None) or save a new version of one, writing its file in the vault.
     Returns what changed; raises MemoryRefused.
 
@@ -148,8 +148,8 @@ def save_note(account_id, note_id, folder, title, text, actor, base_version=None
     """
     if actor not in ACTORS:
         raise ValueError("Unknown memory actor.")
-    vault.scan(account_id)
-    with vault.lock_for(account_id), store.open_store(account_id) as db:
+    vault.scan(project_id)
+    with vault.lock_for(project_id), store.open_store(project_id) as db:
         try:
             parsed = notes.parse(folder, title, text)
         except MemoryRefused as refusal:
@@ -172,7 +172,7 @@ def save_note(account_id, note_id, folder, title, text, actor, base_version=None
                 return {"outcome": "unchanged", "note_id": note_id, "version": previous["version"], "stale_links": 0, "stale_facts": 0}
             old_rel = current_file(db, note_id)
         owner = note_store.path_owner(db, parsed["path"])
-        root = vault.notes_root(account_id)
+        root = vault.notes_root(project_id)
         new_rel = vault.relative(parsed["folder"], parsed["title"])
         if (owner is not None and owner != note_id) or (new_rel != old_rel and vault.taken(root, new_rel, old_rel)):
             raise HTTPException(409, f"A note called “{parsed['title']}” is already in this folder. Choose another title, or open that note.")
@@ -192,15 +192,15 @@ def save_note(account_id, note_id, folder, title, text, actor, base_version=None
             "stale_links": stale_links, "stale_facts": stale_facts}
 
 
-def relink(account_id, note_id, old_folder, old_title, actor):
+def relink(project_id, note_id, old_folder, old_title, actor):
     """After a rename, point other notes' links at the new title, rewriting their files, each as a
     new audited version.
 
     Facts are append-only one-liners and are not rewritten; the count of facts still using the
     old title is returned so the owner can correct them.
     """
-    vault.scan(account_id)
-    with vault.lock_for(account_id), store.open_store(account_id) as db:
+    vault.scan(project_id)
+    with vault.lock_for(project_id), store.open_store(project_id) as db:
         current = note_store.latest(db, note_id)
         row = note_store.note(db, note_id)
         if current is None or row["archived_at"] is not None:
@@ -210,7 +210,7 @@ def relink(account_id, note_id, old_folder, old_title, actor):
         keys = moved_keys(old, parsed_current)
         # An old title or path another note now uses belongs to that note; its links must not move.
         keys = {link_key for link_key in keys if note_store.path_owner(db, link_key) is None and note_store.title_owner(db, link_key) is None}
-        root = vault.notes_root(account_id)
+        root = vault.notes_root(project_id)
         updated = 0
         if keys:
             marks = ",".join("?" for _ in keys)
@@ -230,38 +230,38 @@ def relink(account_id, note_id, old_folder, old_title, actor):
     return {"updated": updated, "stale_facts": stale_facts}
 
 
-def archive_note(account_id, note_id, actor):
+def archive_note(project_id, note_id, actor):
     """Take a note out of the tree, the map, search and link resolution, and move its file into
     the vault's `.trash/`, as Obsidian does. Its versions stay; the file is never deleted."""
-    vault.scan(account_id)
-    with vault.lock_for(account_id), store.open_store(account_id) as db:
+    vault.scan(project_id)
+    with vault.lock_for(project_id), store.open_store(project_id) as db:
         if note_store.note(db, note_id) is None:
             raise HTTPException(404, "This note was not found.")
         rel = current_file(db, note_id)
         note_store.archive(db, note_id)
         store.record(db, "note_archived", None, actor, note_id=note_id)
         if rel is not None:
-            vault.trash(vault.notes_root(account_id), rel)
+            vault.trash(vault.notes_root(project_id), rel)
     return {"note_id": note_id}
 
 
-def create_folder(account_id, folder, actor):
+def create_folder(project_id, folder, actor):
     """A new, empty folder in the vault. The audit keeps a hash of its path, not the name."""
     if actor not in ACTORS:
         raise ValueError("Unknown memory actor.")
     folder = notes.check_folder(folder)
     if not folder:
         raise MemoryRefused("Give the folder a name.")
-    with vault.lock_for(account_id), store.open_store(account_id) as db:
-        vault.make_folder(vault.notes_root(account_id), folder)
+    with vault.lock_for(project_id), store.open_store(project_id) as db:
+        vault.make_folder(vault.notes_root(project_id), folder)
         store.record(db, "folder_created", None, actor, path_hash=store.digest(folder))
     return {"folder": folder}
 
 
-def saved_by_message(account_id, message_id):
+def saved_by_message(project_id, message_id):
     """Facts the Operator saved during the turn that produced `message_id`."""
     if message_id is None:
         return []
-    with store.open_store(account_id) as db:
+    with store.open_store(project_id) as db:
         rows = db.execute("SELECT * FROM entries WHERE origin_message_id = ? AND actor = 'operator' ORDER BY id", (message_id,))
         return [store.public(row) for row in rows]

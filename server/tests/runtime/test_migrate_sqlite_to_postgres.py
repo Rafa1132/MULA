@@ -94,7 +94,8 @@ class CopyScriptTests(DatabaseFixture, unittest.TestCase):
         # New messages continue after the copied ids.
         self.assertGreater(accounts.add_message(self.account_id, "user", "next"), 9)
         settings = team.settings(self.account_id, "operator")
-        self.assertEqual((settings["tools"], settings["revision"], settings["delegation"]), (["csv_read", "memory_read"], 3, "auto"))
+        # The copied delegation reaches the link that replaced it (migration 0005).
+        self.assertEqual((settings["tools"], settings["revision"], settings["links"]), (["csv_read", "memory_read"], 3, {"forecasting": "auto"}))
         with database.database() as db:
             run = db.execute("SELECT report, created_at FROM forecast_runs WHERE id = 'run-1'").fetchone()
             request = db.execute("SELECT approved_in_advance, attachment FROM agent_requests WHERE id = 'req-1'").fetchone()

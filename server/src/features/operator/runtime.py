@@ -7,6 +7,7 @@ from uuid import UUID
 import httpx
 
 from ...common import profiles
+from ...common.agent_catalog import CATALOG
 from ...common.config import HERMES_API_KEY, HERMES_BASE_URL, HERMES_MODEL, HERMES_TIMEOUT_SECONDS
 
 
@@ -16,15 +17,23 @@ class HermesError(RuntimeError):
         self.status_code = status_code
 
 
-def request_headers(session_id: UUID | None = None, agent_id: str = "operator", account_id: str | None = None) -> dict[str, str]:
-    """Headers for the root profile, or for the account's own profile when `account_id` is given."""
+def profile_agent(agent_id: str) -> str | None:
+    """The agent whose profile a turn uses: a project agent from the catalog, or None for a scope
+    with one profile of its own, such as the workspace assistant's."""
+    if agent_id in CATALOG:
+        return agent_id
+    return None
+
+
+def request_headers(session_id: UUID | None = None, agent_id: str = "operator", project_id: str | None = None) -> dict[str, str]:
+    """Headers for the root profile, or for the account's own profile when `project_id` is given."""
     if not HERMES_API_KEY:
         raise HermesError("Hermes is not configured. Run the backend's Hermes setup first.")
     key = HERMES_API_KEY
-    if account_id is not None:
+    if project_id is not None:
         # A named profile only accepts its own key; the root key never opens it.
         try:
-            key = profiles.profile_key(account_id)
+            key = profiles.profile_key(project_id, profile_agent(agent_id))
         except profiles.ProfileError as error:
             raise HermesError(str(error)) from error
     headers = {"Authorization": f"Bearer {key}"}
@@ -99,20 +108,26 @@ async def require_model(model: str) -> None:
         raise HermesError("The brain chosen in My agents is not set up on the Mula runtime. Choose another brain or finish its setup.", 409)
 
 
-def account_base_url(account_id: str) -> str:
-    """The account's profile URL, after making sure the profile exists on disk and the gateway serves it."""
+def account_base_url(project_id: str, identity: str | None = None, agent_id: str = "operator", toolsets: tuple[str, ...] | list[str] = ()) -> str:
+    """The profile URL for this turn, after making sure the profile exists on disk with the agent's
+    runtime toolsets and the gateway serves it (see common/profiles.py).
+
+    `toolsets` are the ones the owner switched on (team.settings `runtime_toolsets`); callers pass
+    them, so this transport never reads settings. Leaving them out offers fewer tools, never more."""
+    agent = profile_agent(agent_id)
     try:
-        profiles.ensure_profile(account_id)
-        profiles.ensure_served(account_id)
-        return profiles.profile_base_url(HERMES_BASE_URL, account_id)
+        profiles.ensure_profile(project_id, identity, agent, toolsets)
+        profiles.ensure_served(project_id, agent)
+        return profiles.profile_base_url(HERMES_BASE_URL, project_id, agent)
     except profiles.ProfileError as error:
         raise HermesError(str(error)) from error
 
 
-async def stream_chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator", *, account_id: str):
-    """One agent turn in the account's own runtime profile."""
+async def stream_chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator", *, project_id: str, identity: str | None = None, toolsets: tuple[str, ...] | list[str] = ()):
+    """One agent turn in the account's own runtime profile. `identity` is the profile's SOUL.md,
+    when it has its own (the orchestrator's); see profiles.ensure_profile."""
     await require_model(model)
-    base_url = account_base_url(account_id)
+    base_url = account_base_url(project_id, identity, agent_id, toolsets)
     payload = {
         "model": model,
         "messages": [
@@ -122,7 +137,7 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID, model:
         "stream": True,
         "model_options": {"reasoning": {"enabled": False}},
     }
-    headers = request_headers(session_id, agent_id, account_id)
+    headers = request_headers(session_id, agent_id, project_id)
     saw_text = False
     finish_reason = None
     try:
@@ -189,11 +204,11 @@ async def stream_chat(system_prompt: str, message: str, session_id: UUID, model:
         raise HermesError("Cannot reach Hermes. Start the Hermes gateway and check its URL.") from error
 
 
-async def chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator", *, account_id: str) -> tuple[str, bool]:
+async def chat(system_prompt: str, message: str, session_id: UUID, model: str = HERMES_MODEL, agent_id: str = "operator", *, project_id: str, identity: str | None = None, toolsets: tuple[str, ...] | list[str] = ()) -> tuple[str, bool]:
     parts = []
     truncated = False
     # Both response formats use one execution path and identical failure semantics.
-    async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id, account_id=account_id)) as events:
+    async with aclosing(stream_chat(system_prompt, message, session_id, model, agent_id, project_id=project_id, identity=identity, toolsets=toolsets)) as events:
         async for event in events:
             if event["type"] == "token":
                 parts.append(event["content"])

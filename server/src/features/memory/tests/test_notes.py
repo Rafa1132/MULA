@@ -85,7 +85,7 @@ class NoteApiTests(AccountFixture, unittest.TestCase):
         return {node["id"]: node for node in body["nodes"]}, {(edge["source"], edge["target"]) for edge in body["edges"]}, body
 
     def notes_dir(self):
-        return self.data_dir / "workspaces" / self.account["id"] / "memory" / "notes"
+        return self.data_dir / "workspaces" / self.project["id"] / "memory" / "notes"
 
     def test_links_resolve_ghosts_and_mentions(self):
         aroma = self.create("Aroma Coffee", "Supplier. Buyer is [[Budi]]. #supplier", folder="suppliers")["note"]
@@ -121,7 +121,7 @@ class NoteApiTests(AccountFixture, unittest.TestCase):
         self.create("opening HOURS", status=409)
         self.create("Bad", "Customer Rina: +62 812 3456 7890", status=422)
         # History is append-only in the database itself, and the audit has hashes, not text.
-        with store.open_store(self.account["id"]) as db:
+        with store.open_store(self.project["id"]) as db:
             for statement in ("DELETE FROM note_versions", "UPDATE note_versions SET body = 'x'", "DELETE FROM notes",
                               "UPDATE notes SET created_at = 'x'"):
                 with self.subTest(statement=statement), self.assertRaises(sqlite3.DatabaseError):
@@ -194,7 +194,7 @@ class NoteApiTests(AccountFixture, unittest.TestCase):
         detail = self.client.get(f"/api/memory/notes/{overview['note_id']}").json()
         self.assertEqual(detail["text"], "---\ntags: [mula]\nstatus: {draft: true}\n---\nSee [[Agent Loop]] and [[Nowhere]].")
         self.assertEqual(detail["frontmatter"]["status"], '{"draft": true}')
-        with store.open_store(self.account["id"]) as db:
+        with store.open_store(self.project["id"]) as db:
             self.assertEqual({row["actor"] for row in db.execute("SELECT actor FROM note_versions")}, {"vault"})
 
     def test_obsidian_edits_moves_and_deletes_become_history(self):
@@ -264,14 +264,14 @@ class NoteApiTests(AccountFixture, unittest.TestCase):
         self.assertIn((f"note:{linking['id']}", f"note:{nested['id']}"), edges)
         # A store from before the vault was the source of truth knows notes but not their files:
         # the files are adopted by path, not duplicated.
-        with store.open_store(self.account["id"]) as db:
+        with store.open_store(self.project["id"]) as db:
             db.execute("DELETE FROM vault_files")
         nodes, _, _ = self.graph()
         self.assertEqual(len([node for node in nodes.values() if node["kind"] == "note"]), 3)
         self.assertEqual(self.client.get(f"/api/memory/notes/{top['id']}").json()["text"], "Top.")
 
     def test_a_store_from_before_the_vault_is_migrated_in_place(self):
-        path = store.memory_folder(self.account["id"]) / "store.sqlite3"
+        path = store.memory_folder(self.project["id"]) / "store.sqlite3"
         old = sqlite3.connect(path)
         old.executescript("""
             CREATE TABLE notes (id INTEGER PRIMARY KEY, actor TEXT NOT NULL, created_at TEXT NOT NULL, archived_at TEXT);
@@ -286,7 +286,7 @@ class NoteApiTests(AccountFixture, unittest.TestCase):
         """)
         old.commit()
         old.close()
-        with store.open_store(self.account["id"]) as db:
+        with store.open_store(self.project["id"]) as db:
             self.assertIn("text", store.columns(db, "note_versions"))
             self.assertIn("warning", store.columns(db, "note_index"))
             self.assertEqual(db.execute("SELECT title FROM note_index").fetchone()["title"], "dawd")
@@ -312,9 +312,9 @@ class NoteApiTests(AccountFixture, unittest.TestCase):
             service.note(other["id"], note["id"])
         self.assertEqual(caught.exception.status_code, 404)
         # Retrieval for the Operator is unchanged: facts only, never note text.
-        sources = service.retrieve(self.account["id"], "cardamom palm sugar")
+        sources = service.retrieve(self.project["id"], "cardamom palm sugar")
         self.assertEqual([source["fact"] for source in sources], ["We sell cardamom coffee."])
-        self.assertNotIn("palm sugar", service.context_for(self.account["id"], sources))
+        self.assertNotIn("palm sugar", service.context_for(self.project["id"], sources))
         self.assertEqual(self.client.get("/api/memory/notes/999").status_code, 404)
 
 

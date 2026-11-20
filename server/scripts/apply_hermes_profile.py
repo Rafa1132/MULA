@@ -3,8 +3,10 @@
 Upstream refuses any model with less than 64k context, once when an agent is
 built and again before each request that offers tools. The exception lets the
 configured local Qwen (40,960 tokens) run on the API server only while every
-tool it has is one of Mula's own business tools (`mcp__mula__*`), whose schemas
-are small. Any other tool, platform or model keeps the upstream guards.
+tool it has is one of Mula's own business tools (`mcp__mula__*`) or one of the
+safe runtime tools an owner can switch on in My agents (SAFE_TOOL_NAMES), and
+there are at most 12 of them, so their schemas stay small. Any other tool,
+platform or model keeps the upstream guards.
 """
 from pathlib import Path
 import subprocess
@@ -29,7 +31,11 @@ PREVIOUS_REPLACEMENT = '''def _enforce_minimum_context(agent):
     ):
         return
 '''
-REPLACEMENT = '''def _mula_compact_agent(agent):
+# The runtime tools of common/agent_catalog.SAFE_TOOLSETS; a test keeps the two in step. Written into
+# the patch sorted, so the patched text is identical every time this script runs.
+SAFE_TOOL_NAMES = ("image_generate", "session_search", "todo_list", "vision_analyze", "web_extract", "web_search")
+# The version that allowed Mula's own tools only, upgraded in place by main().
+MULA_TOOLS_REPLACEMENT = '''def _mula_compact_agent(agent):
     """Mula's configured agents: local Qwen on the API server with only Mula's own small tools."""
     from hermes_cli.config import load_config
     compact_operator = (load_config().get("agent") or {}).get("mula_compact_operator") is True
@@ -51,6 +57,30 @@ def _enforce_minimum_context(agent):
     if _mula_compact_agent(agent):
         return
 '''
+REPLACEMENT = '''def _mula_compact_agent(agent):
+    """Mula's configured agents: local Qwen on the API server with only Mula's own small tools
+    and the safe runtime tools the owner switched on in My agents."""
+    from hermes_cli.config import load_config
+    safe_tools = {SAFE}
+    compact_operator = (load_config().get("agent") or {{}}).get("mula_compact_operator") is True
+    context = getattr(agent.context_compressor, "context_length", 0)
+    tool_names = [((tool or {{}}).get("function") or {{}}).get("name") for tool in (agent.tools or [])]
+    return (
+        compact_operator
+        and agent.platform == "api_server"
+        and agent.model == "huihui_ai/qwen3-abliterated:latest"
+        and all(isinstance(name, str) and (name.startswith("mcp__mula__") or name in safe_tools) for name in tool_names)
+        and len(tool_names) <= 12
+        and isinstance(context, int)
+        and 8192 <= context <= 40960
+    )
+
+
+def _enforce_minimum_context(agent):
+    # Keep upstream's guard for other profiles, models, platforms and all other tools.
+    if _mula_compact_agent(agent):
+        return
+'''.format(SAFE="{" + ", ".join(repr(name) for name in sorted(SAFE_TOOL_NAMES)) + "}")
 LOOP_ANCHOR = '''def _ollama_context_limit_error(agent: Any, request_tokens: int) -> Optional[str]:
     """Return a user-facing error when Ollama is loaded with too little context."""
 '''
@@ -61,7 +91,7 @@ LOOP_REPLACEMENT = LOOP_ANCHOR + '''    # Mula: the same scoped exception as age
 '''
 # (file, anchor, replacement, earlier replacements that may be upgraded in place)
 PATCHES = (
-    ("agent/agent_init.py", ANCHOR, REPLACEMENT, (PREVIOUS_REPLACEMENT,)),
+    ("agent/agent_init.py", ANCHOR, REPLACEMENT, (PREVIOUS_REPLACEMENT, MULA_TOOLS_REPLACEMENT)),
     ("agent/conversation_loop.py", LOOP_ANCHOR, LOOP_REPLACEMENT, ()),
 )
 

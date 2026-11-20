@@ -1,4 +1,4 @@
-"""Give every account its own Mula runtime profile. Dry run by default; --apply writes.
+"""Give every project its own Mula runtime profile. Dry run by default; --apply writes.
 
 Run with the backend environment, which provides PyYAML:
     server/.venv/bin/python server/scripts/provision_profiles.py          # report only
@@ -8,7 +8,7 @@ With --apply the script:
 - adds a MULA_PROFILE_KEY_SEED to `server/.env.hermes` when there is none (new installs
   get it from setup_hermes.py);
 - turns on `gateway.multiplex_profiles` in `.runtime/hermes/config.yaml`;
-- writes `.runtime/hermes/profiles/mula-<account>/` for every account, and refreshes
+- writes `.runtime/hermes/profiles/mula-<project>/` for every project, and refreshes
   the profiles that already exist so they carry the current config and secrets.
 
 Nothing is moved or deleted. Runtime sessions start fresh in the new profiles; the
@@ -27,6 +27,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 from scripts.cloud_brains import env_lines_without, mapping_at, write_private  # noqa: E402
 from src.common import database, profiles  # noqa: E402
+from src.common.agent_catalog import CATALOG  # noqa: E402
 
 RUNTIME_HOME = BACKEND.parent / ".runtime" / "hermes"
 SEED_NAME = "MULA_PROFILE_KEY_SEED"
@@ -46,10 +47,11 @@ def connect_database(backend_env: Path) -> None:
     database.configure(url, schema)
 
 
-def account_ids() -> list[str]:
+def project_ids() -> list[str]:
+    """Every project that isn't archived, oldest first (an account's first project has its id)."""
     try:
         with database.database() as db:
-            rows = db.execute("SELECT id FROM accounts ORDER BY created_at, id").fetchall()
+            rows = db.execute("SELECT id FROM projects WHERE archived_at IS NULL ORDER BY seq").fetchall()
     except psycopg.Error as error:
         raise SystemExit(f"The application database did not answer ({type(error).__name__}). Is PostgreSQL running and migrated? Start the backend once, or see server/README.md.") from error
     return [row["id"] for row in rows]
@@ -93,19 +95,28 @@ def refresh_existing_profiles(backend_env: Path, runtime_home: Path) -> int:
     with configured(seed, runtime_home):
         folders = profiles.existing_profiles()
         for folder in folders:
-            account_id = account_id_of(folder.name)
-            if account_id is not None:
-                profiles.ensure_profile(account_id)
+            owner = owner_of(folder.name)
+            if owner is not None:
+                # Written without the agent's runtime toolsets, which this script can't read; the
+                # agent's next turn writes them back before the runtime is asked anything.
+                profiles.ensure_profile(owner[0], agent_id=owner[1])
     return len(folders)
 
 
-def account_id_of(profile_name: str) -> str | None:
-    """The account UUID a profile folder was derived from, or None for a foreign folder."""
+def owner_of(profile_name: str) -> tuple[str, str | None] | None:
+    """The account UUID and agent id a profile folder was derived from (`mula-<hex>` or
+    `mula-<hex>-<agent id>`, see common/profiles.py), or None for a foreign folder."""
     from uuid import UUID
+    hex_id, _, agent_id = profile_name.removeprefix("mula-").partition("-")
     try:
-        return str(UUID(profile_name.removeprefix("mula-")))
+        account_id = str(UUID(hex_id))
     except ValueError:
         return None
+    if not agent_id:
+        return account_id, None
+    if agent_id in CATALOG and profiles.own_profile(agent_id):
+        return account_id, agent_id
+    return None
 
 
 class configured:
@@ -135,14 +146,14 @@ def main(argv=None) -> None:
     if not backend_env.is_file() or not config_path.is_file():
         raise SystemExit("Run setup_hermes.py first. See server/README.md.")
     connect_database(backend_env)
-    ids = account_ids()
+    ids = project_ids()
     seed = profiles.env_values(backend_env).get(SEED_NAME, "")
     root_config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     multiplexed = isinstance(root_config.get("gateway"), dict) and root_config["gateway"].get("multiplex_profiles") is True
     with configured(seed or "dry-run", RUNTIME_HOME):
         missing = [account_id for account_id in ids if not profiles.profile_dir(account_id).is_dir()]
         leaking = profiles.profiles_with_runtime_memory()
-    print(f"Accounts: {len(ids)}. Without a profile: {len(missing)}. Profiles with the runtime's memory on: {len(leaking)}.")
+    print(f"Projects: {len(ids)}. Without a profile: {len(missing)}. Profiles with the runtime's memory on: {len(leaking)}.")
     seed_state = "missing"
     if seed:
         seed_state = "present"
@@ -158,7 +169,7 @@ def main(argv=None) -> None:
     with configured(seed, RUNTIME_HOME):
         for account_id in ids:
             profiles.ensure_profile(account_id)
-    print(f"Wrote {len(ids)} account profile(s) under .runtime/hermes/profiles/. The seed and keys were not printed.")
+    print(f"Wrote {len(ids)} project profile(s) under .runtime/hermes/profiles/. The seed and keys were not printed.")
     if changed:
         print("Turned on gateway.multiplex_profiles in the runtime config.")
     print("Restart Mula and the backend: ./run.sh")

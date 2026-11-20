@@ -38,6 +38,37 @@ TABLES = ("accounts", "sessions", "messages", "login_failures", "agent_settings"
 LEGACY_TABLES = ("memory_documents", "memory_chunks", "memory_changes", "memory_retrievals")
 
 
+# The revision whose tables match the SQLite file; see main().
+FIRST_REVISION = "0001_initial"
+# Tables later revisions add; emptied with the rest by --replace.
+LATER_TABLES = ("project_members", "projects", "workspace_members", "workspaces")
+
+
+def schema_revision(url, schema):
+    """The schema's Alembic revision, or None for a schema that was never migrated."""
+    with database.connect(url, schema) as connection:
+        if connection.execute("SELECT to_regclass('alembic_version') AS name").fetchone()["name"] is None:
+            return None
+        row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    if row is None:
+        return None
+    return row["version_num"]
+
+
+def prepare_first_revision(url, schema, replace):
+    """Bring the target to FIRST_REVISION. A schema already past it may only be emptied and taken
+    back with --replace (or when it holds no rows), so no copied data is ever mixed with newer data."""
+    revision = schema_revision(url, schema)
+    if revision in (None, FIRST_REVISION):
+        database.migrate(url, schema, FIRST_REVISION)
+        return
+    with database.connect(url, schema) as target:
+        with target.transaction():
+            if any(target_counts(target).values()) and not replace:
+                raise SystemExit("The target already holds rows. Add --replace to empty the application tables and copy again, or point --schema elsewhere.")
+            target.execute("TRUNCATE " + ", ".join(TABLES + LATER_TABLES) + " RESTART IDENTITY CASCADE")
+    database.downgrade(url, schema, FIRST_REVISION)
+
 def open_source(path: Path) -> sqlite3.Connection:
     if not path.is_file():
         raise SystemExit(f"No SQLite file at {path}. Nothing to copy.")
@@ -176,7 +207,9 @@ def main(argv=None) -> int:
         if not arguments.apply:
             print("Dry run; nothing was written. Add --apply to copy.")
             return 0
-        database.migrate(url, arguments.schema)
+        # The SQLite file has the schema of the first revision (one account = one business), so
+        # the rows go into that revision; the later ones then turn each account into a project.
+        prepare_first_revision(url, arguments.schema, arguments.replace)
         with database.connect(url, arguments.schema) as target:
             with target.transaction():
                 existing = target_counts(target)
@@ -186,6 +219,7 @@ def main(argv=None) -> int:
                     target.execute("TRUNCATE " + ", ".join(TABLES) + " RESTART IDENTITY CASCADE")
                 copy_tables(source, target)
             after = target_counts(target)
+        database.migrate(url, arguments.schema)
     finally:
         source.close()
     report("Target after copy:", after)

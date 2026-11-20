@@ -21,6 +21,7 @@ from ..forecasting.service import ForecastRequest, forecast
 from ..memory import pipeline as memory
 from ..memory.filters import MemoryRefused
 from ..operator.runtime import HermesError
+from ..orchestrator import proposals
 from ..team import service as team
 from . import service
 
@@ -43,9 +44,10 @@ def tool_failure(error: Exception) -> ToolError:
     return ToolError(str(error))
 
 
-@server.tool(description="Operator only. Ask another Mula agent for help on the owner's behalf. Its answer arrives in the chat after your reply, once the owner's setting allows it.")
+@server.tool(description="Ask another Mula agent for help on the owner's behalf, only one your instructions name. Its answer arrives in the chat after your reply, once the owner's setting allows it.")
 def ask_agent(ticket: Ticket,
-                    agent: Annotated[Literal["forecasting"], Field(description="The agent to ask.")],
+                    # Any agent id; the owner's links in My agents decide which ones this caller may ask.
+                    agent: Annotated[str, Field(max_length=40, description="The id of the agent to ask, exactly as your instructions give it.")],
                     question: Annotated[str, Field(max_length=2000, description="A specific, self-contained question for that agent.")]) -> str:
     try:
         return service.ask_agent(ticket, agent, question)
@@ -61,10 +63,10 @@ def remember(ticket: Ticket,
              replaces: Annotated[int | None, Field(ge=1, description="The id of the memory this fact replaces, when correcting one.")] = None) -> str:
     try:
         caller = service.resolve_ticket(ticket, "remember")
-        settings = team.settings(caller["account_id"], "operator")
+        settings = team.settings(caller["project_id"], "operator")
         if "memory_write" not in settings["tools"]:
             raise service.ToolDenied("The owner has turned off saving to memory. Do not claim to have saved anything.")
-        result = memory.remember(caller["account_id"], target, fact, "operator", origin_message_id=caller["message_id"], replaces=replaces)
+        result = memory.remember(caller["project_id"], target, fact, "operator", origin_message_id=caller["message_id"], replaces=replaces)
     except EXPECTED as error:
         raise tool_failure(error) from error
     entry = result["entry"]
@@ -89,8 +91,8 @@ def calculate_forecast(ticket: Ticket,
             raise service.ToolDenied("No CSV is attached to this request. Ask the owner to attach one.")
         request = ForecastRequest(csv_file=caller["attachment"], date_column=date_column, value_column=value_column,
                                   frequency=frequency, horizon=horizon, method=method)
-        settings = team.settings(caller["account_id"], "forecasting")
-        report = runs.save_run(caller["account_id"], forecast(request, settings["tools"]))
+        settings = team.settings(caller["project_id"], "forecasting")
+        report = runs.save_run(caller["project_id"], forecast(request, settings["tools"]))
     except EXPECTED as error:
         raise tool_failure(error) from error
     return json.dumps(runs.summary_for_model(report), ensure_ascii=False)
@@ -103,10 +105,23 @@ def latest_forecast(ticket: Ticket) -> str:
         caller = service.resolve_ticket(ticket, "latest_forecast")
     except EXPECTED as error:
         raise tool_failure(error) from error
-    report = runs.latest_run(caller["account_id"])["report"]
+    report = runs.latest_run(caller["project_id"])["report"]
     if report is None:
         return "The owner has no saved forecasts yet."
     return json.dumps(runs.summary_for_model(report), ensure_ascii=False)
+
+
+@server.tool(description="Workspace assistant only. Propose a new project (a separate business) when the owner asks for one. It creates nothing: the owner confirms with a button under your reply.",
+             annotations=ToolAnnotations(destructive_hint=False, open_world_hint=False))
+def create_project(ticket: Ticket,
+                   name: Annotated[str, Field(max_length=160, description="A short project name, usually the business's name.")],
+                   description: Annotated[str | None, Field(max_length=600, description="One line about the business, if you know it.")] = None) -> str:
+    try:
+        proposal = proposals.propose(ticket, name, description)
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    return (f"Proposed “{proposal['name']}”. It is not created yet: tell the owner to press Create project "
+            "under your reply to create it, or Not now to dismiss it.")
 
 
 class ToolGateway:

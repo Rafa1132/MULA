@@ -162,9 +162,9 @@ def digest(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def memory_folder(account_id):
+def memory_folder(project_id):
     """The account's memory folder, created owner-only. Never a client-supplied path."""
-    identity = str(UUID(account_id))
+    identity = str(UUID(project_id))
     root = DATA_DIR / "workspaces"
     folder = root / identity / "memory"
     for directory in (root, root / identity, folder):
@@ -208,9 +208,9 @@ def migrate(connection):
 
 
 @contextmanager
-def open_store(account_id):
+def open_store(project_id):
     """The account's store, with the schema in place; one transaction per use."""
-    path = memory_folder(account_id) / "store.sqlite3"
+    path = memory_folder(project_id) / "store.sqlite3"
     if path.is_symlink():
         raise HTTPException(409, "The memory store must not be a symbolic link.")
     try:

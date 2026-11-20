@@ -41,7 +41,7 @@ Choosing a method that's disabled in My agents returns 403. Running auto with no
 
 ## Storage
 
-`forecast_runs(seq, id, account_id, report JSONB, explanation, created_at)` in the PostgreSQL application database; `seq` orders the runs. Only the **last 20 runs per account** are kept. The report includes the selected date/value history; the original CSV isn't stored.
+`forecast_runs(seq, id, project_id, report JSONB, explanation, created_at)` in the PostgreSQL application database; `seq` orders the runs. Only the **last 20 runs per account** are kept. The report includes the selected date/value history; the original CSV isn't stored.
 
 ## Files
 

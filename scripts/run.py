@@ -140,6 +140,10 @@ def main():
     for executable in ("node", "ollama"):
         if shutil.which(executable) is None:
             raise RuntimeError(f"{executable} is not available in this Terminal's PATH.")
+    # This launcher is for local development, so sign-up accepts any non-empty username and
+    # password (MULA_RELAXED_AUTH, see server/src/common/config.py). Export
+    # MULA_RELAXED_AUTH=false first to test the real rules; Docker and other launches keep them.
+    os.environ.setdefault("MULA_RELAXED_AUTH", "true")
     settings = dict(dotenv_values(env_file))
     settings.update(os.environ)
     hermes = (settings.get("HERMES_BASE_URL") or "http://127.0.0.1:8642").rstrip("/")

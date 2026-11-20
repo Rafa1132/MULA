@@ -9,10 +9,10 @@ from .runtime import chat, stream_chat
 OPERATOR_PROMPT = CATALOG["operator"]["persona"]
 
 
-async def operator_reply(account_id: str, message: str, session_id: UUID, memory_context: str = "", model: str = HERMES_MODEL) -> tuple[str, bool]:
-    return await chat(OPERATOR_PROMPT + memory_context, message, session_id, model, account_id=account_id)
+async def operator_reply(project_id: str, message: str, session_id: UUID, memory_context: str = "", model: str = HERMES_MODEL, toolsets: tuple[str, ...] | list[str] = ()) -> tuple[str, bool]:
+    return await chat(OPERATOR_PROMPT + memory_context, message, session_id, model, project_id=project_id, toolsets=toolsets)
 
 
-def operator_stream(account_id: str, message: str, session_id: UUID, memory_context: str = "", model: str = HERMES_MODEL):
+def operator_stream(project_id: str, message: str, session_id: UUID, memory_context: str = "", model: str = HERMES_MODEL, toolsets: tuple[str, ...] | list[str] = ()):
     # Return the iterator directly so disconnects close the Hermes connection.
-    return stream_chat(OPERATOR_PROMPT + memory_context, message, session_id, model, account_id=account_id)
+    return stream_chat(OPERATOR_PROMPT + memory_context, message, session_id, model, project_id=project_id, toolsets=toolsets)

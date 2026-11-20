@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 
 from ..agents import service as agents
-from ..auth import accounts
+from ..workspaces.access import current_project
 from ..operator.csv_files import CsvFile, prepare_csv
 from ..operator.runtime import HermesError
 from ..team import service as team
@@ -16,21 +16,21 @@ router = APIRouter()
 
 
 @router.post("/api/forecasting/preview")
-def preview(file: CsvFile, account: dict = Depends(accounts.current_account)):
+def preview(file: CsvFile, project: dict = Depends(current_project)):
     payload, note = prepare_csv(file)
     parsed = json.loads(payload)
     return {"columns": parsed["columns"], "rows": parsed["data_rows"], "note": note}
 
 
 @router.post("/api/forecasting/run")
-def run(request: ForecastRequest, account: dict = Depends(accounts.current_account)):
-    config = team.settings(account["id"], "forecasting")
-    return runs.save_run(account["id"], forecast(request, config["tools"]))
+def run(request: ForecastRequest, project: dict = Depends(current_project)):
+    config = team.settings(project["id"], "forecasting")
+    return runs.save_run(project["id"], forecast(request, config["tools"]))
 
 
 @router.get("/api/forecasting/latest")
-def latest(account: dict = Depends(accounts.current_account)):
-    return runs.latest_run(account["id"])
+def latest(project: dict = Depends(current_project)):
+    return runs.latest_run(project["id"])
 
 
 class ExplainRequest(BaseModel):
@@ -39,21 +39,21 @@ class ExplainRequest(BaseModel):
 
 
 @router.post("/api/forecasting/explain")
-async def explain(request: ExplainRequest, account: dict = Depends(accounts.current_account)):
-    config = team.settings(account["id"], "forecasting")
+async def explain(request: ExplainRequest, project: dict = Depends(current_project)):
+    config = team.settings(project["id"], "forecasting")
     team.require_tool(config, "explain")
-    report = runs.find_run(account["id"], str(request.run_id))
+    report = runs.find_run(project["id"], str(request.run_id))
     if report is None:
-        raise HTTPException(404, "This forecast was not found in your account.")
+        raise HTTPException(404, "This forecast was not found in this project.")
     message = "Explain this calculated report. History and forecast lists show at most 12 points each:\n" + json.dumps(runs.summary_for_model(report))
     # A unique session isolates each explanation from the Operator's history and
     # from earlier explanations written under different settings.
-    session = uuid5(UUID(account["id"]), "forecasting:" + str(uuid4()))
+    session = uuid5(UUID(project["id"]), "forecasting:" + str(uuid4()))
     try:
-        reply, truncated = await agents.answer_as(account["id"], "forecasting", message, session, depth=1, include_csv=False)
+        reply, truncated = await agents.answer_as(project["id"], "forecasting", message, session, depth=1, include_csv=False)
     except HermesError as error:
         raise HTTPException(error.status_code, str(error)) from error
     if truncated:
         reply += "\n\n[Explanation reached its length limit.]"
-    runs.save_explanation(account["id"], str(request.run_id), reply)
+    runs.save_explanation(project["id"], str(request.run_id), reply)
     return {"explanation": reply}

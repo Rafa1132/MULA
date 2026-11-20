@@ -30,13 +30,13 @@ _locks = {}
 _locks_guard = threading.Lock()
 
 
-def lock_for(account_id):
+def lock_for(project_id):
     with _locks_guard:
-        return _locks.setdefault(account_id, threading.RLock())
+        return _locks.setdefault(project_id, threading.RLock())
 
 
-def notes_root(account_id):
-    root = store.memory_folder(account_id) / "notes"
+def notes_root(project_id):
+    root = store.memory_folder(project_id) / "notes"
     if root.is_symlink():
         raise HTTPException(409, "The notes folder must not be a symbolic link.")
     root.mkdir(mode=0o700, exist_ok=True)
@@ -91,16 +91,16 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def scan(account_id):
+def scan(project_id):
     """Bring the store in line with the vault. Returns its folders and the files that were skipped."""
-    with lock_for(account_id):
-        root = notes_root(account_id)
+    with lock_for(project_id):
+        root = notes_root(project_id)
         try:
             files, folders = walk(root)
         except OSError as error:
             raise HTTPException(503, "The notes folder could not be read. Check the runtime folder's permissions.") from error
         skipped = []
-        with store.open_store(account_id) as db:
+        with store.open_store(project_id) as db:
             known = note_store.vault_files(db)
             seen = set()
             fresh = []

@@ -26,7 +26,7 @@ class MemoryTests(AccountFixture, unittest.TestCase):
 
     def folder(self, account_id=None):
         if account_id is None:
-            account_id = self.account["id"]
+            account_id = self.project["id"]
         return self.data_dir / "workspaces" / account_id / "memory"
 
     def test_store_and_summary_are_private_to_the_account(self):
@@ -41,7 +41,7 @@ class MemoryTests(AccountFixture, unittest.TestCase):
         self.assertEqual(service.search(other["id"], "Aroma coffee"), [])
         self.assertEqual(service.retrieve(other["id"], "Aroma coffee"), [])
         self.assertNotIn("Aroma", summary.current(other["id"]))
-        self.assertTrue(service.retrieve(self.account["id"], "Who supplies our coffee?"))
+        self.assertTrue(service.retrieve(self.project["id"], "Who supplies our coffee?"))
 
     def test_summary_lists_only_active_facts_newest_first(self):
         first = self.add("business", "We open at 8 every morning.")["entry"]
@@ -58,9 +58,9 @@ class MemoryTests(AccountFixture, unittest.TestCase):
         entries = {entry["id"]: entry for entry in self.overview()["entries"]}
         self.assertEqual(entries[first["id"]]["superseded_by"], replacement["id"])
         self.assertEqual(entries[first["id"]]["superseded_reason"], "replaced")
-        self.assertEqual([source["id"] for source in service.retrieve(self.account["id"], "open morning")], [replacement["id"]])
-        self.assertEqual([row["id"] for row in service.search(self.account["id"], "open morning")], [replacement["id"]])
-        self.assertNotIn("We open at 8", service.context_for(self.account["id"], []))
+        self.assertEqual([source["id"] for source in service.retrieve(self.project["id"], "open morning")], [replacement["id"]])
+        self.assertEqual([row["id"] for row in service.search(self.project["id"], "open morning")], [replacement["id"]])
+        self.assertNotIn("We open at 8", service.context_for(self.project["id"], []))
 
     def test_summary_respects_the_runtime_limits(self):
         entries = [{"id": number, "target": "business", "fact": "x" * 200, "created_at": "2026-11-14T00:00:00"} for number in range(1, 30)]
@@ -88,18 +88,18 @@ class MemoryTests(AccountFixture, unittest.TestCase):
         self.assertEqual(self.client.post("/api/memory/entries/999/retire").status_code, 404)
 
     def test_pipeline_dedupes_refuses_and_audits(self):
-        saved = pipeline.remember(self.account["id"], "business", "Our coffee supplier is Aroma.", "operator", origin_message_id=7)
-        again = pipeline.remember(self.account["id"], "business", "our coffee supplier is aroma!", "owner")
+        saved = pipeline.remember(self.project["id"], "business", "Our coffee supplier is Aroma.", "operator", origin_message_id=7)
+        again = pipeline.remember(self.project["id"], "business", "our coffee supplier is aroma!", "owner")
         self.assertEqual(again["outcome"], "duplicate")
         self.assertEqual(again["entry"]["id"], saved["entry"]["id"])
-        near = pipeline.remember(self.account["id"], "business", "Our coffee supplier is Aroma today.", "owner")
+        near = pipeline.remember(self.project["id"], "business", "Our coffee supplier is Aroma today.", "owner")
         self.assertEqual(near["outcome"], "duplicate")
         for secret in ["API key: sk-live-abcdefghijklmnopqrstuvwxyz", "The card number is 4111 1111 1111 1111",
                        "Customer Budi's phone is 0812 3456 7890", "password = hunter2xx", "x" * 501, "ab", "Line\x00break"]:
             with self.subTest(secret=secret), self.assertRaises(MemoryRefused):
-                pipeline.remember(self.account["id"], "owner", secret, "owner")
+                pipeline.remember(self.project["id"], "owner", secret, "owner")
         # The business's own contact details are fine.
-        pipeline.remember(self.account["id"], "business", "Our shop's phone is 0812 3456 7890.", "owner")
+        pipeline.remember(self.project["id"], "business", "Our shop's phone is 0812 3456 7890.", "owner")
         audit = self.overview()["audit"]
         actions = [row["action"] for row in audit]
         self.assertEqual(actions.count("refused"), 7)
@@ -107,7 +107,7 @@ class MemoryTests(AccountFixture, unittest.TestCase):
         self.assertEqual(actions.count("saved"), 2)
         self.assertNotIn("hunter2xx", json.dumps(audit))
         self.assertNotIn("Aroma", json.dumps(audit))
-        self.assertEqual(pipeline.saved_by_message(self.account["id"], 7)[0]["id"], saved["entry"]["id"])
+        self.assertEqual(pipeline.saved_by_message(self.project["id"], 7)[0]["id"], saved["entry"]["id"])
 
     def test_related_facts_are_flagged_not_merged(self):
         self.add("business", "Deliveries arrive on Tuesdays from Aroma.")
@@ -160,11 +160,11 @@ class MemoryTests(AccountFixture, unittest.TestCase):
         self.assertEqual(self.client.post("/api/agents/operator/chat", json={"message": "/remember elsewhere | fact"}).status_code, 422)
 
     def test_operator_saves_through_the_remember_tool(self):
-        reply_id = accounts.add_message(self.account["id"], "assistant", "", None)
-        ticket = agents.issue_ticket(self.account["id"], "operator", message_id=reply_id)
+        reply_id = accounts.add_message(self.project["id"], "assistant", "", None)
+        ticket = agents.issue_ticket(self.project["id"], "operator", message_id=reply_id)
         result = tools.remember(ticket, "business", "The shop closes on Sundays.")
         self.assertTrue(result.startswith("Saved as memory ["))
-        entry = pipeline.saved_by_message(self.account["id"], reply_id)[0]
+        entry = pipeline.saved_by_message(self.project["id"], reply_id)[0]
         self.assertEqual(entry["actor"], "operator")
         self.assertTrue(tools.remember(ticket, "business", "The shop closes on Sundays.").startswith("Already in memory"))
         corrected = tools.remember(ticket, "business", "The shop closes on Mondays.", replaces=entry["id"])
@@ -172,11 +172,11 @@ class MemoryTests(AccountFixture, unittest.TestCase):
         with self.assertRaises(tools.ToolError) as refusal:
             tools.remember(ticket, "owner", "My PIN: 1234")
         self.assertIn("Not saved", str(refusal.exception))
-        forecasting = agents.issue_ticket(self.account["id"], "forecasting")
+        forecasting = agents.issue_ticket(self.project["id"], "forecasting")
         with self.assertRaises(tools.ToolError):
             tools.remember(forecasting, "business", "Forecasting may not remember.")
         # The chat note under the reply says what this turn saved.
-        self.client.put("/api/team/operator", json={"prompt": "", "data": "", "tools": ["csv_read", "memory_read"], "revision": 0, "brain": "qwen", "delegation": "ask"})
+        self.client.put("/api/team/operator", json={"prompt": "", "data": "", "tools": ["csv_read", "memory_read"], "revision": 0, "brain": "qwen"})
         with self.assertRaises(tools.ToolError):
             tools.remember(ticket, "business", "Saving is off now.")
 

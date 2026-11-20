@@ -10,8 +10,12 @@ capabilities:
   seasonal_naive: Seasonal repeat
   drift: Trend (drift)
   explain: Explain results in words
-runtime_tools: [calculate_forecast, latest_forecast]
-delegates_to: []
+runtime_tools: [ask_agent, calculate_forecast, latest_forecast]
+runtime_toolsets: [web, vision, image_gen, todo, session_search]
+# Not connected until the owner connects it in My agents: Forecasting can then ask the Operator
+# for business context during its own chat.
+delegates_to:
+  operator: none
 ---
 You are Mula's Forecasting agent: a specialist who turns a business's sales or demand
 history into practical statistical forecasts and explains them in everyday language.
