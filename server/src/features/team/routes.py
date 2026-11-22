@@ -37,8 +37,16 @@ async def with_brain_statuses(agents: list[dict]) -> list[dict]:
 
 @router.get("/api/team")
 async def team(project: dict = Depends(current_project)):
-    agents = [service.settings(project["id"], agent_id) for agent_id in service.AGENTS]
-    return {"agents": await with_brain_statuses(agents), "layout": service.layout(project["id"])}
+    agents = [service.settings(project["id"], agent_id) for agent_id in service.project_agent_ids(project["id"])]
+    return {"agents": await with_brain_statuses(agents), "layout": service.layout(project["id"]),
+            "templates": service.available_templates(project["id"])}
+
+
+# Registered before /api/team/{agent_id}, like the layout routes.
+@router.post("/api/team/templates/{agent_id}", status_code=201)
+async def add_template(agent_id: str, value: service.TemplateInput, project: dict = Depends(current_project)):
+    added = service.add_template(project["id"], agent_id, value)
+    return (await with_brain_statuses([added]))[0]
 
 
 # Registered before /api/team/{agent_id} so "layout" is never read as an agent id.
@@ -56,3 +64,13 @@ def reset_layout(project: dict = Depends(current_project)):
 async def update(agent_id: str, value: service.SettingsInput, project: dict = Depends(current_project)):
     saved = service.save(project["id"], agent_id, value)
     return (await with_brain_statuses([saved]))[0]
+
+
+@router.delete("/api/team/{agent_id}", status_code=204)
+def remove(agent_id: str, project: dict = Depends(current_project)):
+    service.remove_template(project["id"], agent_id)
+
+
+@router.put("/api/team/{agent_id}/support")
+def save_support(agent_id: str, value: service.SupportInput, project: dict = Depends(current_project)):
+    return service.save_support(project["id"], agent_id, value)

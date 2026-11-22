@@ -23,7 +23,8 @@ AGENT_ID = re.compile(r"^[a-z][a-z0-9_]{0,25}$")
 CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 # The tools served by features/agents/tools.py. A test keeps this list in step with
 # that server; it lives here so the catalog does not import the feature modules.
-RUNTIME_TOOLS = frozenset({"ask_agent", "remember", "calculate_forecast", "latest_forecast", "board_list", "board_add_card", "board_comment"})
+RUNTIME_TOOLS = frozenset({"ask_agent", "remember", "calculate_forecast", "latest_forecast", "board_list", "board_add_card", "board_comment",
+                           "knowledge_search", "handoff_create"})
 # Tools the same server offers only to the workspace assistant, never to a project agent: an agent
 # file can't name them, and their tickets (orchestrator/proposals.py) name an account, not a project.
 ASSISTANT_TOOLS = frozenset({"create_project"})
@@ -43,6 +44,9 @@ SAFE_TOOLSETS = {
 # or not connected at all. An agent file sets each link's default; the owner changes it in My agents.
 LINK_MODES = ("ask", "auto", "off", "none")
 REQUIRED_KEYS = frozenset({"name", "description", "order", "capabilities", "runtime_tools", "runtime_toolsets", "delegates_to"})
+# `template: true` makes the agent a template: a project has it only after the owner adds it
+# (features/team, table project_agents). Without the key the agent is in every project.
+OPTIONAL_KEYS = frozenset({"template"})
 # The settings form accepts at most this many enabled tools (team.SettingsInput).
 MAX_CAPABILITIES = 10
 FRONT_MATTER = "---\n"
@@ -75,7 +79,7 @@ def parse_header(path, header):
     if missing:
         raise AgentDefinitionError(f"{path.name}: missing {', '.join(sorted(missing))}.")
     # Unknown keys are refused so a misspelt key cannot be silently ignored.
-    unknown = set(fields) - REQUIRED_KEYS
+    unknown = set(fields) - REQUIRED_KEYS - OPTIONAL_KEYS
     if unknown:
         raise AgentDefinitionError(f"{path.name}: unknown {', '.join(sorted(unknown))}.")
     return fields
@@ -150,6 +154,9 @@ def read_agent(path):
         raise AgentDefinitionError(f"{path.name}: unknown runtime tool {', '.join(sorted(unknown_tools))}. Known: {', '.join(sorted(RUNTIME_TOOLS))}.")
     if not persona.strip():
         raise AgentDefinitionError(f"{path.name}: the persona below the front matter is empty.")
+    template = fields.get("template", False)
+    if not isinstance(template, bool):
+        raise AgentDefinitionError(f"{path.name}: template must be true or false.")
     return {
         "id": agent_id,
         "name": require_text(path, fields, "name"),
@@ -159,6 +166,7 @@ def read_agent(path):
         "runtime_tools": frozenset(runtime_tools),
         "runtime_toolsets": read_toolsets(path, fields),
         "delegates_to": read_links(path, fields),
+        "template": template,
         # Kept exactly as written: it is the start of the agent's system prompt.
         "persona": persona,
         # The agent card's version (features/a2a): it changes whenever the file does.
@@ -182,6 +190,12 @@ def load_catalog(folder=AGENTS_DIR):
                 raise AgentDefinitionError(f"{agent['id']}.md: an agent cannot delegate to itself.")
             if other not in catalog:
                 raise AgentDefinitionError(f"{agent['id']}.md: delegates_to names {other!r}, which has no file in {folder.name}/.")
+        if agent["template"] and agent["id"] == "operator":
+            raise AgentDefinitionError("operator.md: the Operator is in every project and cannot be a template.")
+        # Another agent can't depend on a template agent the project may not have.
+        for other in agent["delegates_to"]:
+            if catalog[other]["template"]:
+                raise AgentDefinitionError(f"{agent['id']}.md: delegates_to names {other!r}, a template agent a project may not have.")
         if agent["delegates_to"] and "ask_agent" not in agent["runtime_tools"]:
             raise AgentDefinitionError(f"{agent['id']}.md: delegates_to needs ask_agent in runtime_tools.")
     return catalog

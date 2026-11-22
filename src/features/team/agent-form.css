@@ -34,9 +34,9 @@
 .agent-form-field { display: grid; gap: 6px; }
 .agent-form-field > label, .agent-form-group legend { font-size: 13px; font-weight: 600; color: var(--ink); }
 .agent-required, .agent-optional { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--muted); }
-.agent-form input:not([type="checkbox"]), .agent-form select, .agent-form textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; }
+.agent-form input:not([type="checkbox"]), .agent-form select, .agent-form textarea, .support-settings select, .support-settings textarea { width: 100%; min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; }
 .agent-form textarea { resize: vertical; line-height: 1.6; field-sizing: fixed; max-height: none; }
-.agent-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.agent-form :is(input, select, textarea):focus-visible, .support-settings :is(select, textarea):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .agent-form [aria-invalid="true"] { border-color: var(--accent-text); }
 .agent-form-error { margin: 0; font-size: 12px; color: var(--accent-text); font-weight: 500; }
 .agent-form-hint, .agent-form-count { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
@@ -96,3 +96,18 @@
   .agents-intro { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) { .team-toast { animation: none; } .agent-switch, .agent-switch::after { transition: none; } .agent-list-card:hover { translate: none; } }
+
+/* Add agent: "Start from" (blank or a template) and the template form (agentForm/TemplateForm.tsx). */
+.agent-start-from { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; border: 0; }
+.agent-start-from legend { width: 100%; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.agent-template-group { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; }
+.agent-check { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 14px; cursor: pointer; }
+.agent-check:has(input:checked) { border-color: var(--ink); }
+.agent-check:has(input:disabled) { cursor: not-allowed; opacity: .7; }
+.agent-check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--ink); }
+.agent-template-group .text-button { justify-self: start; }
+
+/* The Customer service tab of a template agent's settings (CustomerServiceSettings.tsx). */
+.support-settings { display: grid; gap: 16px; }
+.support-settings textarea { min-height: 88px; resize: vertical; }
+.support-links { display: flex; flex-wrap: wrap; gap: 8px 16px; }

@@ -13,6 +13,10 @@ import type { AgentSummary } from "../services/agentForm";
 import { browserStorage, createWorkspaceAgent, deleteWorkspaceAgent, listWorkspaceAgents, updateWorkspaceAgent } from "../services/workspaceAgents";
 import type { AgentDraft, WorkspaceAgent } from "../services/workspaceAgents";
 import AgentFormDialog from "./agentForm/AgentFormDialog";
+import type { TemplateChoice } from "./agentForm/AgentFormDialog";
+import CustomerServiceSettings from "./CustomerServiceSettings";
+import { addTemplateAgent, channelOptions } from "../services/templates";
+import type { AgentTemplate, ChannelOption, TemplateDraft } from "../services/templates";
 import AgentList from "./AgentList";
 import Toast from "./Toast";
 import { Agent, resetLayout, teamRequest } from "../services/team";
@@ -37,7 +41,10 @@ type SettingsProps = {
   agent: Agent;
   agents: Agent[];
   username: string;
+  // Where a template agent may answer (its Customer service tab).
+  channels: ChannelOption[];
   onSaved: (agent: Agent) => void;
+  onRemoved: () => void;
   onClose: () => void;
 };
 
@@ -50,7 +57,7 @@ function runtimeProfile(projectId: string | undefined, agentId: string) {
   return `${project}-${agentId}`;
 }
 
-function AgentSettings({ agent, agents, username, onSaved, onClose }: SettingsProps) {
+function AgentSettings({ agent, agents, username, channels, onSaved, onRemoved, onClose }: SettingsProps) {
   const projectId = useProjectId();
   const [prompt, setPrompt] = useState(agent.prompt);
   const [data, setData] = useState(agent.data);
@@ -68,6 +75,8 @@ function AgentSettings({ agent, agents, username, onSaved, onClose }: SettingsPr
   const tabs = [...BASE_TABS];
   if (agent.id !== "operator") tabs.push({ id: "chat", label: "Chat" });
   if (agent.id === "forecasting") tabs.push({ id: "forecast", label: "Run a forecast" });
+  const support = agent.support;
+  if (support) tabs.push({ id: "support", label: "Customer service" });
 
   useEffect(() => {
     if (!dirty) return;
@@ -128,6 +137,9 @@ function AgentSettings({ agent, agents, username, onSaved, onClose }: SettingsPr
       </footer>
     </form>}
     {tab === "chat" && <div role="tabpanel" id={tabPanelId("chat")} aria-labelledby={tabId("chat")}>{dirty && <p className="team-notice">Unsaved configuration changes don’t apply to this chat until you save them.</p>}<AgentChat agent={agent} /></div>}
+    {tab === "support" && support && <div role="tabpanel" id={tabPanelId("support")} aria-labelledby={tabId("support")}>
+      <CustomerServiceSettings agent={{ ...agent, support }} channels={channels} onSaved={onSaved} onRemoved={onRemoved} />
+    </div>}
     {tab === "forecast" && <div role="tabpanel" id={tabPanelId("forecast")} aria-labelledby={tabId("forecast")}>{dirty && <p className="team-notice">Save your configuration changes before running a forecast.</p>}<ForecastPanel agent={agent} disabled={dirty} /></div>}
   </section>;
 }
@@ -179,6 +191,8 @@ export default function TeamPage() {
   const [form, setForm] = useState<FormTarget>(null);
   const [toast, setToast] = useState("");
   const clearToast = useCallback(() => setToast(""), []);
+  // Server templates (Customer Service) this project hasn't added yet.
+  const [templates, setTemplates] = useState<AgentTemplate[]>([]);
 
   async function load(signal?: AbortSignal) {
     setError("");
@@ -192,6 +206,40 @@ export default function TeamPage() {
       listWorkspaceAgents(projectId, browserStorage()),
     ]);
     loadAgents(user.username, result.agents); setLayout(result.layout ?? {}); setInventory(items); setAdded(saved); setAccount(user);
+    setTemplates(result.templates ?? []);
+  }
+
+  /** After a template agent was added or removed: the server's agent list and templates again. */
+  async function reloadTeam(username: string) {
+    const [result, items] = await Promise.all([teamRequest("/api/team"), listInventory(projectId)]);
+    loadAgents(username, result.agents); setLayout(result.layout ?? {}); setInventory(items);
+    setTemplates(result.templates ?? []);
+  }
+
+  async function addTemplate(templateId: string, draft: TemplateDraft) {
+    const agent = await addTemplateAgent(templateId, draft);
+    if (account) await reloadTeam(account.username);
+    setToast(`${agent.name} was added. It answers customers from your knowledge base.`);
+  }
+
+  async function templateRemoved(agent: Agent) {
+    setSelectedId(null);
+    try {
+      if (account) await reloadTeam(account.username);
+      setToast(`${agent.name} was removed. Its knowledge base and inbox stay.`);
+    } catch (failure) {
+      if (failure instanceof Error) setError(failure.message);
+    }
+  }
+
+  /** What the Add agent form needs to offer the server templates. */
+  function templateChoice(): TemplateChoice | undefined {
+    const operator = agents.find((agent) => agent.id === "operator") ?? agents[0];
+    if (templates.length === 0 || !operator) return undefined;
+    return {
+      templates, brains: operator.available_brains, defaultBrain: operator.brain, channels: channelOptions(inventory, projectId),
+      inventoryHref: projectPath(projectId, "/inventory"), onAdd: addTemplate,
+    };
   }
 
   /** Every agent in the workspace except `exceptId`, for name checks and hand-offs. */
@@ -283,11 +331,11 @@ export default function TeamPage() {
         {view === "list" && <AgentList cards={agentCards(agents, added, inventory, projectId)} onOpen={openCard} />}
       </div>
     </main>
-    {selected && <AgentDialog key={selected.id} agent={selected} agents={agents} username={account.username}
-      onClosed={() => setSelectedId(null)} onSaved={replaceAgent} />}
+    {selected && <AgentDialog key={selected.id} agent={selected} agents={agents} username={account.username} channels={channelOptions(inventory, projectId)}
+      onClosed={() => setSelectedId(null)} onSaved={replaceAgent} onRemoved={() => void templateRemoved(selected)} />}
     {form && form.mode === "create" && <AgentFormDialog key="create" mode="create" title="Add agent" subtitle="NEW AGENT"
       initial={emptyDraft(inventory, projectId)} context={{ workspaceId: projectId, inventory, otherAgents: otherAgents() }} projectId={projectId}
-      onSubmit={createAgent} onClosed={() => setForm(null)} />}
+      onSubmit={createAgent} onClosed={() => setForm(null)} templateChoice={templateChoice()} />}
     {form && form.mode === "edit" && <EditAgentDialog agent={added.find((entry) => entry.id === form.id)} inventory={inventory} projectId={projectId}
       otherAgents={otherAgents(form.id)} onSave={saveAgent} onDelete={deleteAgent} onClosed={() => setForm(null)} />}
     <Toast message={toast} onDone={clearToast} />

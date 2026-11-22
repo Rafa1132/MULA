@@ -15,7 +15,7 @@ class SchemaTests(DatabaseFixture, unittest.TestCase):
             version = db.execute("SELECT version_num FROM alembic_version").fetchall()
             tables = {row["table_name"] for row in db.execute(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = %s", (self.schema,))}
-        self.assertEqual([row["version_num"] for row in version], ["0005_a2a_acp_tools"])
+        self.assertEqual([row["version_num"] for row in version], ["0006_customer_service"])
         self.assertTrue({"accounts", "sessions", "messages", "login_failures", "agent_settings", "agent_map_positions",
                          "forecast_runs", "agent_tickets", "agent_requests", "workspaces", "workspace_members",
                          "projects", "project_members", "onboarding", "orchestrator_messages",

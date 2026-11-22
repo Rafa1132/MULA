@@ -35,9 +35,10 @@ class AgentChatRequest(BaseModel):
         return value
 
 
-def direct_agent(agent_id):
-    """Agents the owner can chat with on their own page; the Operator has the workspace chat."""
-    team.definition(agent_id)
+def direct_agent(project_id, agent_id):
+    """Agents the owner can chat with on their own page; the Operator has the workspace chat.
+    A template agent (Customer Service) is reachable only once this project has added it."""
+    team.require_agent(project_id, agent_id)
     if agent_id == "operator":
         raise HTTPException(404, "Chat with the Operator in your workspace.")
     return agent_id
@@ -54,13 +55,13 @@ def event(payload):
 
 @router.get("/api/agents/{agent_id}/conversation")
 def agent_conversation(agent_id: str, project: dict = Depends(current_project)):
-    direct_agent(agent_id)
+    direct_agent(project["id"], agent_id)
     return {"messages": accounts.history(project["id"], agent_id), "requests": service.conversation_requests(project["id"], agent_id)}
 
 
 @router.post("/api/agents/{agent_id}/chat")
 async def chat_with_agent(agent_id: str, request: AgentChatRequest, project: dict = Depends(current_project)):
-    direct_agent(agent_id)
+    direct_agent(project["id"], agent_id)
     return agent_turn(project, agent_id, request, direct_session(project, agent_id))
 
 

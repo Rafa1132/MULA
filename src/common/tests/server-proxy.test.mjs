@@ -11,6 +11,15 @@ test("agent settings and forecasting uploads are bounded at the proxy", async (c
   assert.equal(fetch.mock.callCount(), 0);
 });
 
+test("knowledge, inbox and channel bodies are bounded at the proxy", async (context) => {
+  const fetch = context.mock.method(globalThis, "fetch", () => { throw new Error("Must not forward"); });
+  for (const [path, size] of [["/api/knowledge", 24001], ["/api/support/conversations/" + "a".repeat(32) + "/reply", 8001], ["/api/channels/whatsapp", 8001]]) {
+    const response = await proxyBackend(new Request(`http://localhost:3000${path}`, { method: "POST", body: "x".repeat(size) }), path);
+    assert.equal(response.status, 413, path);
+  }
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
 test("oversized CSV requests stop at the proxy without reaching the backend", async (context) => {
   const fetch = context.mock.method(globalThis, "fetch", () => { throw new Error("Must not forward"); });
   const response = await proxyBackend(new Request("http://localhost:3000/api/chat", {

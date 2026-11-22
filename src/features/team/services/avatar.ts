@@ -1,6 +1,7 @@
 // Which character an agent is drawn as, in the art direction in docs/design/agent-art/. The
 // orchestrator (the Operator) is the animated orb; the others are "bubble bots": the four in the
-// brief by their own ids, and Forecasting, which works with numbers, as the Finance bot. A new
+// brief by their own ids, Forecasting, which works with numbers, as the Finance bot, and Customer
+// Service as the Support bot. A new
 // agent needs a new bot (new shape, new hue, no satellite; never mint), so until it has one it
 // shows its initial. Tested in tests/avatar.test.mjs.
 export type Character = { kind: "orb" } | { kind: "bot"; src: string } | { kind: "initial"; letter: string };
@@ -11,6 +12,7 @@ const BOTS: Record<string, string> = {
   sales: "sales",
   inventory: "inventory",
   support: "support",
+  customer_service: "support",
 };
 
 export function characterFor(id: string, name: string): Character {

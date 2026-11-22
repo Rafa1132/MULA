@@ -27,7 +27,7 @@ export async function proxyBackend(request: Request, path: string) {
     method: request.method, headers, cache: "no-store", signal: request.signal,
   };
   if (request.method !== "GET") {
-    if ((path.startsWith("/api/agents/") || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting") || path.startsWith("/api/projects") || path.startsWith("/api/onboarding") || path.startsWith("/api/orchestrator") || path.startsWith("/api/board")) && request.body) {
+    if ((path.startsWith("/api/agents/") || path.startsWith("/api/memory") || path.startsWith("/api/team") || path.startsWith("/api/forecasting") || path.startsWith("/api/projects") || path.startsWith("/api/onboarding") || path.startsWith("/api/orchestrator") || path.startsWith("/api/board") || path.startsWith("/api/knowledge") || path.startsWith("/api/support") || path.startsWith("/api/channels")) && request.body) {
       // JSON can expand CSV characters into escapes; allow that overhead while
       // bounding the upload before buffering or forwarding it to the server.
       const reader = request.body.getReader();
@@ -45,6 +45,10 @@ export async function proxyBackend(request: Request, path: string) {
       if (path.startsWith("/api/onboarding") || path.startsWith("/api/orchestrator")) maxBytes = 40_000;
       // A card holds a 200-character title and 4,000 characters of notes; a comment 2,000.
       if (path.startsWith("/api/board")) maxBytes = 24_000;
+      // A knowledge entry: a 200-character title, 4,000 characters of text and a short price.
+      if (path.startsWith("/api/knowledge")) maxBytes = 24_000;
+      // An inbox reply holds up to 1,500 characters; WhatsApp connection values are a few hundred.
+      if (path.startsWith("/api/support") || path.startsWith("/api/channels")) maxBytes = 8_000;
       try {
         while (true) {
           const chunk = await reader.read();

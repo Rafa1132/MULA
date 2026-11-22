@@ -2,13 +2,15 @@
 // listInventory(), so it can later come from its own API (for example GET /api/inventory) without
 // changing the Inventory page or the Add agent form.
 //
-// Today it is built from what the server already sends in /api/team: each agent's tools, the
-// runtime toolsets its file offers, and the brains (models) the app supports. Skills and connectors
+// Today it is built from what the server already sends in /api/team (each agent's tools, the runtime
+// toolsets its file offers, and the brains the app supports), plus the WhatsApp connection
+// (/api/channels/whatsapp) and the knowledge base (/api/knowledge). Skills and the other connectors
 // don't exist in Mula yet, so a few labelled samples show what they will look like; samples can't be
 // set up or chosen.
 import type { InventoryFilter, InventoryItem, InventoryStatus, InventoryType, SideEffect } from "../types.ts";
 import { projectFetch, projectPath } from "../../../common/services/project.ts";
 import { toolInfo, toolsetInfo } from "../../team/services/tools.ts";
+import type { WhatsAppStatus } from "./whatsapp.ts";
 
 // The parts of a /api/team agent the inventory reads. Kept local so this feature doesn't depend on
 // the whole team Agent type.
@@ -30,8 +32,15 @@ export type TeamAgentShape = {
   }>;
 };
 
-export const TYPE_ORDER: InventoryType[] = ["tool", "skill", "connector", "model"];
-export const TYPE_LABELS: Record<InventoryType, string> = { tool: "Tools", skill: "Skills", connector: "Connectors", model: "Models" };
+export const TYPE_ORDER: InventoryType[] = ["tool", "skill", "connector", "knowledge", "model"];
+export const TYPE_LABELS: Record<InventoryType, string> = { tool: "Tools", skill: "Skills", connector: "Connectors", knowledge: "Knowledge", model: "Models" };
+
+// The two real (non-sample) items that aren't tools or models.
+export const WHATSAPP_ITEM = "connector:whatsapp";
+export const KNOWLEDGE_ITEM = "knowledge:base";
+
+/** What listInventory read besides /api/team. null means that read failed. */
+export type ChannelState = { whatsapp: WhatsAppStatus | null; knowledgeEntries: number | null };
 export const STATUS_ORDER: InventoryStatus[] = ["installed", "connected", "needs_setup", "error"];
 export const STATUS_LABELS: Record<InventoryStatus, string> = { installed: "Installed", connected: "Connected", needs_setup: "Needs setup", error: "Error" };
 export const SOURCE_LABELS: Record<InventoryItem["source"], string> = { "built-in": "Built-in", marketplace: "Marketplace", custom: "Custom" };
@@ -142,11 +151,60 @@ export function sampleItems(workspaceId: string): InventoryItem[] {
   ];
 }
 
-/** The whole inventory for a workspace, from the /api/team agents. Pure, so it can be tested. */
-export function inventoryFromTeam(agents: TeamAgentShape[], workspaceId: string): InventoryItem[] {
+function whatsappItem(status: WhatsAppStatus | null, workspaceId: string): InventoryItem {
+  const fields = {
+    id: WHATSAPP_ITEM, name: "WhatsApp Business", type: "connector" as const, source: "built-in" as const, sideEffects: ["sends_messages" as const],
+    config: [
+      { key: "phone_number_id", label: "Phone Number ID", required: true, secret: false },
+      { key: "waba_id", label: "WhatsApp Business Account ID", required: true, secret: false },
+      { key: "access_token", label: "Permanent access token", required: true, secret: true },
+      { key: "app_secret", label: "App secret", required: true, secret: true },
+    ],
+  };
+  const description = "Customers message your WhatsApp Business number and Customer Service answers from your knowledge base.";
+  if (status === null) {
+    return item(workspaceId, { ...fields, status: "error", description, setupHint: "Mula couldn't read the WhatsApp connection. Reload the page to try again." });
+  }
+  if (!status.connected) {
+    let setupHint = "Connect your number with the values from Meta's dashboard.";
+    if (!status.secrets_ready) setupHint = "The server needs MULA_SECRET_KEY before a number can be connected (see docker/README.md).";
+    return item(workspaceId, { ...fields, status: "needs_setup", description, setupHint });
+  }
+  let setupHint = "";
+  if (!status.verified_at) setupHint = "Meta hasn't checked the webhook yet: paste the webhook URL and verify token into WhatsApp → Configuration.";
+  return item(workspaceId, { ...fields, status: "connected", description, setupHint });
+}
+
+function knowledgeItem(entries: number | null, workspaceId: string): InventoryItem {
+  const fields = { id: KNOWLEDGE_ITEM, name: "Knowledge base", type: "knowledge" as const, source: "custom" as const };
+  if (entries === null) {
+    return item(workspaceId, { ...fields, status: "error", description: "Products, prices, opening hours, FAQs and policies.", setupHint: "Mula couldn't read the knowledge base. Reload the page to try again." });
+  }
+  let count = `${entries} entries`;
+  if (entries === 1) count = "1 entry";
+  const description = `${count}: the only facts Customer Service tells customers.`;
+  if (entries === 0) {
+    return item(workspaceId, { ...fields, status: "needs_setup", description, setupHint: "Add your products, prices and opening hours. Until then every customer is handed to you." });
+  }
+  return item(workspaceId, { ...fields, status: "installed", description });
+}
+
+/** The WhatsApp connection and the knowledge base as inventory items. Pure, so it can be tested. */
+export function channelItems(state: ChannelState, workspaceId: string): InventoryItem[] {
+  return [whatsappItem(state.whatsapp, workspaceId), knowledgeItem(state.knowledgeEntries, workspaceId)];
+}
+
+/**
+ * The whole inventory for a workspace, from the /api/team agents and, when given, the channel state.
+ * Pure, so it can be tested.
+ */
+export function inventoryFromTeam(agents: TeamAgentShape[], workspaceId: string, channels?: ChannelState): InventoryItem[] {
+  let extra: InventoryItem[] = [];
+  if (channels) extra = channelItems(channels, workspaceId);
   return [
     ...toolItems(agents, workspaceId),
     ...toolsetItems(agents, workspaceId),
+    ...extra,
     ...modelItems(agents, workspaceId),
     ...sampleItems(workspaceId),
   ];
@@ -191,10 +249,34 @@ export function setupLink(projectId: string, itemId: string) {
  * like every other project call, and returns that workspace's inventory.
  */
 export async function listInventory(workspaceId: string, signal?: AbortSignal): Promise<InventoryItem[]> {
-  const response = await projectFetch("/api/team", { cache: "no-store", signal });
+  const [response, channels] = await Promise.all([
+    projectFetch("/api/team", { cache: "no-store", signal }),
+    readChannels(signal),
+  ]);
   if (response.status === 401) throw new Error("Your session expired. Sign in again.");
   if (!response.ok) throw new Error("Could not load the inventory. Please try again.");
   const result = await response.json();
   if (!result || !Array.isArray(result.agents)) throw new Error("The server sent an inventory Mula can't read.");
-  return inventoryFromTeam(result.agents, workspaceId);
+  return inventoryFromTeam(result.agents, workspaceId, channels);
+}
+
+/** The WhatsApp status and the knowledge base's size. A failed read becomes null, shown as Error. */
+async function readChannels(signal?: AbortSignal): Promise<ChannelState> {
+  async function read(path: string) {
+    try {
+      const response = await projectFetch(path, { cache: "no-store", signal });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch (error) {
+      // An abort (leaving the page) is passed on; anything else shows the item as Error.
+      if (signal?.aborted) throw error;
+      return null;
+    }
+  }
+  const [whatsapp, knowledge] = await Promise.all([read("/api/channels/whatsapp"), read("/api/knowledge")]);
+  let knowledgeEntries: number | null = null;
+  if (knowledge && Array.isArray(knowledge.entries)) knowledgeEntries = knowledge.entries.length;
+  let status: WhatsAppStatus | null = null;
+  if (whatsapp && typeof whatsapp.connected === "boolean") status = whatsapp;
+  return { whatsapp: status, knowledgeEntries };
 }

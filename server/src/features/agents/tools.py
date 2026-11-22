@@ -18,12 +18,14 @@ from pydantic import Field
 from ...common import config
 from ...common.agent_catalog import CATALOG
 from ..board import service as board
+from ..knowledge import service as knowledge
 from ..forecasting import runs
 from ..forecasting.service import ForecastRequest, forecast
 from ..memory import pipeline as memory
 from ..memory.filters import MemoryRefused
 from ..operator.runtime import HermesError
 from ..orchestrator import proposals
+from ..support import service as support
 from ..team import service as team
 from . import service
 
@@ -160,6 +162,41 @@ async def board_comment(ticket: Ticket, card: BoardCard,
     except EXPECTED as error:
         raise tool_failure(error) from error
     return f"Commented on {card}."
+
+
+def require_capability(caller: dict, capability: str) -> None:
+    """The owner's switch for this tool in My agents (`capabilities` in the agent's file)."""
+    if capability not in team.settings(caller["project_id"], caller["agent_id"])["tools"]:
+        raise service.ToolDenied("The owner switched this tool off in My agents.")
+
+
+@server.tool(description="Customer Service only. Search the business's knowledge base (FAQ, products and services, opening hours, policies). Answer customers only from what it returns.",
+             annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
+def knowledge_search(ticket: Ticket,
+                     query: Annotated[str, Field(min_length=1, max_length=300, description="What the customer is asking about, in a few words.")]) -> str:
+    try:
+        caller = service.resolve_ticket(ticket, "knowledge_search")
+        require_capability(caller, "knowledge_read")
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    found = knowledge.search(caller["project_id"], query.strip())
+    if not found:
+        return "No knowledge base entry matches. Do not guess: hand off with handoff_create."
+    return "Knowledge base entries (the only facts you may state):\n" + knowledge.format_entries(found)
+
+
+@server.tool(description="Customer Service only. Hand the conversation to a person on the business's team: opens a ticket in the owner's inbox. Use it when the knowledge base doesn't answer, or for orders, refunds, changes, personal data, files or complaints.",
+             annotations=ToolAnnotations(destructive_hint=False, open_world_hint=False))
+def handoff_create(ticket: Ticket,
+                   reason: Annotated[str, Field(min_length=1, max_length=500, description="Why a person is needed, in one sentence.")],
+                   summary: Annotated[str, Field(min_length=1, max_length=2000, description="What the customer wants and what you already told them.")]) -> str:
+    try:
+        caller = service.resolve_ticket(ticket, "handoff_create")
+        require_capability(caller, "handoff")
+        support.handoff_from_tool(caller, reason, summary)
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    return "Handed off: a ticket is open for the team, and you won't answer this customer again until they resolve it. Tell the customer the team will follow up here."
 
 
 @server.tool(description="Workspace assistant only. Propose a new project (a separate business) when the owner asks for one. It creates nothing: the owner confirms with a button under your reply.",

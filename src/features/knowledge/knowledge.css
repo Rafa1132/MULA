@@ -1,0 +1,38 @@
+/* The knowledge base editor. Theme tokens from globals.css; buttons are ink, never mint (mint is the
+   orchestrator's, docs/design/agent-art/). One column, no sideways scrolling at 360 px. */
+.knowledge-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100dvh; background: var(--background); color: var(--ink); font-family: var(--font-ui, var(--font)); }
+.knowledge-shell > .sidebar { position: sticky; top: 0; height: 100dvh; }
+.knowledge-main { min-width: 0; }
+.knowledge-content { max-width: 860px; margin: 0 auto; padding: 28px 36px 48px; }
+.knowledge-intro h1 { font-size: clamp(28px, 3vw, 40px); margin: 8px 0 10px; letter-spacing: -.02em; }
+.knowledge-intro p { margin: 0 0 12px; max-width: 640px; color: var(--muted); line-height: 1.6; }
+.knowledge-message { min-height: 1.4em; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.knowledge-empty-note { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--ink); border-radius: 12px; line-height: 1.5; }
+.knowledge-group { margin-bottom: 18px; padding: 16px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); }
+.knowledge-group-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.knowledge-group-head h2 { margin: 0 0 4px; font-size: 15px; }
+.knowledge-group-head p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+.knowledge-group-head .map-reset { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.knowledge-count { font-size: 12px; font-weight: 500; color: var(--muted); }
+.knowledge-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.knowledge-entry { display: flex; gap: 10px; align-items: start; justify-content: space-between; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--background); }
+.knowledge-entry > .knowledge-form { flex: 1; }
+.knowledge-entry-text { min-width: 0; }
+.knowledge-entry-text h3 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin: 0 0 4px; font-size: 14px; overflow-wrap: anywhere; }
+.knowledge-entry-text p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.knowledge-price { font-size: 13px; font-weight: 600; }
+.knowledge-entry-actions { display: flex; gap: 4px; flex: none; }
+.knowledge-form { display: grid; gap: 12px; margin: 4px 0 12px; }
+.knowledge-field { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.knowledge-field input, .knowledge-field textarea, .knowledge-field select { min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; }
+.knowledge-field textarea { resize: vertical; line-height: 1.5; }
+.knowledge-field :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.knowledge-field [aria-invalid="true"] { border-color: var(--ink); border-width: 2px; }
+.knowledge-error { font-size: 12px; color: var(--ink); font-weight: 600; }
+.knowledge-optional { font-style: italic; }
+.knowledge-form-actions { display: flex; justify-content: end; gap: 8px; }
+@media (max-width: 650px) {
+  .knowledge-shell { display: block; }
+  .knowledge-content { padding: 16px 16px 32px; }
+  .knowledge-group { padding: 12px; }
+}
