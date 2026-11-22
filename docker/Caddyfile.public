@@ -1,0 +1,25 @@
+# Public HTTPS in front of the VPS backend (docker-compose.vps.yml, profile "public").
+# Caddy gets and renews the certificate on its own. Only the frontend's API and the health check are
+# passed on; the runtime's tool endpoint (/mcp) and everything else stay on the VPS's loopback.
+{$MULA_PUBLIC_HOST} {
+	encode gzip
+
+	@backend path /api/* /health
+	handle @backend {
+		# The frontend's proxy caps its own bodies far lower; this is the outer bound.
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	handle {
+		respond "Not found" 404
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+}

@@ -66,6 +66,14 @@ bash /Users/rafa/Desktop/LARAS/run.sh
 
 From the project folder, `./run.sh` works too. It starts Ollama if needed, then FastAPI, Hermes (after FastAPI, because Hermes connects to the agent tools FastAPI serves) and the frontend, waits for them to become reachable, and opens http://127.0.0.1:3000. Existing services are reused. Leave this Terminal open; Ctrl+C stops only services started by this launcher. Logs are written under `.runtime/logs`. Use `./run.sh --no-open` to skip opening the browser.
 
+### Just cloned the repo? Use the shared backend
+
+```sh
+./run-remote.sh
+```
+
+It checks the shared Mula backend (HTTPS, `DEFAULT_REMOTE_URL` in the script), installs the frontend on the first run, starts it pointed at that backend, and opens http://127.0.0.1:3000. Nothing else is needed on your computer: no database, Python, model or SSH key. Creating an account needs an invite code from whoever runs the backend. Needs bash, curl and Node.js 20+ (on Windows, use WSL). `MULA_REMOTE_URL=https://<host>` points it at another Mula backend.
+
 ### Backend on a VPS
 
 When the backend runs on a VPS (`docker-compose.vps.yml`), use `./run-vps.sh ubuntu@<vps-ip>` instead. It starts the SSH tunnel (`scripts/vps-tunnel.sh`) and the frontend, waits for both, and opens http://127.0.0.1:3000; Ctrl+C stops both. Add `--ollama` to lend the VPS this Mac's Ollama for the local brain, or `--no-open` to skip the browser. Set `MULA_VPS=ubuntu@<vps-ip>` to leave out the address. Don't run it together with `./run.sh`: both need port 8000.

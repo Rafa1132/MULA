@@ -13,25 +13,30 @@ type Props = {
   standalone?: boolean;
 };
 
-// The server says whether its development-only relaxed rules are on (MULA_RELAXED_AUTH), so the
-// form never asks for more, or less, than the server will accept.
-async function fetchRelaxed() {
+type Rules = { relaxed: boolean; inviteRequired: boolean };
+const DEFAULT_RULES: Rules = { relaxed: false, inviteRequired: false };
+
+// The server says whether its development-only relaxed rules are on (MULA_RELAXED_AUTH) and whether
+// sign-up needs an invite code (MULA_INVITE_CODE), so the form never asks for more, or less, than
+// the server will accept.
+async function fetchRules(): Promise<Rules> {
   const response = await fetch("/api/auth/rules", { cache: "no-store" });
-  if (!response.ok) return false;
+  if (!response.ok) return DEFAULT_RULES;
   const rules = await response.json();
-  return rules.relaxed === true;
+  return { relaxed: rules.relaxed === true, inviteRequired: rules.invite_required === true };
 }
 
 export default function AccountForm({ onSignedIn, mode = "login", standalone = false }: Props) {
   const [signup, setSignup] = useState(mode === "register");
-  const [relaxed, setRelaxed] = useState(false);
+  const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
   const [username, setUsername] = useState("");
+  const [invite, setInvite] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    fetchRelaxed().then(setRelaxed).catch(() => setRelaxed(false));
+    fetchRules().then(setRules).catch(() => setRules(DEFAULT_RULES));
   }, []);
 
   let title = "Welcome back";
@@ -52,21 +57,26 @@ export default function AccountForm({ onSignedIn, mode = "login", standalone = f
   let passwordHint = "At least 10 characters.";
   let usernamePattern: string | undefined = "[A-Za-z0-9_.\\-]{3,40}";
   let passwordMin = 10;
-  if (relaxed) {
+  if (rules.relaxed) {
     usernameHint = "Development mode: any username works.";
     passwordHint = "Development mode: any password works.";
     usernamePattern = undefined;
     passwordMin = 1;
   }
 
+  // Only sign-up takes an invite code; sign-in refuses unknown fields.
+  const askInvite = signup && rules.inviteRequired;
+
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const body: Record<string, string> = { username, password };
+    if (askInvite) body.invite = invite;
     setBusy(true);
     setError("");
     try {
       const response = await fetch(`/api/auth/${endpoint}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         const failure = await response.json();
@@ -100,6 +110,11 @@ export default function AccountForm({ onSignedIn, mode = "login", standalone = f
       <label htmlFor="password">Password</label>
       <input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={autocomplete} minLength={passwordMin} maxLength={128} aria-describedby="password-hint" required disabled={busy} />
       <small id="password-hint">{passwordHint}</small>
+      {askInvite && <>
+        <label htmlFor="invite">Invite code</label>
+        <input id="invite" value={invite} onChange={(event) => setInvite(event.target.value)} autoComplete="off" spellCheck={false} maxLength={200} aria-describedby="invite-hint" required disabled={busy} />
+        <small id="invite-hint">Ask the person who runs this Mula for one.</small>
+      </>}
       {error && <p className="error" role="alert">{error}</p>}
       <button className="account-submit" disabled={busy}>{action}</button>
       {standalone && <a className="account-toggle account-link" href={toggleHref}>{toggle}</a>}

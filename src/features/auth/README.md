@@ -5,7 +5,7 @@ The sign-in and sign-up form: the `/login` and `/register` pages (`features/land
 ## What it does
 
 - On `/login` and `/register` the switch is a link to the other page, and success goes to `/workspace`; a signed-in visitor skips straight there. Elsewhere it flips the form in place and calls `onSignedIn()`.
-- Asks `/api/auth/rules` which rules the server applies. With the development-only relaxed rules (`MULA_RELAXED_AUTH`, see the server README) any non-empty username and password are accepted and the hints say so; otherwise the usual 3–40 character username and 10-character password.
+- Asks `/api/auth/rules` which rules the server applies. With the development-only relaxed rules (`MULA_RELAXED_AUTH`, see the server README) any non-empty username and password are accepted and the hints say so; otherwise the usual 3–40 character username and 10-character password. When the server needs an invite code (`invite_required`), Create account adds an Invite code field; sign-in never shows it.
 - Posts `{ username, password }` to `/api/auth/login` or `/api/auth/signup` through the Next.js proxy.
 - Shows the server's error message (`detail`) when there is one, or the first validation rule that failed, such as "That username is already taken" or the 15-minute lockout after five failed attempts.
 - Clears the password field after success, then calls `onSignedIn()` so the parent screen reloads the account and conversation.

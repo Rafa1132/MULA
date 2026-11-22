@@ -50,3 +50,29 @@ docker compose --profile app run --rm --no-deps -T --entrypoint python3 api /app
 
 - `MULA_DATABASE_HOST=postgres`: the start script swaps `127.0.0.1` in `MULA_DATABASE_URL` for it.
 - `MULA_MODEL_BASE_URL=http://host.docker.internal:11434/v1`: change this to switch models (e.g. OpenRouter).
+
+## Public HTTPS for people who clone the repo
+
+`./run-remote.sh` lets anyone with a clone use the VPS backend without an SSH key. On the VPS that
+needs Caddy (profile `public` in `docker-compose.vps.yml`, config in `docker/Caddyfile.public`), which
+gets a certificate and passes only `/api/*` and `/health` to the backend. `/mcp` and the runtime stay on
+the loopback.
+
+Do these in this order, so the server is never public with open sign-up:
+
+1. **Invite code first.** Add `MULA_INVITE_CODE=<openssl rand -hex 16>` to `server/.env.hermes` and
+   recreate `api`. Sign-up then needs the code (sign-in doesn't); share it privately, never in the repo.
+2. **Host name.** In `~/mula/.env`: `MULA_PUBLIC_HOST=<ip with dashes>.sslip.io` (a free name that points
+   at the IP), or your own domain with an A record to the VPS.
+3. **Open 80 and 443** in the VPS firewall (`sudo ufw allow 80,443/tcp`) and in the cloud provider's
+   firewall, if it has one.
+4. **Start Caddy:**
+   `docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile public up -d caddy </dev/null`
+5. Check: `curl https://<host>/health` answers JSON with `"status": "ok"`, and `curl https://<host>/mcp` is 404.
+
+If the host changes, update `DEFAULT_REMOTE_URL` in `run-remote.sh`. To change the invite code, edit it
+and recreate `api`; existing accounts keep working. To go private again: `docker compose ... stop caddy`
+and `sudo ufw delete allow 80,443/tcp`.
+
+Anyone with an account can chat with the agents, which spends the OpenRouter credits of the brains
+they choose; give the invite code only to people you'd let do that.

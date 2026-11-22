@@ -1,4 +1,5 @@
-# The backend on a VPS, reached only through an SSH tunnel from the Mac (scripts/vps-tunnel.sh).
+# The backend on a VPS, reached through an SSH tunnel from the Mac (scripts/vps-tunnel.sh), or, with
+# the "public" profile, over HTTPS for anyone who clones the repo (./run-remote.sh; docker/README.md).
 # On the VPS, layer it over the main file and start only the backend and the database:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile app up -d --build api postgres
@@ -19,3 +20,26 @@ services:
       MULA_MODEL_BASE_URL: http://127.0.0.1:11434/v1
     # Host networking can't be combined with extra host mappings, and doesn't need them.
     extra_hosts: !reset []
+
+  # Public HTTPS (profile "public"): Caddy on ports 80/443 passes /api/* and /health to the backend
+  # on 127.0.0.1:8000 (docker/Caddyfile.public). Set MULA_PUBLIC_HOST in ~/mula/.env on the VPS, and
+  # MULA_INVITE_CODE in server/.env.hermes so strangers can't sign up.
+  caddy:
+    image: caddy:2.8.4
+    profiles: ["public"]
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Not "${...:?}": compose resolves variables for every service, so that would break the
+      # backend-only commands too. The start command below refuses an empty host instead.
+      MULA_PUBLIC_HOST: ${MULA_PUBLIC_HOST:-}
+    command: ["sh", "-c", "test -n \"$$MULA_PUBLIC_HOST\" || { echo 'Set MULA_PUBLIC_HOST in ~/mula/.env, for example 203-0-113-10.sslip.io' >&2; exit 1; }; exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"]
+    volumes:
+      - ./docker/Caddyfile.public:/etc/caddy/Caddyfile:ro
+      # Certificates survive restarts, so Let's Encrypt isn't asked again each time.
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

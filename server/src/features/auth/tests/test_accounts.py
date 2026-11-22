@@ -47,11 +47,11 @@ class AccountTests(AccountFixture, unittest.TestCase):
 
     def test_strict_rules_by_default_and_relaxed_rules_for_development(self):
         other = TestClient(app)
-        self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': False})
+        self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': False, 'invite_required': False})
         for username, password in (('ab', 'long-password-123'), ('has space', 'long-password-123'), ('valid', 'short')):
             self.assertEqual(other.post('/api/auth/signup', json={'username': username, 'password': password}).status_code, 422)
         with patch.object(config, 'MULA_RELAXED_AUTH', True):
-            self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': True})
+            self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': True, 'invite_required': False})
             response = other.post('/api/auth/signup', json={'username': ' A b ', 'password': 'x'})
             self.assertEqual(response.status_code, 201, response.text)
             self.assertEqual(response.json()['username'], 'a b')
@@ -61,6 +61,38 @@ class AccountTests(AccountFixture, unittest.TestCase):
             self.assertEqual(TestClient(app).post('/api/auth/login', json={'username': 'a b', 'password': 'x'}).status_code, 200)
         with accounts.database() as db:
             self.assertNotEqual(db.execute("SELECT password_hash FROM accounts WHERE username = 'a b'").fetchone()['password_hash'], 'x')
+
+    def test_invite_code_gates_sign_up_but_not_sign_in(self):
+        code = 'a1b2c3d4e5f6a7b8c9d0'
+        other = TestClient(app)
+        with patch.object(config, 'MULA_INVITE_CODE', code):
+            self.assertEqual(other.get('/api/auth/rules').json(), {'relaxed': False, 'invite_required': True})
+            for invite in (None, '', 'wrong-code-wrong-code', code[:-1]):
+                with self.subTest(invite=invite):
+                    body = {'username': 'invited', 'password': 'long-enough-password'}
+                    if invite is not None:
+                        body['invite'] = invite
+                    response = other.post('/api/auth/signup', json=body)
+                    self.assertEqual(response.status_code, 403)
+                    self.assertNotIn(code, response.text)
+            with accounts.database() as db:
+                self.assertIsNone(db.execute("SELECT id FROM accounts WHERE username = 'invited'").fetchone())
+            response = other.post('/api/auth/signup', json={'username': 'invited', 'password': 'long-enough-password', 'invite': f' {code} '})
+            self.assertEqual(response.status_code, 201, response.text)
+            # Existing accounts sign in without it, and sign-in never takes an invite field.
+            self.assertEqual(TestClient(app).post('/api/auth/login', json={'username': 'invited', 'password': 'long-enough-password'}).status_code, 200)
+            self.assertEqual(TestClient(app).post('/api/auth/login', json={'username': 'invited', 'password': 'long-enough-password', 'invite': code}).status_code, 422)
+        # Without a configured code, sign-up ignores the field.
+        self.assertEqual(TestClient(app).post('/api/auth/signup', json={'username': 'open', 'password': 'long-enough-password', 'invite': 'anything'}).status_code, 201)
+
+    def test_short_invite_codes_refuse_to_start(self):
+        import os
+        import subprocess
+        import sys
+        env = {**os.environ, 'MULA_INVITE_CODE': 'short'}
+        result = subprocess.run([sys.executable, '-c', 'import src.common.config'], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('at least 16 characters', result.stderr)
 
     def test_relaxed_rules_refuse_to_start_with_secure_cookies(self):
         import os

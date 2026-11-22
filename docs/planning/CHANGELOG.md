@@ -2,6 +2,17 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 22 November 2026 — Clone and run against the shared backend (Muhammad Rafandi, with Claude)
+
+Request: anyone who clones the (public) repo should have a script that connects to our backend. Choice: public HTTPS plus an invite code, since an SSH key can't go in a public repo and sign-up was open.
+
+Changed:
+- **`./run-remote.sh`**: checks the shared backend's `/health`, runs `npm ci` on the first run, starts the frontend with `LARAS_BACKEND_URL` set for that process only, waits until its proxy reaches the backend, and opens the browser. Refuses a non-HTTPS backend address (except this computer).
+- **Invite code** `MULA_INVITE_CODE`: when set, sign-up needs it (constant-time check, 403 before any account is made); sign-in never does. At least 16 characters or the backend won't start. `/api/auth/rules` says whether it's required, and Create account shows an Invite code field only then.
+- **Caddy** (`docker-compose.vps.yml`, profile `public`; `docker/Caddyfile.public`): HTTPS with an automatic certificate, passing only `/api/*` and `/health` to the backend; `/mcp` and everything else stay on the loopback. `docker/README.md` gives the rollout order (invite code before opening any port).
+
+Checks: auth tests for the invite code (wrong, missing, partial and padded codes; sign-in unaffected; short codes refused at start).
+
 ## 22 November 2026 — Board: the runtime's kanban as a project page (Muhammad Rafandi, with Claude)
 
 Request: turn on the Mula runtime's kanban and make it a page in the workspace's left nav. Choices: agents work a card only when someone presses Start; agents can also use the Board from chat.

@@ -1,5 +1,6 @@
+import hmac
 import re
-from fastapi import APIRouter, Cookie, Depends, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ...common import config
 from . import accounts
@@ -38,6 +39,19 @@ class Credentials(BaseModel):
         return value
 
 
+class Signup(Credentials):
+    """Sign-up adds the invite code, which the server checks only when MULA_INVITE_CODE is set."""
+    invite: str = Field(default="", max_length=200)
+
+
+def require_invite(invite: str) -> None:
+    if not config.MULA_INVITE_CODE:
+        return
+    # Constant-time, so response timing says nothing about how much of a guess was right.
+    if not hmac.compare_digest(invite.strip().encode("utf-8"), config.MULA_INVITE_CODE.encode("utf-8")):
+        raise HTTPException(403, "That invite code isn't right. Ask the person who runs this Mula for one.")
+
+
 def set_login(response: Response, token: str):
     response.set_cookie(accounts.COOKIE, token, httponly=True, samesite="strict",
                         secure=config.SECURE_COOKIES,
@@ -45,7 +59,8 @@ def set_login(response: Response, token: str):
 
 
 @router.post("/api/auth/signup", status_code=201)
-def signup(credentials: Credentials, response: Response):
+def signup(credentials: Signup, response: Response):
+    require_invite(credentials.invite)
     token, account = accounts.create_account(credentials.username, credentials.password)
     set_login(response, token)
     # The orchestrator's runtime profile, so its first message doesn't wait for the gateway.
@@ -62,8 +77,9 @@ def login(credentials: Credentials, response: Response):
 
 @router.get("/api/auth/rules")
 def rules():
-    """Which sign-up rules the form should show; public, and says nothing about any account."""
-    return {"relaxed": config.MULA_RELAXED_AUTH}
+    """Which sign-up rules the form should show; public, and says nothing about any account (or the
+    invite code, only whether one is needed)."""
+    return {"relaxed": config.MULA_RELAXED_AUTH, "invite_required": bool(config.MULA_INVITE_CODE)}
 
 
 @router.get("/api/auth/me")

@@ -39,6 +39,10 @@ MULA_SPEECH_PROVIDER = os.getenv("MULA_SPEECH_PROVIDER", "say").strip().lower() 
 # voices are listed at https://openrouter.ai/api/v1/audio/speech/models/hexgrad/kokoro-82m.
 MULA_SPEECH_MODEL = os.getenv("MULA_SPEECH_MODEL", "hexgrad/kokoro-82m").strip() or "hexgrad/kokoro-82m"
 MULA_SPEECH_VOICE = os.getenv("MULA_SPEECH_VOICE", "af_heart").strip() or "af_heart"
+# When set, sign-up needs this code (the server is reachable from the internet; see
+# docker/README.md). Shared privately with the people who may make an account; empty means anyone
+# who reaches the server can sign up, which is fine behind an SSH tunnel or on this Mac.
+MULA_INVITE_CODE = os.getenv("MULA_INVITE_CODE", "").strip()
 # Set when serving through HTTPS, which is how Mula runs in production.
 SECURE_COOKIES = os.getenv("LARAS_SECURE_COOKIES") == "true"
 
@@ -63,6 +67,9 @@ if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]*", MULA_SPEECH_M
     raise ValueError("MULA_SPEECH_MODEL must look like author/model, for example hexgrad/kokoro-82m.")
 if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_:.-]{0,63}", MULA_SPEECH_VOICE):
     raise ValueError("MULA_SPEECH_VOICE must be a voice ID such as af_heart.")
+if MULA_INVITE_CODE and len(MULA_INVITE_CODE) < 16:
+    # Short codes can be guessed; sign-up has no per-attempt limit of its own.
+    raise ValueError("MULA_INVITE_CODE must be at least 16 characters; make one with: openssl rand -hex 16")
 if MULA_RELAXED_AUTH and SECURE_COOKIES:
     # Secure cookies mean a real deployment; the testing shortcut must never reach one.
     raise ValueError("MULA_RELAXED_AUTH is for local development and cannot be used with LARAS_SECURE_COOKIES=true.")
