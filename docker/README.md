@@ -70,7 +70,7 @@ Do these in this order, so the server is never public with open sign-up:
    `docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile public up -d caddy </dev/null`
 5. Check: `curl https://<host>/health` answers JSON with `"status": "ok"`, and `curl https://<host>/mcp` is 404.
 
-If the host changes, update `DEFAULT_REMOTE_URL` in `run-remote.sh`. To change the invite code, edit it
+If the host changes, update `DEFAULT_REMOTE_URL` in `scripts/run-remote.mjs`. To change the invite code, edit it
 and recreate `api`; existing accounts keep working. To go private again: `docker compose ... stop caddy`
 and `sudo ufw delete allow 80,443/tcp`.
 
