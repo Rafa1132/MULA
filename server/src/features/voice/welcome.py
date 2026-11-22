@@ -1,6 +1,6 @@
 """The spoken welcome: fixed text, so its audio is made once and reused for every new account.
 
-The file is `<data dir>/speech/welcome-<key>.wav`, where the key is a hash of the provider and the
+The file is `<data dir>/speech/welcome-<key>.wav` (`.mp3` with OpenRouter), where the key is a hash of the provider and the
 text. Changing either makes a new file on the next request (or with
 server/scripts/generate_welcome_audio.py at deploy time); old files are simply never read again.
 """
@@ -21,7 +21,7 @@ _generation_lock = asyncio.Lock()
 
 def welcome_path(text: str) -> Path:
     key = hashlib.sha256(f"{speech.provider_key()}\n{text}".encode("utf-8")).hexdigest()[:16]
-    return store.DATA_DIR / "speech" / f"welcome-{key}.wav"
+    return store.DATA_DIR / "speech" / f"welcome-{key}.{speech.file_extension()}"
 
 
 def write_private(path: Path, audio: bytes) -> None:

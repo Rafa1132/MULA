@@ -10,7 +10,7 @@ capabilities:
   seasonal_naive: Seasonal repeat
   drift: Trend (drift)
   explain: Explain results in words
-runtime_tools: [ask_agent, calculate_forecast, latest_forecast]
+runtime_tools: [ask_agent, calculate_forecast, latest_forecast, board_list, board_comment]
 runtime_toolsets: [web, vision, image_gen, todo, session_search]
 # Not connected until the owner connects it in My agents: Forecasting can then ask the Operator
 # for business context during its own chat.

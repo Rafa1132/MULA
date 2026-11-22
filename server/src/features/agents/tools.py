@@ -16,6 +16,8 @@ from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from ...common import config
+from ...common.agent_catalog import CATALOG
+from ..board import service as board
 from ..forecasting import runs
 from ..forecasting.service import ForecastRequest, forecast
 from ..memory import pipeline as memory
@@ -109,6 +111,55 @@ def latest_forecast(ticket: Ticket) -> str:
     if report is None:
         return "The owner has no saved forecasts yet."
     return json.dumps(runs.summary_for_model(report), ensure_ascii=False)
+
+
+BoardCard = Annotated[str, Field(max_length=40, description="The card id from board_list, for example t_ae9b8693.")]
+
+
+def tool_board_line(card: dict) -> str:
+    agent = card["agent"] or "no agent"
+    return f"{card['id']} [{card['column']}] {card['title']} ({agent})"
+
+
+@server.tool(description="List the cards on this project's Board, grouped as todo, working, needs_you and done, with each card's id and agent.",
+             annotations=ToolAnnotations(read_only_hint=True, open_world_hint=False))
+async def board_list(ticket: Ticket) -> str:
+    try:
+        caller = service.resolve_ticket(ticket, "board_list")
+        result = await board.board(board.project_for_tools(caller["project_id"]))
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    if not result["cards"]:
+        return "The Board has no cards yet."
+    return "\n".join(tool_board_line(card) for card in result["cards"])
+
+
+@server.tool(description="Add a card to this project's Board when the owner asks for a task to be tracked. It waits in To do: nothing runs until the owner presses Start on the Board page. Assign it to one of the project's agents by id, or leave it unassigned.",
+             annotations=ToolAnnotations(destructive_hint=False, open_world_hint=False))
+async def board_add_card(ticket: Ticket,
+                         title: Annotated[str, Field(min_length=1, max_length=200, description="A short title for the task.")],
+                         notes: Annotated[str, Field(max_length=4000, description="What needs doing and any details the owner gave.")] = "",
+                         agent: Annotated[str | None, Field(max_length=40, description="The id of the agent that should do it, or null.")] = None) -> str:
+    try:
+        caller = service.resolve_ticket(ticket, "board_add_card")
+        card = await board.create(board.project_for_tools(caller["project_id"]), title.strip(), notes.strip(), agent,
+                                  CATALOG[caller["agent_id"]]["name"])
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    return (f"Added card {card['id']} “{card['title']}” to To do. It does not run until the owner presses Start "
+            "on the Board page; tell them so.")
+
+
+@server.tool(description="Add a comment to a card on this project's Board, for example a note the owner wants recorded.",
+             annotations=ToolAnnotations(destructive_hint=False, open_world_hint=False))
+async def board_comment(ticket: Ticket, card: BoardCard,
+                        text: Annotated[str, Field(min_length=1, max_length=2000, description="The comment.")]) -> str:
+    try:
+        caller = service.resolve_ticket(ticket, "board_comment")
+        await board.comment(board.project_for_tools(caller["project_id"]), card, CATALOG[caller["agent_id"]]["name"], text.strip())
+    except EXPECTED as error:
+        raise tool_failure(error) from error
+    return f"Commented on {card}."
 
 
 @server.tool(description="Workspace assistant only. Propose a new project (a separate business) when the owner asks for one. It creates nothing: the owner confirms with a button under your reply.",

@@ -1,9 +1,11 @@
 import asyncio
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
+import httpx
 from fastapi.testclient import TestClient
 
 from src.features.voice import service as speech
@@ -134,6 +136,132 @@ class SpeechProviderTests(unittest.IsolatedAsyncioTestCase):
         process.kill.assert_called_once()
         self.assertFalse(directories[0].exists())
         self.assertFalse(speech._synthesis_lock.locked())
+
+
+
+MP3 = b"ID3" + bytes(64)
+
+
+class OpenRouterSpeechTests(unittest.IsolatedAsyncioTestCase):
+    """The OpenRouter provider, against a fake transport: no request ever leaves the process."""
+
+    async def asyncSetUp(self):
+        for name, value in [("_synthesis_lock", asyncio.Lock())]:
+            patcher = patch(f"src.features.voice.service.{name}", value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name, value in [("MULA_SPEECH_PROVIDER", "openrouter"), ("MULA_SPEECH_MODEL", "hexgrad/kokoro-82m"),
+                            ("MULA_SPEECH_VOICE", "af_heart")]:
+            patcher = patch.object(speech.config, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        key = patch.dict("os.environ", {"OPENROUTER_API_KEY": "sk-or-test-key"})
+        key.start()
+        self.addCleanup(key.stop)
+        self.requests = []
+
+    def answer_with(self, handler):
+        """Route the provider's client through `handler` instead of the network."""
+        def recording(request):
+            self.requests.append(request)
+            return handler(request)
+        transport = httpx.MockTransport(recording)
+        patcher = patch("src.features.voice.service.openrouter_client",
+                        lambda: httpx.AsyncClient(transport=transport))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def test_sends_kokoro_mp3_request_and_returns_audio(self):
+        self.answer_with(lambda request: httpx.Response(200, content=MP3, headers={"content-type": "audio/mpeg"}))
+        audio = await speech.synthesize("Hello there")
+        self.assertEqual(audio, MP3)
+        request = self.requests[0]
+        self.assertEqual(str(request.url), speech.OPENROUTER_SPEECH_URL)
+        self.assertEqual(request.headers["authorization"], "Bearer sk-or-test-key")
+        self.assertEqual(json.loads(request.content), {
+            "model": "hexgrad/kokoro-82m", "input": "Hello there", "voice": "af_heart", "response_format": "mp3"})
+        self.assertEqual(speech.media_type(), "audio/mpeg")
+        self.assertEqual(speech.file_extension(), "mp3")
+
+    async def test_voice_choice_changes_the_cache_key(self):
+        first = speech.provider_key()
+        with patch.object(speech.config, "MULA_SPEECH_VOICE", "am_adam"):
+            self.assertNotEqual(speech.provider_key(), first)
+
+    async def test_missing_key_refuses_without_a_request(self):
+        self.answer_with(lambda request: httpx.Response(200, content=MP3))
+        with patch.dict("os.environ", {"OPENROUTER_API_KEY": ""}), patch(
+                "src.features.voice.service.profiles.env_values", return_value={}):
+            with self.assertRaises(HTTPException) as caught:
+                await speech.synthesize("hello")
+        self.assertEqual(caught.exception.status_code, 503)
+        self.assertIn("enable_openrouter.py", caught.exception.detail)
+        self.assertEqual(self.requests, [])
+
+    async def test_key_falls_back_to_the_runtime_settings(self):
+        self.answer_with(lambda request: httpx.Response(200, content=MP3))
+        with patch.dict("os.environ", {"OPENROUTER_API_KEY": ""}), patch(
+                "src.features.voice.service.profiles.env_values", return_value={"OPENROUTER_API_KEY": "sk-or-from-file"}):
+            await speech.synthesize("hello")
+        self.assertEqual(self.requests[0].headers["authorization"], "Bearer sk-or-from-file")
+
+    async def test_provider_errors_are_explained_without_text_or_key(self):
+        for status, expected in [(401, 503), (402, 503), (403, 503), (429, 429), (500, 503), (502, 503)]:
+            with self.subTest(status=status):
+                self.answer_with(lambda request, status=status: httpx.Response(
+                    status, json={"error": {"code": status, "message": "upstream said private business text"}}))
+                with self.assertRaises(HTTPException) as caught:
+                    await speech.synthesize("private business text")
+                self.assertEqual(caught.exception.status_code, expected)
+                self.assertNotIn("private business text", caught.exception.detail)
+                self.assertNotIn("sk-or-test-key", caught.exception.detail)
+
+    async def test_out_of_credits_says_so(self):
+        self.answer_with(lambda request: httpx.Response(402, json={"error": {"code": 402, "message": "no"}}))
+        with self.assertRaises(HTTPException) as caught:
+            await speech.synthesize("hello")
+        self.assertIn("credits", caught.exception.detail)
+
+    async def test_non_audio_body_is_refused(self):
+        self.answer_with(lambda request: httpx.Response(200, json={"not": "audio"}))
+        with self.assertRaises(HTTPException) as caught:
+            await speech.synthesize("hello")
+        self.assertEqual(caught.exception.status_code, 503)
+
+    async def test_timeout_and_network_failure_release_capacity(self):
+        for error, expected in [(httpx.ReadTimeout("slow"), 504), (httpx.ConnectError("down"), 503)]:
+            with self.subTest(error=type(error).__name__):
+                def fail(request, error=error):
+                    raise error
+                self.answer_with(fail)
+                with self.assertRaises(HTTPException) as caught:
+                    await speech.synthesize("hello")
+                self.assertEqual(caught.exception.status_code, expected)
+                self.assertFalse(speech._synthesis_lock.locked())
+
+    async def test_busy_voice_does_not_queue(self):
+        self.answer_with(lambda request: httpx.Response(200, content=MP3))
+        async with speech._synthesis_lock:
+            with self.assertRaises(HTTPException) as caught:
+                await speech.synthesize("hello")
+        self.assertEqual(caught.exception.status_code, 429)
+        self.assertEqual(self.requests, [])
+
+    async def test_mp3_check(self):
+        self.assertTrue(speech.is_mp3(b"ID3\x04"))
+        self.assertTrue(speech.is_mp3(b"\xff\xfb\x90"))
+        self.assertFalse(speech.is_mp3(b"{\"error\""))
+        self.assertFalse(speech.is_mp3(b""))
+
+
+class OpenRouterSpeechEndpointTests(AccountFixture, unittest.TestCase):
+    def test_route_serves_mp3_with_openrouter(self):
+        with patch.object(speech.config, "MULA_SPEECH_PROVIDER", "openrouter"), patch(
+                "src.features.voice.service.synthesize", new_callable=AsyncMock, return_value=MP3):
+            response = self.client.post("/api/speech", json={"text": "Hello"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "audio/mpeg")
+        self.assertEqual(response.content, MP3)
 
 
 if __name__ == "__main__":

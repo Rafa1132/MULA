@@ -136,8 +136,9 @@ class ShippedAgentsTests(unittest.TestCase):
         self.assertEqual(catalog["operator"]["delegates_to"], {"forecasting": "ask"})
         # Forecasting may ask the Operator, but is not connected until the owner connects it.
         self.assertEqual(catalog["forecasting"]["delegates_to"], {"operator": "none"})
-        self.assertEqual(catalog["operator"]["runtime_tools"], frozenset({"ask_agent", "remember"}))
-        self.assertEqual(catalog["forecasting"]["runtime_tools"], frozenset({"ask_agent", "calculate_forecast", "latest_forecast"}))
+        self.assertEqual(catalog["operator"]["runtime_tools"], frozenset({"ask_agent", "remember", "board_list", "board_add_card", "board_comment"}))
+        # Forecasting reads and comments on the Board but doesn't add cards.
+        self.assertEqual(catalog["forecasting"]["runtime_tools"], frozenset({"ask_agent", "calculate_forecast", "latest_forecast", "board_list", "board_comment"}))
         for agent in catalog.values():
             self.assertEqual(set(agent["runtime_toolsets"]), set(agent_catalog.SAFE_TOOLSETS))
         self.assertTrue(catalog["operator"]["persona"].startswith("You are the Operator AI"))

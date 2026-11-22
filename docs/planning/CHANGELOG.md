@@ -2,6 +2,42 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 22 November 2026 — Clone and run against the shared backend (Muhammad Rafandi, with Claude)
+
+Request: anyone who clones the (public) repo should have a script that connects to our backend. Choice: public HTTPS plus an invite code, since an SSH key can't go in a public repo and sign-up was open.
+
+Changed:
+- **`./run-remote.sh`**: checks the shared backend's `/health`, runs `npm ci` on the first run, starts the frontend with `LARAS_BACKEND_URL` set for that process only, waits until its proxy reaches the backend, and opens the browser. Refuses a non-HTTPS backend address (except this computer).
+- **Invite code** `MULA_INVITE_CODE`: when set, sign-up needs it (constant-time check, 403 before any account is made); sign-in never does. At least 16 characters or the backend won't start. `/api/auth/rules` says whether it's required, and Create account shows an Invite code field only then.
+- **Caddy** (`docker-compose.vps.yml`, profile `public`; `docker/Caddyfile.public`): HTTPS with an automatic certificate, passing only `/api/*` and `/health` to the backend; `/mcp` and everything else stay on the loopback. `docker/README.md` gives the rollout order (invite code before opening any port).
+
+Checks: auth tests for the invite code (wrong, missing, partial and padded codes; sign-in unaffected; short codes refused at start).
+
+## 22 November 2026 — Board: the runtime's kanban as a project page (Muhammad Rafandi, with Claude)
+
+Request: turn on the Mula runtime's kanban and make it a page in the workspace's left nav. Choices: agents work a card only when someone presses Start; agents can also use the Board from chat.
+
+Changed:
+- **Backend** `server/src/features/board/` (`/api/board`): one board per project (`mula-<project hex>`), run through `hermes kanban` with no shell (`runtime.py`). Every card is created `blocked`, so the runtime never promotes or runs it on its own; Start copies the agent's brain onto the card (`set-model`) and then unblocks it. Columns: To do, Working, Needs you, Done. Strict request models; card ids are checked before any runtime call; another project's card is "not found".
+- **Chat tools** `board_list`, `board_comment` (Operator and Forecasting) and `board_add_card` (Operator), Mula's own MCP tools rather than the runtime's `kanban_*`, which could name any board and create cards that run at once. A card an agent adds waits in To do.
+- **Runtime settings** (`server/hermes/config.yaml` `kanban:`): dispatcher on, every 15 s; `auto_decompose` and `review_dispatch` off, so nothing runs without a Start; at most 2 cards at once, 1 per agent. `server/scripts/enable_kanban.py` applies them to an existing install (dry run unless `--apply`).
+- **Front end** `src/features/board/` at `/projects/<id>/board`, after Chat in the sidebar with a new Board icon: four columns, a New card form, a card panel with Start/Continue (with a note that a cloud brain may use credits), Send back, Mark done, Edit, Archive (with a confirm) and comments. Buttons, not drag-and-drop, so starting is always deliberate. It reloads every 10 s while a card is Working. Proxy routes under `src/app/api/board/**` with a 24 KB body cap.
+
+Limits: a card's worker has only the runtime's kanban tools (no Mula tools, terminal or files) and doesn't get the agent's custom instructions; pick-up takes up to about 15 s.
+
+Checks: 25 board tests plus a test against the real `hermes kanban` command line in a throwaway board folder (no gateway, no model); the full backend suite (293 tests) and the front-end tests (215) pass, and `tsc --noEmit` is clean. No card was started, since that runs a model.
+
+## 22 November 2026 — AI voice on the VPS with Kokoro (Muhammad Rafandi, with Claude)
+
+Request: AI voice was switched off on the VPS (macOS `say` doesn't exist on Linux); use Kokoro through OpenRouter.
+
+Changed:
+- **New speech provider** `MULA_SPEECH_PROVIDER=openrouter` (`server/src/features/voice/service.py`): POSTs to OpenRouter's `/api/v1/audio/speech` with `MULA_SPEECH_MODEL` (default `hexgrad/kokoro-82m`) and `MULA_SPEECH_VOICE` (default `af_heart`), asks for MP3, and reuses the brains' `OPENROUTER_API_KEY`. One job at a time, a 30-second timeout, an MP3 check on the answer, and messages for a rejected key, no credits and rate limits that never include the spoken text or the key. No new dependency (`httpx` was already there).
+- `/api/speech` and the cached welcome serve `audio/mpeg` with this provider (`welcome-<hash>.mp3`); `say` is unchanged and stays the default.
+- `config.py` validates the new settings. Voice README rewritten for the three providers.
+
+Checks: 11 new tests against a fake transport (no request leaves the process); the full backend suite (268 tests) passes. The first real spoken reply is the owner's to try, since it spends credits.
+
 ## 20 November 2026 — Inventory and Add agent (Muhammad Rafandi, with Claude)
 
 Request: a workspace Inventory (tools, skills, connectors, models) and an Add agent flow on My agents that picks only from it, with correlation rules, validation and tests. Scope chosen: front end plus a service seam, no server changes.

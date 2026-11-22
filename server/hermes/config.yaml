@@ -35,7 +35,7 @@ mcp_servers:
     trust: full
     timeout: 300
     tools:
-      include: [ask_agent, calculate_forecast, create_project, latest_forecast, remember]
+      include: [ask_agent, board_add_card, board_comment, board_list, calculate_forecast, create_project, latest_forecast, remember]
       resources: false
       prompts: false
 # Show these few tools to the model directly. The default search bridge adds a
@@ -60,6 +60,20 @@ compression:
   protect_last_n: 6
 display:
   interim_assistant_messages: false
+# The Board (server/src/features/board) uses the runtime's kanban, one board per project. Mula's rule:
+# a card runs only when the owner presses Start. Mula creates every card parked (blocked) and Start
+# unblocks it; these settings switch off everything that would start work without that click.
+# Existing installs: server/scripts/enable_kanban.py copies this block.
+kanban:
+  dispatch_in_gateway: true
+  # Pick up a started card within about 15 seconds instead of a minute.
+  dispatch_interval_seconds: 15
+  # Never let an AI split a triage card into cards that run, or auto-run reviewers.
+  auto_decompose: false
+  review_dispatch: false
+  # Bound spending: at most two cards working on the whole server, one per agent.
+  max_in_progress: 2
+  max_in_progress_per_profile: 1
 gateway:
   # Serve one profile per account under /p/<profile>/ (see server/hermes/profile.config.yaml).
   # Each profile has its own API key, runtime sessions and secrets.
