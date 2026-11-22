@@ -64,6 +64,14 @@ export default function InventoryPage() {
     // Loads once per project; load() itself only reads projectId.
   }, [projectId]);
 
+  async function reload() {
+    try {
+      setItems(await listInventory(projectId));
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+  }
+
   // A "Set up" link from the Add agent form brings the owner to one item: scroll to it and focus it.
   useEffect(() => {
     if (!highlighted || loading) return;
@@ -102,7 +110,8 @@ export default function InventoryPage() {
           {groups.map((group) => <section key={group.type} className="inventory-group" aria-labelledby={`group-${group.type}`}>
             <h2 id={`group-${group.type}`}>{group.label} <span className="inventory-group-count">{group.items.length}</span></h2>
             <div className="inventory-grid">
-              {group.items.map((entry) => <InventoryItemCard key={entry.id} item={entry} highlighted={entry.id === highlighted} />)}
+              {group.items.map((entry) => <InventoryItemCard key={entry.id} item={entry} highlighted={entry.id === highlighted}
+                knowledgeHref={projectPath(projectId, "/knowledge")} onChanged={() => { void reload(); }} />)}
             </div>
           </section>)}
         </>}

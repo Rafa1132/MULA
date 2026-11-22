@@ -2,6 +2,22 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 22 November 2026 — Customer Service agent on WhatsApp (Muhammad Rafandi, with Claude)
+
+Request: a built-in Customer Service agent that answers customers over the WhatsApp Business Cloud API, from a knowledge base, handing anything else to the owner. Choices: WhatsApp only, so there is no order lookup (order questions become handoff tickets); `cryptography` added for encrypting secrets.
+
+Changed:
+- **Template agents**: `server/agents/customer_service.md` with the new optional catalog key `template: true`. A template is hidden from a project until the owner adds it (`project_agents` table; `POST /api/team/templates/<id>`, `DELETE /api/team/<id>` keeps its data). Its only tools are `knowledge_search` and `handoff_create`; nothing moves money, changes orders or shares files.
+- **Knowledge base** `server/src/features/knowledge/` (`/api/knowledge`): FAQ, product (with price), hours and policy entries, Postgres full-text search, and a grounding guard that blocks any reply with a number found in neither the knowledge base nor the customer's message. An empty base hands off without a model call.
+- **WhatsApp** `server/src/features/channels/whatsapp/`: a webhook URL per connection, the verify-token check, `X-Hub-Signature-256` checked before parsing, routing by Phone Number ID, duplicates dropped by message id, background replies, Graph sends retried on 429/5xx, delivery statuses stored. Token, app secret and verify token are AES-GCM encrypted with the new `MULA_SECRET_KEY` (`common/secrets.py`) and never returned.
+- **Support** `server/src/features/support/`: conversations, messages, handoff tickets and the inbox API; STOP/START, an optional allowlist, 6 messages per 10 minutes per sender, human mode while a ticket is open, the 24-hour window (owner replies refused outside it, approved template allowed), and summaries of long chats.
+- **Front end**: Add agent **Start from: Customer Service** with tools and their approval rule, channels (WhatsApp only once connected), tone and brain; a **Customer service** tab (tone, WhatsApp switch, allowlist, Remove); a real **WhatsApp Business** card in Inventory (connect with Meta's checklist, webhook URL and verify token, Check, Disconnect) and a **Knowledge base** item; new **Knowledge base** (`/projects/<id>/knowledge`) and **Inbox** (`/projects/<id>/inbox`, after Board in the sidebar) pages. Proxies under `src/app/api/{knowledge,support,channels}/**` with id checks and body caps.
+- Settings `MULA_SECRET_KEY`, `MULA_PUBLIC_URL`, `MULA_WHATSAPP_GRAPH_VERSION`; `docker/README.md` and `server/src/features/channels/whatsapp/README.md` (Meta setup checklist).
+
+Limits: text messages only; one number per workspace; the grounding guard checks numbers, not wording; a restart mid-reply drops that reply.
+
+Checks: 40 new backend tests (Graph through a mock transport, the runtime mocked, no network) and the full backend suite (337) pass; the front-end tests (235) pass and `tsc --noEmit` is clean. In a browser against a local API with no runtime running (so no model call was possible): connected dummy values (Meta's Check rejected the token, as expected), added a knowledge entry, added Customer Service from its template, saved the allowlist, resolved a seeded ticket in the Inbox, disconnected, and checked 360 px layouts. No WhatsApp message was sent and no model was called.
+
 ## 22 November 2026 — Clone and run against the shared backend (Muhammad Rafandi, with Claude)
 
 Request: anyone who clones the (public) repo should have a script that connects to our backend. Choice: public HTTPS plus an invite code, since an SSH key can't go in a public repo and sign-up was open.

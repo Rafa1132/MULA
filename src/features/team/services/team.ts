@@ -1,4 +1,5 @@
 import type { Stamina } from "./stamina";
+import type { SupportSettings } from "./templates";
 import { projectFetch } from "../../../common/services/project.ts";
 
 export type Brain = {
@@ -38,6 +39,8 @@ export type Agent = {
   // Tokens used and allowed this period; limit null means unlimited. The server doesn't send it yet,
   // so a missing value is read as unlimited (see services/stamina.ts).
   stamina?: Stamina;
+  // Agents added from a template (Customer Service) only: tone, channels and allowlist.
+  support?: SupportSettings;
 };
 
 // ask: the owner approves each request; auto: requests run right after the reply; off: connected but

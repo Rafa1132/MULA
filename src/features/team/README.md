@@ -63,6 +63,22 @@ Today the map shows two agents, **Operator** and **Forecasting**, because the se
 - **Where added agents live:** in this browser, per project (`localStorage` key `mula.agents.workspace.<project id>`), through the async functions in `services/workspaceAgents.ts`, so they can later call an API without the form changing. They are not on the map and Mula doesn't run them yet: their cards say *Saved · not running yet*. Their ids already fit the server's agent id rule (`agentIdFor`).
 - **Inventory rules:** if an item an added agent uses is removed or stops working, its card shows a **Check inventory** badge and its detail lists the problems; the agent is kept. Deleting an agent leaves the inventory alone. Other agents that hand work to a deleted agent keep that setting, shown as *(deleted)*, until the owner removes it.
 
+### Starting from a template (Customer Service)
+
+- When the server has a template agent the project hasn't added (`templates` in `/api/team`; a file in
+  `server/agents/` with `template: true`), Add agent opens with **Start from: Blank · Customer Service**.
+  Blank is the form above. Switching after typing asks first.
+- **Customer Service** shows its own form (`agentForm/TemplateForm.tsx`): its tools, each with its approval rule
+  (none of them moves money, changes orders or shares files, so none waits; such requests become handoff
+  tickets), **Channels** (WhatsApp can be ticked only once Inventory has a connected number, with a **Connect
+  in Inventory** link otherwise), tone (Friendly, Professional, Concise), brain and instructions.
+- Unlike a blank agent it runs on the server: **Add Customer Service** posts to
+  `/api/team/templates/customer_service`, then the agent joins the map (the Support bot) and the list.
+- Its settings panel has a **Customer service** tab (`CustomerServiceSettings.tsx`): tone, the WhatsApp
+  switch, **Only these numbers** (an allowlist for testing), links to the Knowledge base and the Inbox, and
+  **Remove agent** (the knowledge base and inbox stay; it can be added again). Saved with `PUT
+  /api/team/customer_service/support`.
+
 ### Connecting an added agent to Mula so it can run its tools
 
 An added agent is a definition only. To make Mula run it, the server needs to own it:
@@ -95,24 +111,27 @@ An added agent is a definition only. To make Mula run it, the server needs to ow
 | `services/agentStore.ts` | Agent store: agents and their links from the server, remembered panel layer |
 | `services/clientAccess.ts` | The editor settings snippet for a client key |
 | `services/tools.ts` | Icon and one-line description per tool id |
-| `services/team.ts` | `Agent` type (with optional `stamina`), `saveLayout()`/`resetLayout()`, and `teamRequest()` fetch helper with friendly 401/404 messages |
+| `services/team.ts` | `Agent` type (with optional `stamina` and, for template agents, `support`), `saveLayout()`/`resetLayout()`, and `teamRequest()` fetch helper with friendly 401/404 messages |
+| `services/templates.ts` | Template agents: types, `channelOptions`, `templateDraft`, `validateTemplate`, `templatePayload`, `parseAllowlist`, and the add, remove and support-settings calls |
+| `components/CustomerServiceSettings.tsx` | The Customer service tab |
 | `team.css` | Page styles |
 | `components/AgentList.tsx` | The list view: agent cards with status dot, role and inventory warning |
 | `components/agentForm/AgentForm.tsx` | The Add agent form and an added agent's detail: fields, inline errors, focus on the first error |
-| `components/agentForm/AgentFormDialog.tsx` | The side panel around the form, with the unsaved-changes warning |
+| `components/agentForm/AgentFormDialog.tsx` | The side panel around the form, with **Start from** and the unsaved-changes warning |
+| `components/agentForm/TemplateForm.tsx` | Adding a server agent from its template |
 | `components/agentForm/InventoryChecklist.tsx`, `ApprovalSwitches.tsx`, `HandoffChecklist.tsx`, `FieldError.tsx` | The form's parts |
 | `components/Toast.tsx` | The confirmation toast |
 | `services/agentForm.ts` | Form limits, defaults, approval defaults and validation |
 | `services/workspaceAgents.ts` | Added agents: types, ids, and the browser-backed create, update, delete and list |
 | `services/agentCards.ts` | Cards for the list view, with status and inventory warning |
 | `agent-form.css` | Styles for Add agent, the list view and the toast |
-| `tests/map.test.mjs`, `connectors.test.mjs`, `stamina.test.mjs`, `agentStore.test.mjs`, `clientAccess.test.mjs`, `agentForm.test.mjs`, `workspaceAgents.test.mjs`, `agentCards.test.mjs` | Unit tests for the services (run by `npm test`) |
+| `tests/map.test.mjs`, `connectors.test.mjs`, `stamina.test.mjs`, `agentStore.test.mjs`, `clientAccess.test.mjs`, `agentForm.test.mjs`, `workspaceAgents.test.mjs`, `agentCards.test.mjs`, `templates.test.mjs` | Unit tests for the services (run by `npm test`) |
 | `tests/map.browser.spec.mjs` | Optional Playwright check of connectors, stamina, controls, keys, wheel, drags, low zoom, the saved view, resize, links switched off, reduced motion and touch. Fakes the account and team API, so it needs only the frontend |
 | `tests/panel.browser.spec.mjs` | Optional Playwright check of the panel: tabs and keys, remembered layer, instructions, tools and pickers, connections and their lines, Advanced settings and client access, contrast and the phone sheet. Fakes the API like the map check |
 | `tests/browser.spec.mjs` | Optional Playwright check of the map and its link, arranging, settings and connections, the Forecasting chat, forecasts, CSV export and phone layout. Needs a stand-in runtime that answers chats |
 | `index.ts` | Exports `TeamPage` |
 
-The route is `src/app/agents/page.tsx`; `src/app/team/page.tsx` redirects to it. The proxies are `src/app/api/team/route.ts` (GET), `src/app/api/team/layout/route.ts` (PUT, DELETE) and `src/app/api/team/[agent]/route.ts` (PUT, allowed only for `operator` and `forecasting`). The proxy limits these requests to 100 KB. The direct chat uses `src/app/api/agents/[agent]/chat` and `.../conversation`, allowed only for `forecasting`.
+The route is `src/app/agents/page.tsx`; `src/app/team/page.tsx` redirects to it. The proxies are `src/app/api/team/route.ts` (GET), `src/app/api/team/layout/route.ts` (PUT, DELETE) and `src/app/api/team/[agent]/route.ts` (PUT for the server agents; DELETE only for template agents), plus `src/app/api/team/templates/[agent]` (POST) and `src/app/api/team/[agent]/support` (PUT). The allowed agent ids are in `src/app/api/team/agentIds.ts`. The proxy limits these requests to 100 KB. The direct chat uses `src/app/api/agents/[agent]/chat` and `.../conversation`, allowed for `forecasting` and `customer_service` (the server answers 404 until the project adds it).
 
 ## Server counterpart
 

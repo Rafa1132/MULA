@@ -11,6 +11,8 @@ export type Size = { width: number; height: number };
 export const DEFAULT_POSITIONS: Layout = {
   operator: { x: 0.3, y: 0.42 },
   forecasting: { x: 0.7, y: 0.62 },
+  // Only on the map once the project adds it from its template.
+  customer_service: { x: 0.68, y: 0.28 },
 };
 export const WORLD: Size = { width: 1600, height: 1000 };
 // Matches .map-card in team.css. The card's raised ledge is a box-shadow drawn below the box.

@@ -55,13 +55,15 @@ def stored_attachment(attachment: CsvFile | None):
     return Jsonb(attachment.model_dump())
 
 
-def issue_ticket(project_id, agent_id, attachment: CsvFile | None = None, message_id=None, depth=0):
+def issue_ticket(project_id, agent_id, attachment: CsvFile | None = None, message_id=None, depth=0, conversation_id=None):
+    """A per-turn tool ticket. `conversation_id` names the customer conversation a Customer Service
+    turn answers (features/support), which its handoff tool hands off; other turns have none."""
     token = secrets.token_urlsafe(24)
     now = int(time.time())
     with accounts.database() as db:
         db.execute("DELETE FROM agent_tickets WHERE expires <= %s", (now,))
-        db.execute("INSERT INTO agent_tickets (token_hash, project_id, agent_id, attachment, message_id, depth, expires) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                   (ticket_hash(token), project_id, agent_id, stored_attachment(attachment), message_id, depth, now + TICKET_SECONDS))
+        db.execute("INSERT INTO agent_tickets (token_hash, project_id, agent_id, attachment, message_id, depth, expires, conversation_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                   (ticket_hash(token), project_id, agent_id, stored_attachment(attachment), message_id, depth, now + TICKET_SECONDS, conversation_id))
     return token
 
 
@@ -118,6 +120,15 @@ def tool_context(agent_id, token, config, via_client=False):
             lines.append("Saving to memory is turned off. Do not call remember or claim to have saved anything.")
     if agent_id == "forecasting":
         lines.append("Use calculate_forecast for new numbers and latest_forecast for the most recent saved run.")
+    if agent_id == "customer_service":
+        if "knowledge_read" in config["tools"]:
+            lines.append("Use knowledge_search to find more knowledge base entries when the ones you were given don't answer the question.")
+        else:
+            lines.append("Reading the knowledge base is switched off. Do not call knowledge_search; hand off every question.")
+        if "handoff" in config["tools"]:
+            lines.append("Call handoff_create with a short reason and a summary of what the customer wants whenever a person must help. Then tell the customer the team will follow up here.")
+        else:
+            lines.append("Handoff is switched off. Do not call handoff_create; when you can't answer, say you will pass the question to the team.")
     if "board_add_card" in AGENT_TOOLS[agent_id]:
         lines.append("The project's Board tracks tasks. Use board_add_card when the owner asks you to track or hand off a task; it waits in To do and only runs when the owner presses Start on the Board page, so say that. Use board_list to see cards and board_comment to add notes. You cannot start, finish or archive cards.")
     elif "board_list" in AGENT_TOOLS[agent_id]:

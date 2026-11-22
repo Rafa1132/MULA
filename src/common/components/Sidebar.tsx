@@ -5,7 +5,7 @@ import ProjectSwitcher from "./ProjectSwitcher";
 import { useProjectId } from "../hooks/useProjectId";
 import { projectPath } from "../services/project";
 
-type Section = "workspace" | "board" | "catalogue" | "apps" | "inventory" | "team" | "memory";
+type Section = "workspace" | "board" | "inbox" | "catalogue" | "apps" | "inventory" | "team" | "memory";
 
 type Props = {
   // "workspace" is the project's chat, kept under its old name so callers don't change.
@@ -15,9 +15,10 @@ type Props = {
   busy?: boolean;
 };
 
-const ITEMS: { section: Section; path: string; icon: "home" | "board" | "catalogue" | "app" | "tool" | "team" | "memory"; label: string }[] = [
+const ITEMS: { section: Section; path: string; icon: "home" | "board" | "inbox" | "catalogue" | "app" | "tool" | "team" | "memory"; label: string }[] = [
   { section: "workspace", path: "", icon: "home", label: "Chat" },
   { section: "board", path: "/board", icon: "board", label: "Board" },
+  { section: "inbox", path: "/inbox", icon: "inbox", label: "Inbox" },
   { section: "catalogue", path: "/catalogue", icon: "catalogue", label: "Catalogue" },
   { section: "apps", path: "/apps", icon: "app", label: "My apps" },
   { section: "inventory", path: "/inventory", icon: "tool", label: "Inventory" },

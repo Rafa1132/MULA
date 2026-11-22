@@ -1,7 +1,8 @@
 // What a workspace (a project) owns or has installed. The Inventory page lists these, and the Add
 // agent form in features/team picks from them, so both pages share these types.
 
-export type InventoryType = "tool" | "skill" | "connector" | "model";
+// "knowledge" is the project's knowledge base (features/knowledge), which Customer Service answers from.
+export type InventoryType = "tool" | "skill" | "connector" | "knowledge" | "model";
 export type InventoryStatus = "installed" | "connected" | "needs_setup" | "error";
 export type InventorySource = "built-in" | "marketplace" | "custom";
 

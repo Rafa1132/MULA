@@ -19,6 +19,9 @@ from .features.orchestrator.routes import router as orchestrator_router
 from .features.a2a.routes import router as a2a_router
 from .features.acp.routes import router as acp_router
 from .features.board.routes import router as board_router
+from .features.channels.whatsapp.routes import router as whatsapp_router
+from .features.knowledge.routes import router as knowledge_router
+from .features.support.routes import router as support_router
 from .features.agents.tools import gateway as tool_gateway
 
 
@@ -57,6 +60,9 @@ app.include_router(acp_router)
 app.include_router(team_router)
 app.include_router(forecasting_router)
 app.include_router(board_router)
+app.include_router(knowledge_router)
+app.include_router(support_router)
+app.include_router(whatsapp_router)
 app.include_router(workspaces_router)
 app.include_router(orchestrator_router)
 # Agent tools for the Mula runtime. The Next.js proxy never forwards /mcp, and every request needs MULA_TOOLS_KEY.
@@ -77,6 +83,14 @@ async def validation_error(request: Request, error: RequestValidationError):
     if request.url.path.startswith("/api/board"):
         # Card text stays out of the answer, like chat messages.
         return JSONResponse(status_code=422, content={"detail": "Use a card title of 1–200 characters, notes up to 4,000, a comment of 1–2,000, and one of the project's agents or none."})
+    if request.url.path.startswith(("/api/channels", "/api/knowledge", "/api/support")):
+        # Field names and rules only: never the submitted values (an access token, app secret, or
+        # customer and knowledge text).
+        problems = []
+        for item in error.errors():
+            field = ".".join(str(part) for part in item.get("loc", ())[1:]) or "request"
+            problems.append(f"{field}: {str(item.get('msg', 'invalid')).removeprefix('Value error, ')}")
+        return JSONResponse(status_code=422, content={"detail": "Check these fields. " + "; ".join(problems[:6])})
     if request.url.path.startswith("/api/agents/"):
         # Validation errors must not echo uploaded business rows to clients/logs.
         return JSONResponse(status_code=422, content={

@@ -1,0 +1,48 @@
+/* The handoff inbox. Theme tokens from globals.css; buttons are ink, never mint (mint is the
+   orchestrator's, docs/design/agent-art/). Stacks to one column on phones, no sideways scrolling. */
+.inbox-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100dvh; background: var(--background); color: var(--ink); font-family: var(--font-ui, var(--font)); }
+.inbox-shell > .sidebar { position: sticky; top: 0; height: 100dvh; }
+.inbox-main { min-width: 0; }
+.inbox-content { max-width: 1180px; margin: 0 auto; padding: 28px 36px 48px; }
+.inbox-intro h1 { font-size: clamp(28px, 3vw, 40px); margin: 8px 0 10px; letter-spacing: -.02em; }
+.inbox-intro p { margin: 0 0 12px; max-width: 640px; color: var(--muted); line-height: 1.6; }
+.inbox-message-line { min-height: 1.4em; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+.inbox-layout { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.inbox-list { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); }
+.inbox-list ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.inbox-ticket { display: grid; gap: 4px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--background); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.inbox-ticket:hover, .inbox-ticket[aria-current="true"] { border-color: var(--ink); }
+.inbox-ticket:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.inbox-ticket strong { font-size: 14px; overflow-wrap: anywhere; }
+.inbox-ticket span, .inbox-ticket time { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.inbox-empty, .inbox-pick { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.inbox-panel { min-width: 0; padding: 18px; border: 1px solid var(--edge); border-radius: var(--radius); background: var(--surface); }
+.inbox-panel-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.inbox-panel-head h2 { margin: 0 0 4px; font-size: 18px; overflow-wrap: anywhere; }
+.inbox-eyebrow { margin: 0 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.inbox-mode { margin: 0; font-size: 13px; color: var(--muted); }
+.inbox-reason { margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--ink); border-radius: 12px; background: var(--background); }
+.inbox-reason h3 { margin: 0 0 4px; font-size: 14px; }
+.inbox-reason p, .inbox-summary p { margin: 0; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inbox-summary { margin: 0 0 12px; font-size: 13px; }
+.inbox-summary summary { cursor: pointer; color: var(--muted); }
+.inbox-thread { display: grid; gap: 10px; max-height: 52vh; overflow: auto; margin: 0 0 14px; padding: 0; list-style: none; }
+.inbox-message { max-width: 85%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--background); }
+.inbox-message[data-direction="out"] { justify-self: end; }
+.inbox-message-meta { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
+.inbox-message-meta strong { color: var(--ink); }
+.inbox-message-meta [data-failed="true"] { color: var(--ink); font-weight: 600; }
+.inbox-message-body { margin: 0; white-space: pre-wrap; line-height: 1.5; overflow-wrap: anywhere; }
+.inbox-reply { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+.inbox-reply textarea { min-height: 72px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--background); color: var(--ink); font: inherit; font-size: 14px; resize: vertical; }
+.inbox-reply textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.inbox-reply-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: end; gap: 8px 12px; }
+.inbox-hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.inbox-blocked { padding: 10px 12px; border: 1px dashed var(--line); border-radius: 12px; }
+@media (max-width: 900px) { .inbox-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 650px) {
+  .inbox-shell { display: block; }
+  .inbox-content { padding: 16px 16px 32px; }
+  .inbox-panel { padding: 14px; }
+  .inbox-message { max-width: 100%; }
+}

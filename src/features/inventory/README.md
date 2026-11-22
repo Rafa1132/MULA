@@ -10,7 +10,8 @@ Grouped by type, in this order:
 |---|---|---|
 | **Tools** | Each agent's `available_tools` in `/api/team`, plus the runtime toolsets their files offer (`available_toolsets`, id `toolset:<name>`) | *Installed*; a toolset whose `toolset_status` is `needs_setup` is *Needs setup* |
 | **Skills** | Samples only (Mula has no skills yet) | *Needs setup*, labelled *Sample* |
-| **Connectors** | Samples only (Google Docs, Microsoft Excel, Shopify) | *Needs setup*, labelled *Sample* |
+| **Connectors** | **WhatsApp Business** (`connector:whatsapp`, from `/api/channels/whatsapp`), plus samples (Google Docs, Microsoft Excel, Shopify) | WhatsApp: *Connected* once a number is connected, else *Needs setup*; samples: *Needs setup*, labelled *Sample* |
+| **Knowledge** | The project's knowledge base (`knowledge:base`, size from `/api/knowledge`) | *Installed* with entries; *Needs setup* while empty |
 | **Models** | The brains in `available_brains` (id `model:<brain>`) | Local: *Installed*; cloud: *Connected*; a brain whose provider script hasn't been run: *Needs setup* |
 
 Each item has an id, the workspace id, name, type, status (`installed`, `connected`, `needs_setup`, `error`), source (`built-in`, `marketplace`, `custom`), description, the config it needs (`ConfigField`: a label and whether it is required or secret; secret values are never shown or stored in the browser), a setup hint, its side effects (`sends_messages`, `moves_money`, `changes_data`) and, for models, whether it is the default. The default model is the Operator's brain, or the first usable model. Samples are listed so the shape is clear but can never be chosen.
@@ -25,7 +26,18 @@ Each item has an id, the workspace id, name, type, status (`installed`, `connect
 
 ## Data layer
 
-Pages call only `listInventory(workspaceId)` in `services/inventory.ts`. Today it reads `/api/team` and builds the list with `inventoryFromTeam()` (pure, tested). When the server gets its own endpoint (for example `GET /api/inventory`), only `listInventory` changes.
+Pages call only `listInventory(workspaceId)` in `services/inventory.ts`. Today it reads `/api/team`, `/api/channels/whatsapp` and `/api/knowledge` and builds the list with `inventoryFromTeam()` and `channelItems()` (pure, tested). If the WhatsApp or knowledge read fails, that item shows *Error* rather than disappearing. When the server gets its own endpoint (for example `GET /api/inventory`), only `listInventory` changes.
+
+## The WhatsApp card (`components/WhatsAppSetup.tsx`, `services/whatsapp.ts`)
+
+- **Connect WhatsApp** opens a form with Meta's setup checklist and four values (Phone Number ID, WhatsApp
+  Business Account ID, permanent token, App secret) plus an optional template for after 24 hours. The values
+  are checked like the server's `ConnectInput` before sending; the token and secret fields are password fields,
+  and the browser forgets them as soon as the server has them.
+- Once connected: the webhook URL and verify token (with Copy) to paste into Meta, whether Meta verified the
+  webhook, the last event, **Check** (asks Meta whether the token works; sends nothing), **Replace values** and
+  **Disconnect** (with a confirm). The token and secret are only ever shown as "Stored encrypted; never shown".
+- The full Meta checklist is in `server/src/features/channels/whatsapp/README.md`.
 
 ## How agents relate to the inventory (`services/correlation.ts`)
 
@@ -38,11 +50,12 @@ Pages call only `listInventory(workspaceId)` in `services/inventory.ts`. Today i
 | File | Purpose |
 |---|---|
 | `types.ts` | Shared types: `InventoryItem`, `ConfigField`, statuses, `InventoryReferences` (what agents point at) |
-| `services/inventory.ts` | `listInventory`, `inventoryFromTeam`, samples, filters, groups, `setupLink` |
+| `services/inventory.ts` | `listInventory`, `inventoryFromTeam`, `channelItems`, samples, filters, groups, `setupLink` |
+| `services/whatsapp.ts` | The WhatsApp connection's API calls, `connectErrors`, `META_CHECKLIST` |
 | `services/correlation.ts` | The agent ↔ inventory rules and warning text |
 | `components/InventoryPage.tsx` | The page: loading, sign-in, filters, groups, empty states |
-| `components/InventoryFilters.tsx`, `InventoryItemCard.tsx`, `StatusPill.tsx` | Its parts |
+| `components/InventoryFilters.tsx`, `InventoryItemCard.tsx`, `StatusPill.tsx`, `WhatsAppSetup.tsx` | Its parts |
 | `inventory.css` | Styles |
-| `tests/` | `inventory.test.mjs`, `correlation.test.mjs` (with `fixtures.mjs`) |
+| `tests/` | `inventory.test.mjs`, `correlation.test.mjs`, `channels.test.mjs` (with `fixtures.mjs`) |
 
 `npm test` runs the tests. Agents added with the form are documented in `features/team/README.md`.

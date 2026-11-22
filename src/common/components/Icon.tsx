@@ -1,8 +1,10 @@
-export type IconName = "board" | "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified" | "edit" | "trash" | "external" | "infinity" | "zoomIn" | "zoomOut" | "fit" | "info" | "repeat" | "trend" | "tool" | "newNote" | "newFolder" | "collapseAll" | "chevron" | "folder";
+export type IconName = "board" | "inbox" | "microphone" | "memory" | "home" | "report" | "website" | "team" | "send" | "voice" | "muted" | "exit" | "arrow" | "stop" | "plus" | "live" | "options" | "catalogue" | "agent" | "app" | "connected" | "attention" | "unlinked" | "verified" | "edit" | "trash" | "external" | "infinity" | "zoomIn" | "zoomOut" | "fit" | "info" | "repeat" | "trend" | "tool" | "newNote" | "newFolder" | "collapseAll" | "chevron" | "folder";
 
 const paths: Record<IconName, string> = {
   // Three columns of cards, the Board.
   board: "M3 4h18v16H3ZM9 4v16M15 4v16M5 7h2M11 7h2M11 10h2M17 7h2",
+  // A tray, for the Inbox of customer handoffs.
+  inbox: "M5 4h14l2 9v7H3v-7ZM3 13h5l2 3h4l2-3h5",
   microphone: "M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8",
   memory: "M4 3h16v18H4ZM8 3v18M12 8h4M12 12h4M12 16h3",
   home: "m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z",

@@ -55,3 +55,20 @@
   .inventory-count { margin-left: 0; width: 100%; }
   .inventory-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* The WhatsApp connector card's setup (components/WhatsAppSetup.tsx) and the knowledge base link. */
+.inventory-card-link { justify-self: start; margin-top: 4px; text-decoration: none; }
+.whatsapp-setup { display: grid; gap: 10px; margin-top: 4px; }
+.whatsapp-values { display: grid; gap: 8px; margin: 0; }
+.whatsapp-values div { display: grid; gap: 2px; }
+.whatsapp-values dt { font-size: 12px; color: var(--muted); }
+.whatsapp-values dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.whatsapp-values code { font-size: 12px; overflow-wrap: anywhere; }
+.whatsapp-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.whatsapp-form { display: grid; gap: 10px; }
+.whatsapp-form details { font-size: 13px; }
+.whatsapp-form summary { cursor: pointer; font-weight: 600; }
+.whatsapp-checklist { margin: 8px 0 0; padding-left: 20px; line-height: 1.55; color: var(--muted); }
+.whatsapp-optional { font-style: italic; }
+.whatsapp-error { font-size: 12px; font-weight: 600; color: var(--ink); }
+.whatsapp-form [aria-invalid="true"] { border-color: var(--ink); border-width: 2px; }

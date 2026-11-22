@@ -51,10 +51,15 @@ def agent_profiles(project_id: str) -> dict[str, str]:
     return {profiles.profile_name(project_id, agent_id): agent_id for agent_id in CATALOG}
 
 
+# Agents a card can be given. Template agents (today only Customer Service, which talks to customers
+# on a channel) aren't Board workers.
+BOARD_AGENTS = [agent_id for agent_id, agent in CATALOG.items() if not agent["template"]]
+
+
 def require_agent(agent_id: str | None) -> str | None:
     if agent_id is None:
         return None
-    if agent_id not in CATALOG:
+    if agent_id not in BOARD_AGENTS:
         raise HTTPException(422, "Choose one of the project's agents, or none.")
     return agent_id
 
@@ -114,7 +119,7 @@ def project_for_tools(project_id: str) -> dict:
 
 
 def agents_for_picker() -> list[dict]:
-    return [{"id": agent_id, "name": agent["name"]} for agent_id, agent in sorted(CATALOG.items(), key=lambda item: item[1]["order"])]
+    return [{"id": agent_id, "name": CATALOG[agent_id]["name"]} for agent_id in sorted(BOARD_AGENTS, key=lambda agent_id: CATALOG[agent_id]["order"])]
 
 
 async def board(project: dict) -> dict:

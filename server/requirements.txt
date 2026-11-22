@@ -8,3 +8,5 @@ psycopg[binary]>=3.2,<4
 psycopg-pool>=3.2,<4
 # Schema migrations (server/migrations); Alembic drives SQLAlchemy as its engine only.
 alembic>=1.13,<2
+# Encrypts channel secrets at rest (common/secrets.py): AES-GCM.
+cryptography>=42,<51

@@ -43,6 +43,15 @@ MULA_SPEECH_VOICE = os.getenv("MULA_SPEECH_VOICE", "af_heart").strip() or "af_he
 # docker/README.md). Shared privately with the people who may make an account; empty means anyone
 # who reaches the server can sign up, which is fine behind an SSH tunnel or on this Mac.
 MULA_INVITE_CODE = os.getenv("MULA_INVITE_CODE", "").strip()
+# The key that encrypts channel secrets at rest (common/secrets.py), such as a WhatsApp access
+# token: 64 hex characters (32 bytes), made with `openssl rand -hex 32`. Empty means channels can't
+# be connected. Never commit it; losing it means reconnecting every channel.
+MULA_SECRET_KEY = os.getenv("MULA_SECRET_KEY", "").strip()
+# This server's public HTTPS address, shown to the owner as the base of the WhatsApp webhook URL
+# (for example https://203-0-113-10.sslip.io). Empty on a Mac without a public address.
+MULA_PUBLIC_URL = os.getenv("MULA_PUBLIC_URL", "").strip().rstrip("/")
+# The Meta Graph API version for WhatsApp calls (features/channels/whatsapp/graph.py).
+MULA_WHATSAPP_GRAPH_VERSION = os.getenv("MULA_WHATSAPP_GRAPH_VERSION", "v23.0").strip() or "v23.0"
 # Set when serving through HTTPS, which is how Mula runs in production.
 SECURE_COOKIES = os.getenv("LARAS_SECURE_COOKIES") == "true"
 
@@ -70,6 +79,12 @@ if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_:.-]{0,63}", MULA_SPEECH_VOICE):
 if MULA_INVITE_CODE and len(MULA_INVITE_CODE) < 16:
     # Short codes can be guessed; sign-up has no per-attempt limit of its own.
     raise ValueError("MULA_INVITE_CODE must be at least 16 characters; make one with: openssl rand -hex 16")
+if MULA_SECRET_KEY and not re.fullmatch(r"[0-9a-fA-F]{64}", MULA_SECRET_KEY):
+    raise ValueError("MULA_SECRET_KEY must be 64 hex characters; make one with: openssl rand -hex 32")
+if MULA_PUBLIC_URL and not re.fullmatch(r"https://[A-Za-z0-9.-]+(:[0-9]+)?", MULA_PUBLIC_URL):
+    raise ValueError("MULA_PUBLIC_URL must be https://<host>, with no path.")
+if not re.fullmatch(r"v[0-9]{1,2}\.[0-9]", MULA_WHATSAPP_GRAPH_VERSION):
+    raise ValueError("MULA_WHATSAPP_GRAPH_VERSION must look like v23.0.")
 if MULA_RELAXED_AUTH and SECURE_COOKIES:
     # Secure cookies mean a real deployment; the testing shortcut must never reach one.
     raise ValueError("MULA_RELAXED_AUTH is for local development and cannot be used with LARAS_SECURE_COOKIES=true.")

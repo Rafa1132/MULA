@@ -117,6 +117,19 @@ class AgentFolderTests(unittest.TestCase):
         self.write("helper.md", agent_file({"capabilities": many}))
         self.assertRefused("at most")
 
+    def test_template_key_is_optional_and_boolean(self):
+        self.write("helper.md", agent_file({"template": "true"}))
+        self.assertTrue(load_catalog(self.folder)["helper"]["template"])
+        self.write("helper.md", agent_file())
+        self.assertFalse(load_catalog(self.folder)["helper"]["template"])
+        self.write("helper.md", agent_file({"template": "'yes'"}))
+        self.assertRefused("template must be true or false")
+
+    def test_no_agent_may_depend_on_a_template(self):
+        self.write("other.md", agent_file({"template": "true"}))
+        self.write("helper.md", agent_file({"runtime_tools": "[ask_agent]", "delegates_to": "{other: ask}"}))
+        self.assertRefused("a template agent a project may not have")
+
     def test_file_name_is_the_agent_id(self):
         self.write("Bad Name.md", agent_file())
         self.assertRefused("file name is the agent id")
@@ -132,15 +145,24 @@ class ShippedAgentsTests(unittest.TestCase):
 
     def test_shipped_agents_load_in_display_order(self):
         catalog = load_catalog()
-        self.assertEqual(list(catalog), ["operator", "forecasting"])
+        self.assertEqual(list(catalog), ["operator", "forecasting", "customer_service"])
         self.assertEqual(catalog["operator"]["delegates_to"], {"forecasting": "ask"})
         # Forecasting may ask the Operator, but is not connected until the owner connects it.
         self.assertEqual(catalog["forecasting"]["delegates_to"], {"operator": "none"})
         self.assertEqual(catalog["operator"]["runtime_tools"], frozenset({"ask_agent", "remember", "board_list", "board_add_card", "board_comment"}))
         # Forecasting reads and comments on the Board but doesn't add cards.
         self.assertEqual(catalog["forecasting"]["runtime_tools"], frozenset({"ask_agent", "calculate_forecast", "latest_forecast", "board_list", "board_comment"}))
-        for agent in catalog.values():
-            self.assertEqual(set(agent["runtime_toolsets"]), set(agent_catalog.SAFE_TOOLSETS))
+        for agent_id in ("operator", "forecasting"):
+            self.assertEqual(set(catalog[agent_id]["runtime_toolsets"]), set(agent_catalog.SAFE_TOOLSETS))
+        # Customer Service is a template a project adds, answers only from the knowledge base (no web
+        # or other runtime toolsets), and has no tool that moves money, changes orders or shares files.
+        service = catalog["customer_service"]
+        self.assertTrue(service["template"])
+        self.assertFalse(catalog["operator"]["template"] or catalog["forecasting"]["template"])
+        self.assertEqual(service["runtime_toolsets"], [])
+        self.assertEqual(service["runtime_tools"], frozenset({"knowledge_search", "handoff_create"}))
+        self.assertEqual(set(service["capabilities"]), {"knowledge_read", "handoff"})
+        self.assertEqual(service["delegates_to"], {})
         self.assertTrue(catalog["operator"]["persona"].startswith("You are the Operator AI"))
 
     def test_known_runtime_tools_match_the_tool_server(self):
@@ -164,7 +186,7 @@ class ShippedAgentsTests(unittest.TestCase):
 
     def test_team_api_shape_hides_persona_and_runtime_tools(self):
         from src.features.team import service as team
-        self.assertEqual(set(team.AGENTS["operator"]), {"name", "description", "tools", "delegates_to", "available_toolsets"})
+        self.assertEqual(set(team.AGENTS["operator"]), {"name", "description", "tools", "delegates_to", "available_toolsets", "template"})
         self.assertEqual(list(team.AGENTS["operator"]["tools"]), ["csv_read", "memory_read", "memory_write"])
 
 

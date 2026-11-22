@@ -76,3 +76,20 @@ and `sudo ufw delete allow 80,443/tcp`.
 
 Anyone with an account can chat with the agents, which spends the OpenRouter credits of the brains
 they choose; give the invite code only to people you'd let do that.
+
+## Customer Service on WhatsApp
+
+Meta calls the backend at `https://<host>/api/channels/whatsapp/webhook/<id>`, through the public HTTPS
+address above (Caddy passes `/api/*`). Two settings in `server/.env.hermes`, then recreate `api` (the
+migration `0006_customer_service` runs on start):
+
+- `MULA_SECRET_KEY=<openssl rand -hex 32>`: encrypts each workspace's WhatsApp token and app secret. New
+  installs get one from `server/scripts/setup_hermes.py`. Keep it with your backups: if it changes, stored
+  WhatsApp connections can't be read and must be connected again. Never put it in the repo.
+- `MULA_PUBLIC_URL=https://<host>` (for example `https://43-173-36-209.sslip.io`, no path): so Inventory
+  shows the full webhook URL to paste into Meta.
+
+Optional: `MULA_WHATSAPP_GRAPH_VERSION` (default `v23.0`). The owner's steps in Meta's dashboard are in
+`server/src/features/channels/whatsapp/README.md`. Each customer message is one model turn on the agent's
+brain, so a cloud brain spends credits per reply; the agent's allowlist (**Only these numbers**) keeps a test
+to your own phone.

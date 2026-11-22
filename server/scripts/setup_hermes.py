@@ -54,6 +54,8 @@ def main() -> None:
     tools_key = secrets.token_urlsafe(32)
     # Each account's runtime profile key is derived from this seed (src/common/profiles.py).
     profile_seed = secrets.token_urlsafe(32)
+    # Encrypts channel secrets at rest, such as a WhatsApp access token (src/common/secrets.py).
+    secret_key = secrets.token_hex(32)
     database_url, compose_env = database_settings()
     # The model address the Hermes config reads as ${MULA_MODEL_BASE_URL}; local Ollama by default.
     model_url = os.getenv("MULA_MODEL_BASE_URL", "").strip() or "http://127.0.0.1:11434/v1"
@@ -64,6 +66,7 @@ def main() -> None:
         "HERMES_TIMEOUT_SECONDS=120\n"
         f"MULA_TOOLS_KEY={tools_key}\n"
         f"MULA_PROFILE_KEY_SEED={profile_seed}\n"
+        f"MULA_SECRET_KEY={secret_key}\n"
         f"MULA_DATABASE_URL={database_url}\n"
     ))
     if compose_env is not None:

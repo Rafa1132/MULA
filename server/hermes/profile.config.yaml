@@ -40,7 +40,7 @@ mcp_servers:
     trust: full
     timeout: 300
     tools:
-      include: [ask_agent, board_add_card, board_comment, board_list, calculate_forecast, create_project, latest_forecast, remember]
+      include: [ask_agent, board_add_card, board_comment, board_list, calculate_forecast, create_project, handoff_create, knowledge_search, latest_forecast, remember]
       resources: false
       prompts: false
 tools:
