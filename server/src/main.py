@@ -18,6 +18,7 @@ from .features.workspaces.routes import router as workspaces_router
 from .features.orchestrator.routes import router as orchestrator_router
 from .features.a2a.routes import router as a2a_router
 from .features.acp.routes import router as acp_router
+from .features.board.routes import router as board_router
 from .features.agents.tools import gateway as tool_gateway
 
 
@@ -55,6 +56,7 @@ app.include_router(a2a_router)
 app.include_router(acp_router)
 app.include_router(team_router)
 app.include_router(forecasting_router)
+app.include_router(board_router)
 app.include_router(workspaces_router)
 app.include_router(orchestrator_router)
 # Agent tools for the Mula runtime. The Next.js proxy never forwards /mcp, and every request needs MULA_TOOLS_KEY.
@@ -72,6 +74,9 @@ async def validation_error(request: Request, error: RequestValidationError):
         return JSONResponse(status_code=422, content={"detail": "Choose a valid memory file, content and revision, or a search question of up to 1,000 characters."})
     if request.url.path.startswith(("/api/team", "/api/forecasting")):
         return JSONResponse(status_code=422, content={"detail": "Check the submitted settings, map layout or forecast inputs. Use a CSV up to 50 KB, valid columns and a horizon of 1–90 periods. Map positions must be numbers from 0 to 1."})
+    if request.url.path.startswith("/api/board"):
+        # Card text stays out of the answer, like chat messages.
+        return JSONResponse(status_code=422, content={"detail": "Use a card title of 1–200 characters, notes up to 4,000, a comment of 1–2,000, and one of the project's agents or none."})
     if request.url.path.startswith("/api/agents/"):
         # Validation errors must not echo uploaded business rows to clients/logs.
         return JSONResponse(status_code=422, content={

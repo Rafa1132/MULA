@@ -23,7 +23,7 @@ AGENT_ID = re.compile(r"^[a-z][a-z0-9_]{0,25}$")
 CAPABILITY_ID = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 # The tools served by features/agents/tools.py. A test keeps this list in step with
 # that server; it lives here so the catalog does not import the feature modules.
-RUNTIME_TOOLS = frozenset({"ask_agent", "remember", "calculate_forecast", "latest_forecast"})
+RUNTIME_TOOLS = frozenset({"ask_agent", "remember", "calculate_forecast", "latest_forecast", "board_list", "board_add_card", "board_comment"})
 # Tools the same server offers only to the workspace assistant, never to a project agent: an agent
 # file can't name them, and their tickets (orchestrator/proposals.py) name an account, not a project.
 ASSISTANT_TOOLS = frozenset({"create_project"})

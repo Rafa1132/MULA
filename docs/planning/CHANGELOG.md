@@ -2,6 +2,20 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 22 November 2026 — Board: the runtime's kanban as a project page (Muhammad Rafandi, with Claude)
+
+Request: turn on the Mula runtime's kanban and make it a page in the workspace's left nav. Choices: agents work a card only when someone presses Start; agents can also use the Board from chat.
+
+Changed:
+- **Backend** `server/src/features/board/` (`/api/board`): one board per project (`mula-<project hex>`), run through `hermes kanban` with no shell (`runtime.py`). Every card is created `blocked`, so the runtime never promotes or runs it on its own; Start copies the agent's brain onto the card (`set-model`) and then unblocks it. Columns: To do, Working, Needs you, Done. Strict request models; card ids are checked before any runtime call; another project's card is "not found".
+- **Chat tools** `board_list`, `board_comment` (Operator and Forecasting) and `board_add_card` (Operator), Mula's own MCP tools rather than the runtime's `kanban_*`, which could name any board and create cards that run at once. A card an agent adds waits in To do.
+- **Runtime settings** (`server/hermes/config.yaml` `kanban:`): dispatcher on, every 15 s; `auto_decompose` and `review_dispatch` off, so nothing runs without a Start; at most 2 cards at once, 1 per agent. `server/scripts/enable_kanban.py` applies them to an existing install (dry run unless `--apply`).
+- **Front end** `src/features/board/` at `/projects/<id>/board`, after Chat in the sidebar with a new Board icon: four columns, a New card form, a card panel with Start/Continue (with a note that a cloud brain may use credits), Send back, Mark done, Edit, Archive (with a confirm) and comments. Buttons, not drag-and-drop, so starting is always deliberate. It reloads every 10 s while a card is Working. Proxy routes under `src/app/api/board/**` with a 24 KB body cap.
+
+Limits: a card's worker has only the runtime's kanban tools (no Mula tools, terminal or files) and doesn't get the agent's custom instructions; pick-up takes up to about 15 s.
+
+Checks: 25 board tests plus a test against the real `hermes kanban` command line in a throwaway board folder (no gateway, no model); the full backend suite (293 tests) and the front-end tests (215) pass, and `tsc --noEmit` is clean. No card was started, since that runs a model.
+
 ## 22 November 2026 — AI voice on the VPS with Kokoro (Muhammad Rafandi, with Claude)
 
 Request: AI voice was switched off on the VPS (macOS `say` doesn't exist on Linux); use Kokoro through OpenRouter.

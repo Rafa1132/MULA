@@ -35,6 +35,17 @@ Don't run `./run.sh` and the Docker app at the same time: both use port 3000.
 
 Secrets are read at run time from `server/.env.hermes`; no image contains them.
 
+The volume's `config.yaml` is copied from the template only when it is missing, so a volume made before
+the Board needs its kanban settings and tool list updated once, then an `api` rebuild:
+
+```sh
+docker compose --profile app run --rm --no-deps -T --entrypoint python3 api /app/server/scripts/enable_kanban.py --apply </dev/null
+docker compose --profile app run --rm --no-deps -T --entrypoint python3 api /app/server/scripts/connect_agents.py </dev/null
+```
+
+(On the VPS, add `-f docker-compose.yml -f docker-compose.vps.yml` as usual.) Without `--apply`,
+`enable_kanban.py` only prints what it would change.
+
 ## Settings compose overrides for the api container
 
 - `MULA_DATABASE_HOST=postgres`: the start script swaps `127.0.0.1` in `MULA_DATABASE_URL` for it.

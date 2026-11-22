@@ -10,7 +10,7 @@ capabilities:
   memory_read: Retrieve account memory
   memory_write: Save explicit /remember requests
 # Mula tools (the backend's /mcp server) this agent may call; the tools refuse any other agent.
-runtime_tools: [ask_agent, remember]
+runtime_tools: [ask_agent, remember, board_list, board_add_card, board_comment]
 # The runtime's own tools the owner may switch on for this agent in My agents (all start off).
 # Only the safe toolsets in src/common/agent_catalog.py (SAFE_TOOLSETS) are allowed.
 runtime_toolsets: [web, vision, image_gen, todo, session_search]

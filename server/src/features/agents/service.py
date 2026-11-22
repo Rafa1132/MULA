@@ -118,6 +118,10 @@ def tool_context(agent_id, token, config, via_client=False):
             lines.append("Saving to memory is turned off. Do not call remember or claim to have saved anything.")
     if agent_id == "forecasting":
         lines.append("Use calculate_forecast for new numbers and latest_forecast for the most recent saved run.")
+    if "board_add_card" in AGENT_TOOLS[agent_id]:
+        lines.append("The project's Board tracks tasks. Use board_add_card when the owner asks you to track or hand off a task; it waits in To do and only runs when the owner presses Start on the Board page, so say that. Use board_list to see cards and board_comment to add notes. You cannot start, finish or archive cards.")
+    elif "board_list" in AGENT_TOOLS[agent_id]:
+        lines.append("Use board_list to see the project's Board and board_comment to add a note to a card. You cannot add, start or finish cards.")
     return "\n".join(lines)
 
 

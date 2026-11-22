@@ -16,6 +16,9 @@ MULA_TOOLS_KEY = os.getenv("MULA_TOOLS_KEY", "").strip()
 MULA_PROFILE_KEY_SEED = os.getenv("MULA_PROFILE_KEY_SEED", "").strip()
 # The runtime home that holds the root profile and, under profiles/, one profile per account.
 HERMES_HOME = os.getenv("HERMES_HOME", "").strip()
+# The runtime's command-line launcher, which the Board feature runs for `hermes kanban`. Empty means
+# the install's own path, <repo>/.runtime/hermes-source/.hermes/bin/hermes (also /app/... in Docker).
+MULA_HERMES_BIN = os.getenv("MULA_HERMES_BIN", "").strip()
 # The application database (accounts, sessions, chat history, agent settings, forecast runs,
 # tool tickets, agent requests). Empty means the backend refuses to start; see common/database.py.
 MULA_DATABASE_URL = os.getenv("MULA_DATABASE_URL", "").strip()
