@@ -1,0 +1,4 @@
+# Shell scripts must keep Unix line endings even when cloned on Windows (Git's autocrlf would add
+# \r and break bash); Windows batch files keep CRLF.
+*.sh text eol=lf
+*.cmd text eol=crlf

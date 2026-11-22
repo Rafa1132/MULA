@@ -68,11 +68,13 @@ From the project folder, `./run.sh` works too. It starts Ollama if needed, then 
 
 ### Just cloned the repo? Use the shared backend
 
-```sh
-./run-remote.sh
-```
+| On | Run |
+|---|---|
+| macOS, Linux, WSL, Git Bash | `./run-remote.sh` |
+| Windows (PowerShell, cmd, or double-click) | `run-remote.cmd` |
+| Anywhere | `npm run remote` |
 
-It checks the shared Mula backend (HTTPS, `DEFAULT_REMOTE_URL` in the script), installs the frontend on the first run, starts it pointed at that backend, and opens http://127.0.0.1:3000. Nothing else is needed on your computer: no database, Python, model or SSH key. Creating an account needs an invite code from whoever runs the backend. Needs bash, curl and Node.js 20+ (on Windows, use WSL). `MULA_REMOTE_URL=https://<host>` points it at another Mula backend.
+All three run `scripts/run-remote.mjs` (plain Node.js): it checks the shared Mula backend (HTTPS, `DEFAULT_REMOTE_URL` in that file), installs the frontend on the first run, starts it pointed at that backend, and opens http://127.0.0.1:3000. Nothing else is needed on your computer: no database, Python, model or SSH key, only Node.js 20+. Creating an account needs an invite code from whoever runs the backend. `MULA_REMOTE_URL=https://<host>` points it at another Mula backend; `--no-open` skips the browser.
 
 ### Backend on a VPS
 

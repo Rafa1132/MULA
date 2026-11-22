@@ -7,7 +7,8 @@ Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entr
 Request: anyone who clones the (public) repo should have a script that connects to our backend. Choice: public HTTPS plus an invite code, since an SSH key can't go in a public repo and sign-up was open.
 
 Changed:
-- **`./run-remote.sh`**: checks the shared backend's `/health`, runs `npm ci` on the first run, starts the frontend with `LARAS_BACKEND_URL` set for that process only, waits until its proxy reaches the backend, and opens the browser. Refuses a non-HTTPS backend address (except this computer).
+- **Launchers for every system** (follow-up: on Windows, `./run-remote.sh` only opened the file): the work moved to `scripts/run-remote.mjs`, plain Node.js; `run-remote.sh`, `run-remote.cmd` (Windows) and `npm run remote` all start it. `.gitattributes` keeps `.sh` files LF so a Windows clone doesn't break them.
+- **The launcher**: checks the shared backend's `/health`, runs `npm ci` on the first run, starts the frontend with `LARAS_BACKEND_URL` set for that process only, waits until its proxy reaches the backend, and opens the browser. Refuses a non-HTTPS backend address (except this computer).
 - **Invite code** `MULA_INVITE_CODE`: when set, sign-up needs it (constant-time check, 403 before any account is made); sign-in never does. At least 16 characters or the backend won't start. `/api/auth/rules` says whether it's required, and Create account shows an Invite code field only then.
 - **Caddy** (`docker-compose.vps.yml`, profile `public`; `docker/Caddyfile.public`): HTTPS with an automatic certificate, passing only `/api/*` and `/health` to the backend; `/mcp` and everything else stay on the loopback. `docker/README.md` gives the rollout order (invite code before opening any port).
 
