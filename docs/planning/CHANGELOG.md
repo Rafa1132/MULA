@@ -2,6 +2,17 @@
 
 Dates use Asia/Jakarta. Entries before 13 November 2026 are condensed. Each entry names its author.
 
+## 22 November 2026 — AI voice on the VPS with Kokoro (Muhammad Rafandi, with Claude)
+
+Request: AI voice was switched off on the VPS (macOS `say` doesn't exist on Linux); use Kokoro through OpenRouter.
+
+Changed:
+- **New speech provider** `MULA_SPEECH_PROVIDER=openrouter` (`server/src/features/voice/service.py`): POSTs to OpenRouter's `/api/v1/audio/speech` with `MULA_SPEECH_MODEL` (default `hexgrad/kokoro-82m`) and `MULA_SPEECH_VOICE` (default `af_heart`), asks for MP3, and reuses the brains' `OPENROUTER_API_KEY`. One job at a time, a 30-second timeout, an MP3 check on the answer, and messages for a rejected key, no credits and rate limits that never include the spoken text or the key. No new dependency (`httpx` was already there).
+- `/api/speech` and the cached welcome serve `audio/mpeg` with this provider (`welcome-<hash>.mp3`); `say` is unchanged and stays the default.
+- `config.py` validates the new settings. Voice README rewritten for the three providers.
+
+Checks: 11 new tests against a fake transport (no request leaves the process); the full backend suite (268 tests) passes. The first real spoken reply is the owner's to try, since it spends credits.
+
 ## 20 November 2026 — Inventory and Add agent (Muhammad Rafandi, with Claude)
 
 Request: a workspace Inventory (tools, skills, connectors, models) and an Add agent flow on My agents that picks only from it, with correlation rules, validation and tests. Scope chosen: front end plus a service seam, no server changes.

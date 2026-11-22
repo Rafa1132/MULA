@@ -24,11 +24,11 @@ class SpeechRequest(BaseModel):
 @router.post("/api/speech")
 async def create_speech(request: SpeechRequest, account: dict = Depends(accounts.current_account)):
     audio = await speech.synthesize(request.text)
-    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    return Response(audio, media_type=speech.media_type(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/speech/welcome")
 async def welcome_speech(account: dict = Depends(accounts.current_account)):
     """The spoken welcome for new accounts. Fixed text, so the audio is made once and reused."""
     audio = await welcome.welcome_audio(onboarding.WELCOME)
-    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "private, max-age=86400"})
+    return Response(audio, media_type=speech.media_type(), headers={"Cache-Control": "private, max-age=86400"})
