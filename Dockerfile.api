@@ -1,18 +1,41 @@
 # Mula api: the FastAPI backend and the Hermes agent runtime in one container,
 # because they share the Hermes home, its profiles and the gateway control socket.
 FROM python:3.12-slim-bookworm
+# libatomic1: the Node.js that Hermes downloads needs it. When the image ran the Hermes installer as
+# root, the installer added it with apt-get itself; as the unprivileged user it can't, so it's listed here.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends bash ca-certificates curl git xz-utils \
+ && apt-get install -y --no-install-recommends bash ca-certificates curl git libatomic1 xz-utils \
  && rm -rf /var/lib/apt/lists/*
+# The container runs as this unprivileged user. The id is fixed (10001) so volume ownership and
+# Kubernetes (runAsUser, fsGroup) can refer to it by number.
+RUN groupadd --system --gid 10001 mula \
+ && useradd --system --uid 10001 --gid mula --home-dir /home/mula --create-home --shell /usr/sbin/nologin mula
 WORKDIR /app
 COPY server/requirements.txt server/requirements.txt
 RUN pip install --no-cache-dir -r server/requirements.txt
+# The backend's code stays owned by root, so the running process can't change it.
 COPY server/ server/
+COPY docker/api-start.sh /usr/local/bin/mula-api-start
+RUN chmod +x /usr/local/bin/mula-api-start \
+ && mkdir /app/.runtime \
+ && chown mula:mula /app/.runtime
+# Hermes is installed as the runtime user, not as root: start_hermes.sh patches the Hermes source
+# at every start, Hermes writes its state next to its tools in .runtime/hermes, and the installer
+# puts its downloaded Python under $HOME. All three must belong to the user that runs them.
+USER mula
+ENV HOME=/home/mula
 # Install the pinned Hermes revision at build time, at the same paths ./run.sh uses:
 # source in .runtime/hermes-source (stays in the image), tools in .runtime/hermes.
 # On first start the empty mula-hermes volume is seeded from this image's .runtime/hermes.
+# A volume created by an older, root-run image is owned by root; see docker/README.md.
 RUN bash server/scripts/install_hermes.sh
-COPY docker/api-start.sh /usr/local/bin/mula-api-start
-RUN chmod +x /usr/local/bin/mula-api-start
+# The commit this image was built from (scripts/build-images.sh). Set last, so a new commit
+# doesn't invalidate the cached Hermes install above.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="$GIT_SHA"
 EXPOSE 8000
+# For Docker only (Compose sets its own); Kubernetes ignores HEALTHCHECK and uses the probes in its
+# manifests. /health answers once the backend is up, before Hermes is ready (see /ready).
+HEALTHCHECK --interval=10s --timeout=3s --start-period=120s --retries=3 \
+  CMD ["curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8000/health"]
 CMD ["mula-api-start"]

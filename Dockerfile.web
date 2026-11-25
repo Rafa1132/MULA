@@ -9,11 +9,23 @@ RUN npm run build
 FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
+# The code stays owned by root, so the running server can't change its own files. Only .next is
+# owned by the unprivileged "node" user (uid 1000, from the base image), because Next.js writes its
+# runtime cache there.
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/.next ./.next
+COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/next.config.ts ./next.config.ts
+USER node
+# The commit this image was built from (scripts/build-images.sh). Set last, so a new commit
+# doesn't invalidate the cached layers above.
+ARG GIT_SHA=unknown
+LABEL org.opencontainers.image.revision="$GIT_SHA"
 EXPOSE 3000
+# For Docker and Compose only; Kubernetes ignores HEALTHCHECK and uses the probes in its manifests.
+# Any answer below 500 means the server is up. The image has no curl, so Node's fetch checks it.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/').then((response) => { if (response.status < 500) { process.exit(0); } else { process.exit(1); } }).catch(() => process.exit(1))"]
 # 0.0.0.0 so the published port reaches it; `npm start` binds 127.0.0.1 for ./run.sh.
 CMD ["node", "node_modules/next/dist/bin/next", "start", "--hostname", "0.0.0.0", "--port", "3000"]

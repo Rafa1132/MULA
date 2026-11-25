@@ -35,6 +35,23 @@ Don't run `./run.sh` and the Docker app at the same time: both use port 3000.
 
 Secrets are read at run time from `server/.env.hermes`; no image contains them.
 
+The images run as unprivileged users: `api` as `mula` (uid 10001), `web` as `node` (uid 1000). Volumes
+created by an older image, which ran as root, are owned by root and the api can't write to them. Hand
+them to the new user once, before the first start with the new image:
+
+```sh
+docker compose --profile app run --rm --no-deps --user root --entrypoint chown api -R 10001:10001 /app/.runtime/hermes /app/.runtime/workspaces
+```
+
+## Images tagged by commit
+
+`scripts/build-images.sh` builds `mula-api:<commit>` and `mula-web:<commit>` from the current checkout,
+and labels each image with that commit (`org.opencontainers.image.revision`). Uncommitted changes add
+`-dirty` to the tag, because such an image can't be rebuilt from Git; don't deploy those.
+`MULA_PLATFORM=linux/amd64` builds for an x86 server from an Apple-silicon Mac (slower, emulated).
+Compose keeps building its own `mula-api` and `mula-web` images; this script is for Kubernetes and
+other deployments that must name an exact version.
+
 The volume's `config.yaml` is copied from the template only when it is missing, so a volume made before
 the Board needs its kanban settings and tool list updated once, then an `api` rebuild:
 
